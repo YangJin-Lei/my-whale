@@ -29,7 +29,11 @@ export const setupNative = () => {
     return
   }
 
-  setOpenExternal((url) => void Browser.open({ url, presentationStyle: 'popover' }))
+  setOpenExternal((url) => {
+    void Browser.open({ url, presentationStyle: 'popover' }).catch(() => {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    })
+  })
   setClipboardReader(() =>
     Clipboard.read()
       .then((res) => res.value ?? null)

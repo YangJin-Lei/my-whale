@@ -247,6 +247,9 @@ export const en = {
   personaGreetingPlaceholder: 'Optional opening line shown in new chats',
   personaDefaults: 'Default toggles',
   personaTrialChat: 'Try chat',
+  personaStartChat: 'Chat',
+  personaSaveToList: 'Save to chats',
+  personaSavedToListToast: 'Saved to chat list',
   personaSave: 'Save',
   personaDeleteConfirmTitle: 'Delete persona "{name}"?',
   personaDeleteConfirmDesc:

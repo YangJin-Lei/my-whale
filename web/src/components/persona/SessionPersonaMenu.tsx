@@ -4,6 +4,7 @@ import { useTranslate } from '../../i18n/index.js'
 import {
   getSessionUsedMemories,
   isEphemeralSession,
+  promoteTrialSession,
   switchSessionPersona,
   syncSessionPersonaSnapshot,
   toggleSessionIncognito,
@@ -17,6 +18,7 @@ import { useSettings } from '../../services/settings.js'
 import { Button } from '../base/Button.js'
 import { IconChevronDownOutline14, IconIncognitoOutline16 } from '../base/icons.js'
 import { Modal } from '../base/Modal.js'
+import { showToast } from '../base/toastState.js'
 import { PersonaAvatar } from './PersonaAvatar.js'
 import styles from './Persona.module.css'
 
@@ -89,6 +91,20 @@ export const SessionPersonaMenu = ({
           <IconChevronDownOutline14 />
         </span>
       </button>
+
+      {ephemeral ? (
+        <button
+          type="button"
+          className={styles.updateBannerBtn}
+          onClick={() => {
+            if (promoteTrialSession(session.id)) {
+              showToast({ key: 'personaSavedToListToast' })
+            }
+          }}
+        >
+          {t('personaSaveToList')}
+        </button>
+      ) : null}
 
       {hasUpdate && matchedCustom && !streaming ? (
         <button

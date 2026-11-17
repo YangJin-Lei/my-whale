@@ -141,7 +141,6 @@ const SettingsContent = () => {
                   </Button>
                 }
               />
-              <AppNotice />
               {isMobile ? <ApiKeyConfirm editor={apiKeyEditor} /> : null}
             </>
           )}

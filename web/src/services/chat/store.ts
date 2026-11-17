@@ -10,11 +10,7 @@ import {
 } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
 import { debouncedRefreshBalance, markInsufficient } from '../balance.js'
-import {
-  flushPendingExtracts,
-  scheduleExtract,
-  seedExtractedBaseline,
-} from '../memory/extract.js'
+import { flushPendingExtracts, scheduleExtract, seedExtractedBaseline } from '../memory/extract.js'
 import { selectMemories } from '../memory/select.js'
 import { initMemories, markMemoriesUsed, useMemoryStore } from '../memory/store.js'
 import type { Memory } from '../memory/types.js'
@@ -540,6 +536,35 @@ export const startTrialChat = (persona: Persona) => {
     sessionCache: { ...state.sessionCache, [session.id]: session },
     activeId: session.id,
   }))
+}
+
+/** 从设置中选择人设后进入欢迎页发起普通对话（发送首条消息即保存到左侧对话列表） */
+export const startChatWithPersona = (persona: Persona) => {
+  if (get().importingHistory) {
+    return
+  }
+  flushPendingExtracts()
+  cleanupEphemeralIfLeaving(null)
+  applyPersonaDefaults(persona)
+  set({ activeId: null, draftPersonaId: persona.id, draftIncognito: false })
+  trimSessionCache()
+}
+
+/** 将「试聊」临时会话转为正式保存会话，展示在左侧对话列表 */
+export const promoteTrialSession = (sessionId: string): boolean => {
+  const session = getSession(sessionId)
+  if (!session || !ephemeralSessions.has(sessionId) || get().importingHistory) {
+    return false
+  }
+  ephemeralSessions.delete(sessionId)
+  touchSession(sessionId)
+  set((state) => ({
+    sessions: state.sessions.some((item) => item.id === sessionId)
+      ? state.sessions
+      : sortSessions([toSessionSummary(session), ...state.sessions]),
+  }))
+  persist(sessionId)
+  return true
 }
 
 export const newChat = () => {
@@ -1157,7 +1182,10 @@ export const switchSessionPersona = (sessionId: string, persona: Persona) => {
       personaId: persona.id,
       snapshot: nextSnapshot,
     },
-    personaNotices: [...(current.personaNotices ?? []), { afterMessageId, personaName: persona.name }],
+    personaNotices: [
+      ...(current.personaNotices ?? []),
+      { afterMessageId, personaName: persona.name },
+    ],
     updatedAt: Date.now(),
   }))
   persist(sessionId)

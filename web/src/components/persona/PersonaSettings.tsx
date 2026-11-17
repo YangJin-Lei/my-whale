@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
-import { startTrialChat } from '../../services/chat/store.js'
+import { startChatWithPersona, startTrialChat } from '../../services/chat/store.js'
 import { DEFAULT_PERSONA_ID } from '../../services/persona/builtin.js'
 import {
   duplicatePersona,
@@ -63,6 +63,16 @@ export const PersonaSettings = () => {
                 <div className={styles.personaDesc}>{persona.description}</div>
               </div>
               <div className={styles.personaActions}>
+                <button
+                  type="button"
+                  className={styles.linkBtn}
+                  onClick={() => {
+                    startChatWithPersona(persona)
+                    closeSettings()
+                  }}
+                >
+                  {t('personaStartChat')}
+                </button>
                 {persona.id !== DEFAULT_PERSONA_ID ? (
                   <button
                     type="button"
