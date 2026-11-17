@@ -100,6 +100,10 @@ export const zh = {
   avatarMenuSettingsDialogThemeSelectSystemOption: '跟随系统',
   apiKeyStart: '输入 API Key 开始使用',
   apiKeyEdit: '修改 API Key',
+  apiKeyLogout: '退出 Key',
+  apiKeyLogoutConfirmTitle: '退出当前 API Key？',
+  apiKeyLogoutConfirmDesc:
+    '清除本机保存的 API Key 后需要重新输入才能继续聊天；本地历史对话、人设与记忆会保留。',
   apiKeyPlaceholder: '请输入 API Key',
   apiKeyVerifying: '正在验证...',
   confirm: '确定',
@@ -191,6 +195,14 @@ export const zh = {
   noBalanceCta: '没有余额？点击这里',
   balanceLoadFailed: '余额获取失败',
   refreshBalance: '刷新余额',
+  viewUsageLink: '官网用量',
+  balanceLeakHint: '如发现余额异常变动，建议查看官网用量排查 API Key 是否泄露',
+  settingsNoticeTitle: '注意事项与说明',
+  settingsNoticeItem1:
+    '本应用（my-whale）基于 deepseek-ai/chat-demo（MIT 协议）二次开发，为第三方客户端，非 DeepSeek 官方应用。',
+  settingsNoticeItem2:
+    'API Key、历史对话、人设与记忆仅保存在本地，仅在请求时直连官方 API；请勿泄露 Key，发现余额异常请及时前往官网用量排查并更换。',
+  settingsNoticeItem3: '对话及开启「自动记忆」后的后台提炼均会按官方标准计费消耗余额。',
   startChatting: '开始聊天',
   skipTopUp: '稍后充值，先进入',
   onboardingHistoryTitle: '迁移历史对话（可选）',

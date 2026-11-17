@@ -5,8 +5,17 @@ export const extractApiKey = (raw: string): string | null => {
   return API_KEY_PATTERN.test(trimmed) ? trimmed : null
 }
 
-/** 尝试读取剪贴板中的 API Key；浏览器拒绝授权或不支持时静默返回 null */
+let nativeReader: (() => Promise<string | null>) | null = null
+
+export const setClipboardReader = (impl: () => Promise<string | null>) => {
+  nativeReader = impl
+}
+
+/** 尝试读取剪贴板；原生端优先走 Capacitor Clipboard，Web 端走浏览器 API */
 export const readClipboardText = async (): Promise<string | null> => {
+  if (nativeReader) {
+    return nativeReader()
+  }
   if (typeof navigator === 'undefined' || !navigator.clipboard?.readText) {
     return null
   }

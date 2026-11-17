@@ -257,6 +257,55 @@
   user-select: none;
 }
 
+.apiKeySavedActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.apiKeyLogoutBtn {
+  padding: 4px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 100px;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-state-error-primary);
+  cursor: pointer;
+
+  &:hover {
+    background-color: var(--dsw-alias-interactive-bg-hover-danger);
+  }
+}
+
+.noticeBox {
+  margin-top: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background-color: var(--dsw-specific-login-input);
+  border: 1px solid var(--dsw-alias-border-l2);
+}
+
+.noticeTitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+  margin-bottom: 6px;
+}
+
+.noticeList {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
 .apiKeyInput {
   gap: 12px;
   padding: 0 14px;

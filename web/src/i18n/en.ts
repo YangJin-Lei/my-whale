@@ -105,6 +105,10 @@ export const en = {
   avatarMenuSettingsDialogThemeSelectSystemOption: 'System',
   apiKeyStart: 'Enter an API Key to get started',
   apiKeyEdit: 'Edit API Key',
+  apiKeyLogout: 'Sign out Key',
+  apiKeyLogoutConfirmTitle: 'Remove current API Key?',
+  apiKeyLogoutConfirmDesc:
+    'You will need to enter an API Key again to chat. Your local chats, personas, and memories will be kept.',
   apiKeyPlaceholder: 'Enter API Key',
   apiKeyVerifying: 'Verifying...',
   confirm: 'Confirm',
@@ -200,6 +204,16 @@ export const en = {
   noBalanceCta: 'Out of balance? Click here',
   balanceLoadFailed: 'Failed to load balance',
   refreshBalance: 'Refresh balance',
+  viewUsageLink: 'Usage',
+  balanceLeakHint:
+    'If your balance changes unexpectedly, check official usage to verify your API Key is not leaked.',
+  settingsNoticeTitle: 'Notice & Disclaimer',
+  settingsNoticeItem1:
+    'my-whale is a third-party client modified from deepseek-ai/chat-demo (MIT License), NOT an official DeepSeek app.',
+  settingsNoticeItem2:
+    'Your API Key, chats, personas, and memories stay local and connect directly to DeepSeek API. Keep your Key safe and check official usage if balance changes unexpectedly.',
+  settingsNoticeItem3:
+    'Chats and background Auto Memory extraction consume DeepSeek API credits.',
   startChatting: 'Start chatting',
   skipTopUp: 'Top up later',
   onboardingHistoryTitle: 'Migrate chat history (optional)',

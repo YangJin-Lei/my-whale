@@ -7,7 +7,7 @@ import {
   refreshBalance,
   useBalance,
 } from '../../services/balance.js'
-import { openExternal, PLATFORM_TOP_UP_URL } from '../../services/links.js'
+import { openExternal, PLATFORM_TOP_UP_URL, PLATFORM_USAGE_URL } from '../../services/links.js'
 import { useSettings } from '../../services/settings.js'
 import { IconRefreshOutline16 } from '../base/icons.js'
 import { TopUpLink } from './TopUpLink.js'
@@ -112,6 +112,16 @@ export const BalanceBadge = ({ variant }: { variant: 'sider' | 'header' | 'setti
           </button>
         </div>
         {tooltip ? <div className={styles.settingsHint}>{tooltip}</div> : null}
+        <div className={styles.leakHintRow}>
+          <span className={styles.settingsHint}>{t('balanceLeakHint')}</span>
+          <button
+            type="button"
+            className={styles.topUpInline}
+            onClick={() => openExternal(PLATFORM_USAGE_URL)}
+          >
+            {t('viewUsageLink')} ↗
+          </button>
+        </div>
         {status === 'insufficient' ? <TopUpLink className={styles.settingsTopUp} /> : null}
       </div>
     )
@@ -134,15 +144,25 @@ export const BalanceBadge = ({ variant }: { variant: 'sider' | 'header' | 'setti
                 ? '--'
                 : summary || '--'}
         </span>
-        <button
-          type="button"
-          className={styles.refreshBtn}
-          aria-label={t('refreshBalance')}
-          title={t('refreshBalance')}
-          onClick={() => void refreshBalance()}
-        >
-          <IconRefreshOutline16 />
-        </button>
+        <div className={styles.siderActions}>
+          <button
+            type="button"
+            className={styles.usageMicroBtn}
+            title={t('balanceLeakHint')}
+            onClick={() => openExternal(PLATFORM_USAGE_URL)}
+          >
+            {t('viewUsageLink')} ↗
+          </button>
+          <button
+            type="button"
+            className={styles.refreshBtn}
+            aria-label={t('refreshBalance')}
+            title={t('refreshBalance')}
+            onClick={() => void refreshBalance()}
+          >
+            <IconRefreshOutline16 />
+          </button>
+        </div>
       </div>
       {status === 'insufficient' ? <TopUpLink className={styles.siderTopUp} /> : null}
     </div>

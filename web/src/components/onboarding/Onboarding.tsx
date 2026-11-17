@@ -6,7 +6,13 @@ import { formatBalanceSummary, refreshBalance, useBalance } from '../../services
 import { BackupError, exportHistory, importHistory } from '../../services/chat/backup.js'
 import { useChatStore } from '../../services/chat/store.js'
 import { extractApiKey, readClipboardApiKey, readClipboardText } from '../../services/clipboard.js'
-import { openExternal, PLATFORM_API_KEYS_URL, PLATFORM_TOP_UP_URL } from '../../services/links.js'
+import { exportBlobFile } from '../../services/fileExport.js'
+import {
+  openExternal,
+  PLATFORM_API_KEYS_URL,
+  PLATFORM_TOP_UP_URL,
+  PLATFORM_USAGE_URL,
+} from '../../services/links.js'
 import { setApiKey, useSettings } from '../../services/settings.js'
 import { Button } from '../base/Button.js'
 import { IconDownloadOutline16, IconUploadOutline14 } from '../base/icons.js'
@@ -66,13 +72,23 @@ const OnboardingContent = () => {
         void tryAutoDetectClipboard()
       }
     }
+    const onNativeKey = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail
+      if (detail && !apiKey) {
+        form.setValue(detail)
+        setDetected(true)
+        setClipboardFailed(false)
+      }
+    }
     window.addEventListener('focus', onFocus)
     document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('mywhale:clipboard-key', onNativeKey)
     return () => {
       window.removeEventListener('focus', onFocus)
       document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('mywhale:clipboard-key', onNativeKey)
     }
-  }, [awaitingKey, apiKey, tryAutoDetectClipboard])
+  }, [awaitingKey, apiKey, tryAutoDetectClipboard, form])
 
   const handlePaste = async () => {
     setClipboardFailed(false)
@@ -117,12 +133,7 @@ const OnboardingContent = () => {
     setHistoryStatus(null)
     try {
       const { name, blob } = await exportHistory()
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = name
-      link.click()
-      setTimeout(() => URL.revokeObjectURL(url), 10_000)
+      await exportBlobFile(name, blob)
     } catch (error) {
       const msg =
         error instanceof BackupError
@@ -285,6 +296,17 @@ const OnboardingContent = () => {
                   </Button>
                 </div>
               ) : null}
+
+              <div className={styles.usageHintRow}>
+                <span className={styles.hint}>{t('balanceLeakHint')}</span>
+                <button
+                  type="button"
+                  className={styles.changeKeyBtn}
+                  onClick={() => openExternal(PLATFORM_USAGE_URL)}
+                >
+                  {t('viewUsageLink')} ↗
+                </button>
+              </div>
             </div>
 
             <div className={styles.footerActions}>

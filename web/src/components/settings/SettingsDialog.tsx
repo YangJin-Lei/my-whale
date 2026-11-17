@@ -17,6 +17,7 @@ import {
   exportHistory,
   importHistory,
 } from '../../services/chat/backup.js'
+import { exportBlobFile } from '../../services/fileExport.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { useChatStore } from '../../services/chat/store.js'
 import { regionCodes, getRegionName, provinces } from '../../services/location.js'
@@ -114,6 +115,7 @@ const SettingsContent = () => {
               <LocaleSetting />
               <TtsVoiceSetting />
               <LocationSetting />
+              <AppNotice />
             </>
           ) : section === 'persona' ? (
             <PersonaSettings />
@@ -139,6 +141,7 @@ const SettingsContent = () => {
                   </Button>
                 }
               />
+              <AppNotice />
               {isMobile ? <ApiKeyConfirm editor={apiKeyEditor} /> : null}
             </>
           )}
@@ -306,6 +309,20 @@ const LocaleSetting = () => {
         />
       }
     />
+  )
+}
+
+const AppNotice = () => {
+  const t = useTranslate()
+  return (
+    <div className={styles.noticeBox}>
+      <div className={styles.noticeTitle}>{t('settingsNoticeTitle')}</div>
+      <ul className={styles.noticeList}>
+        <li>{t('settingsNoticeItem1')}</li>
+        <li>{t('settingsNoticeItem2')}</li>
+        <li>{t('settingsNoticeItem3')}</li>
+      </ul>
+    </div>
   )
 }
 
@@ -542,12 +559,7 @@ const ExportHistory = ({ disabled }: { disabled: boolean }) => {
     setStatus(null)
     try {
       const { name, blob } = await exportHistory()
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = name
-      link.click()
-      setTimeout(() => URL.revokeObjectURL(url), 10_000)
+      await exportBlobFile(name, blob)
     } catch (error) {
       setStatus(errorStatus('historyExportFailed', error))
     } finally {

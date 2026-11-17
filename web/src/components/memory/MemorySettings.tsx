@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { useMemo, useRef, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { selectSession } from '../../services/chat/store.js'
+import { exportBlobFile } from '../../services/fileExport.js'
 import { hasSensitiveInfo } from '../../services/memory/sensitive.js'
 import {
   addMemory,
@@ -110,15 +111,10 @@ export const MemorySettings = () => {
     }
   }
 
-  const exportProfile = () => {
+  const exportProfile = async () => {
     const backup = buildProfileBackup()
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `my-whale-profile-${new Date().toISOString().slice(0, 10)}.json`
-    link.click()
-    setTimeout(() => URL.revokeObjectURL(url), 10_000)
+    await exportBlobFile(`my-whale-profile-${new Date().toISOString().slice(0, 10)}.json`, blob)
   }
 
   const handleSelectProfileFile = async (file: File) => {
@@ -377,7 +373,7 @@ export const MemorySettings = () => {
 
       <div className={styles.footerRow}>
         <div className={styles.profileBackupBtns}>
-          <Button variant="outlined" size="s" onClick={exportProfile}>
+          <Button variant="outlined" size="s" onClick={() => void exportProfile()}>
             <IconDownloadOutline16 />
             {t('profileExport')}
           </Button>

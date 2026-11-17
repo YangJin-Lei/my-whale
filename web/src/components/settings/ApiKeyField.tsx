@@ -3,10 +3,14 @@ import { IconEditOutline16 } from '../base/icons.js'
 import { refreshBalance } from '../../services/balance.js'
 import { readClipboardText } from '../../services/clipboard.js'
 import { openExternal, PLATFORM_API_KEYS_URL } from '../../services/links.js'
-import { useSettings } from '../../services/settings.js'
+import { setApiKey, useSettings } from '../../services/settings.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { BalanceBadge } from '../balance/BalanceBadge.js'
+import { Button } from '../base/Button.js'
 import { IconButton } from '../base/IconButton.js'
+import { Modal } from '../base/Modal.js'
+import { openOnboarding } from '../onboarding/onboardingState.js'
+import { closeSettings } from './settingsDialogState.js'
 import { useApiKeyForm } from './useApiKeyForm.js'
 import { useTranslate } from '../../i18n/index.js'
 import styles from './Settings.module.css'
@@ -29,6 +33,7 @@ export const ApiKeyField = ({ editor }: { editor: ApiKeyEditor }) => {
   const t = useTranslate()
   const isMobile = useIsMobile()
   const { apiKey, editing, setEditing, form, showInput } = editor
+  const [confirmLogout, setConfirmLogout] = useState(false)
 
   return (
     <div className={styles.cell}>
@@ -46,12 +51,21 @@ export const ApiKeyField = ({ editor }: { editor: ApiKeyEditor }) => {
         {apiKey && !editing ? (
           <div className={styles.apiKeySaved}>
             <span className={styles.apiKeyMask}>{'*'.repeat(apiKey.length)}</span>
-            <IconButton
-              tone="primary"
-              icon={<IconEditOutline16 />}
-              tooltip={t('apiKeyEdit')}
-              onClick={() => setEditing(true)}
-            />
+            <div className={styles.apiKeySavedActions}>
+              <IconButton
+                tone="primary"
+                icon={<IconEditOutline16 />}
+                tooltip={t('apiKeyEdit')}
+                onClick={() => setEditing(true)}
+              />
+              <button
+                type="button"
+                className={styles.apiKeyLogoutBtn}
+                onClick={() => setConfirmLogout(true)}
+              >
+                {t('apiKeyLogout')}
+              </button>
+            </div>
           </div>
         ) : (
           <div className={styles.apiKeyInput}>
@@ -109,6 +123,34 @@ export const ApiKeyField = ({ editor }: { editor: ApiKeyEditor }) => {
         {showInput && form.error ? <div className={styles.error}>{form.error}</div> : null}
         <BalanceBadge variant="settings" />
       </div>
+      {confirmLogout ? (
+        <Modal
+          title={t('apiKeyLogoutConfirmTitle')}
+          onClose={() => setConfirmLogout(false)}
+          footer={
+            <>
+              <Button variant="outlined" size="m" onClick={() => setConfirmLogout(false)}>
+                {t('cancel')}
+              </Button>
+              <Button
+                variant="danger"
+                size="m"
+                onClick={() => {
+                  setConfirmLogout(false)
+                  setEditing(false)
+                  setApiKey(null)
+                  closeSettings()
+                  openOnboarding()
+                }}
+              >
+                {t('apiKeyLogout')}
+              </Button>
+            </>
+          }
+        >
+          {t('apiKeyLogoutConfirmDesc')}
+        </Modal>
+      ) : null}
     </div>
   )
 }
