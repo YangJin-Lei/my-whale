@@ -6,42 +6,47 @@
     <title>my-whale — 本地优先的 DeepSeek 第三方全端客户端</title>
     <meta
       name="description"
-      content="基于 deepseek-ai/chat-demo 二次开发的本地优先 DeepSeek 第三方客户端，支持 Web / iOS PWA、Android APK 与 Tauri 桌面端。"
+      content="基于 deepseek-ai/chat-demo 二次开发的本地优先 DeepSeek 第三方客户端，支持 Web / iOS PWA、Android APK 与 Tauri v2 桌面端。"
     />
     <link rel="icon" type="image/png" href="./assets/logo.png" />
     <style>
       :root {
-        --bg: #f8fafc;
+        --bg: #f6f8fc;
         --surface: #ffffff;
-        --surface-soft: #f1f5f9;
+        --surface-soft: #eef2f8;
         --text: #0f172a;
         --text-secondary: #475569;
         --text-muted: #64748b;
         --border: #e2e8f0;
         --brand: #4d6bfe;
         --brand-hover: #3b57e8;
-        --accent: #f472b6;
-        --shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+        --brand-soft: rgba(77, 107, 254, 0.12);
+        --shadow: 0 20px 50px rgba(15, 23, 42, 0.1);
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --bg: #0f1115;
-          --surface: #171a21;
-          --surface-soft: #1e232d;
+          --bg: #0d1017;
+          --surface: #151923;
+          --surface-soft: #1d2331;
           --text: #f1f5f9;
           --text-secondary: #cbd5e1;
           --text-muted: #94a3b8;
-          --border: #283040;
-          --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+          --border: #262f40;
+          --brand-soft: rgba(77, 107, 254, 0.22);
+          --shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
         }
       }
       * {
         box-sizing: border-box;
       }
+      html {
+        scroll-behavior: smooth;
+      }
       body {
         margin: 0;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC',
-          'Microsoft YaHei', sans-serif;
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei',
+          sans-serif;
         background: var(--bg);
         color: var(--text);
         line-height: 1.6;
@@ -52,16 +57,16 @@
         text-decoration: none;
       }
       .container {
-        max-width: 1080px;
+        max-width: 1120px;
         margin: 0 auto;
         padding: 0 20px;
       }
       header {
         position: sticky;
         top: 0;
-        z-index: 20;
+        z-index: 40;
         backdrop-filter: blur(12px);
-        background: color-mix(in srgb, var(--bg) 82%, transparent);
+        background: color-mix(in srgb, var(--bg) 84%, transparent);
         border-bottom: 1px solid var(--border);
       }
       .nav {
@@ -76,11 +81,11 @@
         align-items: center;
         gap: 10px;
         font-weight: 700;
-        font-size: 19px;
+        font-size: 18px;
       }
       .brand img {
-        width: 34px;
-        height: 34px;
+        width: 32px;
+        height: 32px;
         object-fit: contain;
       }
       .badge {
@@ -88,13 +93,24 @@
         font-weight: 600;
         padding: 2px 8px;
         border-radius: 999px;
-        background: color-mix(in srgb, var(--brand) 14%, transparent);
+        background: var(--brand-soft);
         color: var(--brand);
       }
       .navLinks {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 10px;
+      }
+      .navAnchor {
+        padding: 6px 10px;
+        font-size: 14px;
+        color: var(--text-secondary);
+        border-radius: 8px;
+        transition: color 0.15s ease, background-color 0.15s ease;
+      }
+      .navAnchor:hover {
+        color: var(--text);
+        background: var(--surface-soft);
       }
       .btn {
         display: inline-flex;
@@ -109,7 +125,10 @@
         background: var(--surface);
         color: var(--text);
         cursor: pointer;
-        transition: transform 0.12s ease, background-color 0.15s ease, border-color 0.15s ease;
+        transition:
+          transform 0.12s ease,
+          background-color 0.15s ease,
+          border-color 0.15s ease;
       }
       .btn:hover {
         transform: translateY(-1px);
@@ -130,24 +149,24 @@
         border-radius: 10px;
       }
       .hero {
-        padding: 56px 0 36px;
+        padding: 44px 0 24px;
         text-align: center;
       }
       .heroLogo {
-        width: 96px;
-        height: 96px;
+        width: 84px;
+        height: 84px;
         object-fit: contain;
-        margin-bottom: 14px;
+        margin-bottom: 10px;
       }
       h1 {
-        margin: 0 0 12px;
-        font-size: clamp(28px, 5vw, 44px);
+        margin: 0 0 10px;
+        font-size: clamp(28px, 4.6vw, 44px);
         line-height: 1.2;
         letter-spacing: -0.02em;
       }
       .heroSub {
-        max-width: 680px;
-        margin: 0 auto 28px;
+        max-width: 720px;
+        margin: 0 auto 24px;
         font-size: 16px;
         color: var(--text-secondary);
       }
@@ -156,12 +175,12 @@
         flex-wrap: wrap;
         justify-content: center;
         gap: 12px;
-        margin-bottom: 24px;
+        margin-bottom: 18px;
       }
       .iosTip {
-        max-width: 680px;
+        max-width: 740px;
         margin: 0 auto;
-        padding: 14px 18px;
+        padding: 12px 16px;
         border-radius: 14px;
         background: var(--surface);
         border: 1px solid var(--border);
@@ -172,6 +191,301 @@
       .iosTip strong {
         color: var(--text);
       }
+
+      /* Interactive Desktop Walkthrough */
+      .demoSection {
+        padding: 20px 0 40px;
+      }
+      .demoHeader {
+        text-align: center;
+        margin-bottom: 18px;
+      }
+      .demoHeader h2 {
+        margin: 0 0 6px;
+        font-size: 24px;
+      }
+      .demoHeader p {
+        margin: 0;
+        font-size: 14px;
+        color: var(--text-muted);
+      }
+      .stepBar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+      .stepPill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 14px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text-secondary);
+        font: inherit;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .stepPill:hover {
+        border-color: var(--brand);
+        color: var(--text);
+      }
+      .stepPill.active {
+        background: var(--brand);
+        border-color: var(--brand);
+        color: #ffffff;
+      }
+      .stepNum {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        font-size: 11px;
+        font-weight: 700;
+        background: rgba(15, 23, 42, 0.08);
+      }
+      .stepPill.active .stepNum {
+        background: rgba(255, 255, 255, 0.25);
+        color: #ffffff;
+      }
+
+      .desktopShell {
+        border-radius: 18px;
+        overflow: hidden;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow);
+      }
+      .windowChrome {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 16px;
+        background: var(--surface-soft);
+        border-bottom: 1px solid var(--border);
+      }
+      .trafficLights {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .dot {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+      }
+      .dotRed {
+        background: #ff5f56;
+      }
+      .dotYellow {
+        background: #ffbd2e;
+      }
+      .dotGreen {
+        background: #27c93f;
+      }
+      .windowTitle {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-secondary);
+      }
+      .windowActions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .miniBtn {
+        padding: 4px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text-secondary);
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .miniBtn:hover {
+        border-color: var(--brand);
+        color: var(--text);
+      }
+      .guideBanner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 10px 16px;
+        background: color-mix(in srgb, var(--brand) 8%, var(--surface));
+        border-bottom: 1px solid var(--border);
+        font-size: 13px;
+      }
+      .guideText strong {
+        color: var(--brand);
+      }
+      .guideHintBtn {
+        padding: 4px 12px;
+        border-radius: 999px;
+        border: none;
+        background: var(--brand);
+        color: #ffffff;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .guideHintBtn:hover {
+        background: var(--brand-hover);
+      }
+
+      .stage {
+        position: relative;
+        width: 100%;
+        background: #ffffff;
+      }
+      .stepView {
+        display: none;
+        position: relative;
+        width: 100%;
+      }
+      .stepView.active {
+        display: block;
+        animation: fadeIn 0.22s ease;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0.45;
+          transform: scale(0.995);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      .shotFrame {
+        position: relative;
+        width: 100%;
+      }
+      .shotFrame img {
+        display: block;
+        width: 100%;
+        height: auto;
+        user-select: none;
+      }
+
+      /* Interactive Hotspots */
+      .hotspot {
+        position: absolute;
+        border: 2px solid var(--brand);
+        border-radius: 10px;
+        background: rgba(77, 107, 254, 0.14);
+        cursor: pointer;
+        padding: 0;
+        transition:
+          background-color 0.15s ease,
+          transform 0.15s ease;
+        z-index: 5;
+      }
+      .hotspot:hover {
+        background: rgba(77, 107, 254, 0.28);
+        transform: scale(1.03);
+      }
+      .hotspot::after {
+        content: '';
+        position: absolute;
+        inset: -6px;
+        border-radius: 14px;
+        border: 2px solid var(--brand);
+        opacity: 0.65;
+        animation: pulseRing 1.6s infinite;
+        pointer-events: none;
+      }
+      @keyframes pulseRing {
+        0% {
+          transform: scale(0.96);
+          opacity: 0.85;
+        }
+        70% {
+          transform: scale(1.12);
+          opacity: 0;
+        }
+        100% {
+          transform: scale(1.12);
+          opacity: 0;
+        }
+      }
+      .hotspotTip {
+        position: absolute;
+        padding: 4px 10px;
+        border-radius: 8px;
+        background: #0f172a;
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+        pointer-events: none;
+      }
+      .tipTopRight {
+        left: 0;
+        bottom: calc(100% + 10px);
+      }
+      .tipRight {
+        left: calc(100% + 12px);
+        top: 50%;
+        transform: translateY(-50%);
+      }
+      .tipTopCenter {
+        left: 50%;
+        bottom: calc(100% + 10px);
+        transform: translateX(-50%);
+      }
+      .invisibleHotspot {
+        position: absolute;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        z-index: 4;
+      }
+
+      /* Scrollable continuous trial chat view (Step 4) */
+      .chatScrollBox {
+        max-height: 600px;
+        overflow-y: auto;
+        background: #ffffff;
+        scroll-behavior: smooth;
+      }
+      .chatScrollBox img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      .chatFloatControls {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 10px 16px;
+        background: var(--surface-soft);
+        border-top: 1px solid var(--border);
+        font-size: 13px;
+        color: var(--text-secondary);
+      }
+      .chatFloatBtns {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      /* Features & Extra Shots */
       .section {
         padding: 36px 0;
       }
@@ -219,7 +533,7 @@
         border-radius: 16px;
         background: var(--surface);
         border: 1px solid var(--border);
-        box-shadow: var(--shadow);
+        box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
       }
       .shotCard img {
         width: 100%;
@@ -236,7 +550,7 @@
         color: var(--text-muted);
       }
       footer {
-        margin-top: 28px;
+        margin-top: 24px;
         padding: 28px 0 44px;
         border-top: 1px solid var(--border);
         font-size: 13px;
@@ -244,15 +558,22 @@
         text-align: center;
       }
       .disclaimer {
-        max-width: 760px;
+        max-width: 780px;
         margin: 0 auto 10px;
       }
-      @media (max-width: 600px) {
+      @media (max-width: 680px) {
         .hideMobile {
           display: none;
         }
         .hero {
-          padding: 36px 0 24px;
+          padding: 28px 0 18px;
+        }
+        .hotspotTip {
+          font-size: 10px;
+          padding: 2px 6px;
+        }
+        .chatScrollBox {
+          max-height: 440px;
         }
       }
     </style>
@@ -266,6 +587,9 @@
           <span class="badge">v0.1.0</span>
         </a>
         <div class="navLinks">
+          <a class="navAnchor hideMobile" href="#demo">交互演示</a>
+          <a class="navAnchor hideMobile" href="#features">核心能力</a>
+          <a class="navAnchor hideMobile" href="#gallery">更多界面</a>
           <a
             class="btn btnCompact hideMobile"
             href="https://github.com/YangJin-Lei/my-whale"
@@ -283,7 +607,7 @@
         <img class="heroLogo" src="./assets/logo.png" alt="my-whale logo" />
         <h1>本地优先的 DeepSeek 第三方客户端</h1>
         <p class="heroSub">
-          纯静态直连 DeepSeek 官方 API，零后端不中转。支持引导配 Key 与余额安全排查、自定义人设、全局与单对话局部记忆隔离，以及历史对话 ZIP v3 无损迁移。
+          纯静态直连 DeepSeek 官方 API，零后端不中转。支持引导配 Key 与余额安全排查、自定义人设试聊、全局与单对话局部记忆隔离，以及历史对话 ZIP v3 无损迁移。
         </p>
         <div class="ctaGroup">
           <a class="btn btnPrimary" href="./app/">立即打开 Web / iOS PWA 版</a>
@@ -304,13 +628,149 @@
         </div>
         <div class="iosTip">
           <strong>iPhone / iPad 安装方式（PWA）：</strong>
-          使用 Safari 点击上方「立即打开 Web / iOS PWA 版」进入应用后，点击底部<strong>「分享」</strong>图标 → 选择<strong>「添加到主屏幕」</strong>，即可像原生 App 一样全屏运行，所有数据仅保存在你设备的本地浏览器中。
+          使用 Safari 点击上方「立即打开 Web / iOS PWA 版」进入应用后，点击底部<strong>「分享」</strong>图标 → 选择<strong>「添加到主屏幕」</strong>，即可全屏像原生 App 一样使用，所有数据仅保存在本地浏览器。
         </div>
       </section>
 
-      <section class="section">
+      <!-- Interactive Desktop Walkthrough -->
+      <section id="demo" class="demoSection">
+        <div class="demoHeader">
+          <h2>桌面端交互演示（点击界面高亮点亲自体验）</h2>
+          <p>按真实操作路径依次点击：<strong>左下角「设置」</strong> → <strong>左侧「人设」</strong> → <strong>霸道总裁「试聊」</strong>，即可进入连续试聊窗口</p>
+        </div>
+
+        <div class="stepBar" role="tablist" aria-label="交互演示步骤">
+          <button type="button" class="stepPill active" data-step-btn="1">
+            <span class="stepNum">1</span>主界面
+          </button>
+          <button type="button" class="stepPill" data-step-btn="2">
+            <span class="stepNum">2</span>打开设置
+          </button>
+          <button type="button" class="stepPill" data-step-btn="3">
+            <span class="stepNum">3</span>人设列表
+          </button>
+          <button type="button" class="stepPill" data-step-btn="4">
+            <span class="stepNum">4</span>霸道总裁试聊
+          </button>
+        </div>
+
+        <div class="desktopShell">
+          <div class="windowChrome">
+            <div class="trafficLights" aria-hidden="true">
+              <span class="dot dotRed"></span>
+              <span class="dot dotYellow"></span>
+              <span class="dot dotGreen"></span>
+            </div>
+            <div class="windowTitle" id="demoWindowTitle">my-whale Desktop — 欢迎主页</div>
+            <div class="windowActions">
+              <button type="button" class="miniBtn" id="demoResetBtn">回到首页</button>
+              <a class="miniBtn" href="./app/">体验真机网页版 ↗</a>
+            </div>
+          </div>
+
+          <div class="guideBanner">
+            <div class="guideText" id="demoGuideText">
+              <strong>第 1/4 步：</strong>请点击画面左下角的 <strong>「⚙ 设置」</strong> 按钮，打开系统设置弹窗。
+            </div>
+            <button type="button" class="guideHintBtn" id="demoNextBtn">点击前往下一步 →</button>
+          </div>
+
+          <div class="stage">
+            <!-- Step 1: Home -->
+            <div class="stepView active" data-step="1">
+              <div class="shotFrame">
+                <img src="./assets/demo/step-1-home.png" alt="my-whale 桌面端主界面" />
+                <button
+                  type="button"
+                  class="hotspot"
+                  style="left: 0.6%; top: 93.2%; width: 14%; height: 6.4%"
+                  aria-label="点击打开设置"
+                  data-goto="2"
+                >
+                  <span class="hotspotTip tipTopRight">① 点击「设置」</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Step 2: Settings -> General -->
+            <div class="stepView" data-step="2">
+              <div class="shotFrame">
+                <img src="./assets/demo/step-2-settings.png" alt="设置弹窗 - 通用设置" />
+                <button
+                  type="button"
+                  class="hotspot"
+                  style="left: 3.4%; top: 20.8%; width: 19.2%; height: 6.8%"
+                  aria-label="点击切换到人设"
+                  data-goto="3"
+                >
+                  <span class="hotspotTip tipRight">② 点击「人设」</span>
+                </button>
+                <button
+                  type="button"
+                  class="invisibleHotspot"
+                  style="left: 81%; top: 4%; width: 5%; height: 7%"
+                  title="关闭弹窗返回主界面"
+                  aria-label="关闭弹窗返回主界面"
+                  data-goto="1"
+                ></button>
+              </div>
+            </div>
+
+            <!-- Step 3: Settings -> Personas -->
+            <div class="stepView" data-step="3">
+              <div class="shotFrame">
+                <img src="./assets/demo/step-3-personas.jpg" alt="设置弹窗 - 人设列表" />
+                <button
+                  type="button"
+                  class="hotspot"
+                  style="left: 65.8%; top: 27%; width: 4%; height: 5.5%"
+                  aria-label="点击霸道总裁试聊"
+                  data-goto="4"
+                >
+                  <span class="hotspotTip tipTopCenter">③ 点击「试聊」进入霸道总裁对话</span>
+                </button>
+                <button
+                  type="button"
+                  class="invisibleHotspot"
+                  style="left: 6%; top: 15.6%; width: 19%; height: 6%"
+                  title="返回通用设置"
+                  aria-label="返回通用设置"
+                  data-goto="2"
+                ></button>
+                <button
+                  type="button"
+                  class="invisibleHotspot"
+                  style="left: 87.5%; top: 8.5%; width: 4%; height: 5.5%"
+                  title="关闭弹窗返回主界面"
+                  aria-label="关闭弹窗返回主界面"
+                  data-goto="1"
+                ></button>
+              </div>
+            </div>
+
+            <!-- Step 4: Continuous Stitched Trial Chat (3 screenshots combined) -->
+            <div class="stepView" data-step="4">
+              <div class="chatScrollBox" id="chatScrollBox">
+                <img
+                  src="./assets/demo/step-4-chat.png"
+                  alt="霸道总裁连续试聊对话（支持Python代码高亮与LaTeX公式）"
+                />
+              </div>
+              <div class="chatFloatControls">
+                <span>④ 已进入「霸道总裁 · 试聊·不保存」模式，支持上下滚动阅读完整连贯对话（含角色演绎、Python 冒泡排序与数学积分推导）</span>
+                <div class="chatFloatBtns">
+                  <button type="button" class="miniBtn" id="scrollChatBtn">向下滚动看代码与公式 ↓</button>
+                  <button type="button" class="miniBtn" data-goto="3">返回人设列表</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="section">
         <h2 class="sectionTitle">核心能力</h2>
-        <p class="sectionDesc">Web、iOS PWA、Android APK 与 Tauri 桌面端数据格式 100% 互通</p>
+        <p class="sectionDesc">Web / iOS PWA、Android APK 与 Tauri v2 桌面端数据格式 100% 互通</p>
         <div class="grid">
           <div class="card">
             <h3>引导配 Key 与余额监测</h3>
@@ -339,14 +799,14 @@
         </div>
       </section>
 
-      <section class="section">
-        <h2 class="sectionTitle">界面演示</h2>
-        <p class="sectionDesc">从首次引导、记忆管理到主对话界面的完整体验</p>
+      <section id="gallery" class="section">
+        <h2 class="sectionTitle">引导、记忆与迁移界面</h2>
+        <p class="sectionDesc">覆盖从首次配置 API Key 到历史归档导入与记忆提炼的日常高频场景</p>
         <div class="shots">
           <div class="shotCard">
             <img src="./assets/1.png" alt="首次启动引导与数据迁移" loading="lazy" />
             <div class="shotTitle">1. 首次启动引导与历史迁移</div>
-            <div class="shotCaption">支持引导申请并粘贴 API Key，并在首屏直接导入历史对话压缩包。</div>
+            <div class="shotCaption">引导申请并粘贴 API Key，支持直接在首屏导入历史对话压缩包。</div>
           </div>
           <div class="shotCard">
             <img src="./assets/2.png" alt="记忆设置与关于我" loading="lazy" />
@@ -370,5 +830,101 @@
         <p>MIT License · <a href="https://github.com/YangJin-Lei/my-whale">github.com/YangJin-Lei/my-whale</a></p>
       </div>
     </footer>
+
+    <script>
+      ;(() => {
+        const META = {
+          1: {
+            title: 'my-whale Desktop — 欢迎主页',
+            guide:
+              '<strong>第 1/4 步：</strong>请点击画面左下角的 <strong>「⚙ 设置」</strong> 按钮，打开系统设置弹窗。',
+            nextLabel: '点击前往第 2 步（打开设置） →',
+            nextStep: 2,
+          },
+          2: {
+            title: 'my-whale Desktop — 通用设置',
+            guide:
+              '<strong>第 2/4 步：</strong>请点击设置弹窗左侧栏的 <strong>「人设」</strong>，切换至人设管理列表。',
+            nextLabel: '点击前往第 3 步（人设列表） →',
+            nextStep: 3,
+          },
+          3: {
+            title: 'my-whale Desktop — 人设广场与自定义',
+            guide:
+              '<strong>第 3/4 步：</strong>请点击 <strong>「霸道总裁」</strong> 右侧的 <strong>「试聊」</strong>，立即开启无痕试聊体验。',
+            nextLabel: '点击前往第 4 步（霸道总裁试聊） →',
+            nextStep: 4,
+          },
+          4: {
+            title: 'my-whale Desktop — 霸道总裁 · 试聊·不保存',
+            guide:
+              '<strong>第 4/4 步：</strong>已进入连贯试聊对话！可在下方窗口内 <strong>上下滚动</strong> 查看完整对话、Python 代码与数学公式。',
+            nextLabel: '回到第 1 步重新演示 ↺',
+            nextStep: 1,
+          },
+        }
+
+        let currentStep = 1
+        const titleEl = document.getElementById('demoWindowTitle')
+        const guideEl = document.getElementById('demoGuideText')
+        const nextBtn = document.getElementById('demoNextBtn')
+        const resetBtn = document.getElementById('demoResetBtn')
+        const scrollChatBtn = document.getElementById('scrollChatBtn')
+        const chatScrollBox = document.getElementById('chatScrollBox')
+        const stepViews = document.querySelectorAll('[data-step]')
+        const stepBtns = document.querySelectorAll('[data-step-btn]')
+
+        const setStep = (step) => {
+          currentStep = Number(step) || 1
+          stepViews.forEach((el) => {
+            el.classList.toggle('active', Number(el.dataset.step) === currentStep)
+          })
+          stepBtns.forEach((btn) => {
+            btn.classList.toggle('active', Number(btn.dataset.stepBtn) === currentStep)
+          })
+          const info = META[currentStep]
+          titleEl.textContent = info.title
+          guideEl.innerHTML = info.guide
+          nextBtn.textContent = info.nextLabel
+          if (currentStep === 4 && chatScrollBox) {
+            chatScrollBox.scrollTop = 0
+          }
+        }
+
+        document.querySelectorAll('[data-goto]').forEach((el) => {
+          el.addEventListener('click', () => setStep(el.dataset.goto))
+        })
+        stepBtns.forEach((btn) => {
+          btn.addEventListener('click', () => setStep(btn.dataset.stepBtn))
+        })
+        nextBtn.addEventListener('click', () => setStep(META[currentStep].nextStep))
+        resetBtn.addEventListener('click', () => setStep(1))
+
+        if (scrollChatBtn && chatScrollBox) {
+          scrollChatBtn.addEventListener('click', () => {
+            const atBottom =
+              chatScrollBox.scrollTop + chatScrollBox.clientHeight >=
+              chatScrollBox.scrollHeight - 40
+            if (atBottom) {
+              chatScrollBox.scrollTo({ top: 0, behavior: 'smooth' })
+              scrollChatBtn.textContent = '向下滚动看代码与公式 ↓'
+            } else {
+              chatScrollBox.scrollTo({
+                top: Math.min(chatScrollBox.scrollTop + 480, chatScrollBox.scrollHeight),
+                behavior: 'smooth',
+              })
+            }
+          })
+          chatScrollBox.addEventListener('scroll', () => {
+            const atBottom =
+              chatScrollBox.scrollTop + chatScrollBox.clientHeight >=
+              chatScrollBox.scrollHeight - 40
+            scrollChatBtn.textContent = atBottom
+              ? '回到对话顶部 ↑'
+              : '向下滚动看代码与公式 ↓'
+          })
+        }
+      })()
+    </script>
   </body>
 </html>
