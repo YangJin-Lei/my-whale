@@ -55,9 +55,11 @@
 
 ### 5. 全端覆盖（Web / iOS PWA / Android / Tauri 桌面端）
 - **Web 端 & iOS PWA**：React 18 + TypeScript + Zustand + IndexedDB（`idb`）+ Rspack，支持流式 SSE、深度思考、智能搜索、链接阅读、GFM Markdown、KaTeX 公式、Prism 代码高亮与 Mermaid 图表；内置 `manifest.webmanifest` 与离线 Service Worker，支持通过 GitHub Pages 纯静态部署并由 iPhone Safari「添加到主屏幕」作为全屏 PWA 使用。
-- **Android 端**：基于 Capacitor 8 打包为原生 APK，适配 Android 15/16 Edge-to-Edge 状态栏安全区，通过 `@capacitor/browser`（调用系统默认浏览器）、`@capacitor/clipboard`、`@capacitor/filesystem` 与 `@capacitor/share` 对接原生系统能力。
+- **Android 端**：基于 Capacitor 8 打包为原生 APK，适配 Android 15/16 Edge-to-Edge 状态栏安全区与软键盘视口，通过 `@capacitor/browser`（调用系统默认浏览器）、`@capacitor/clipboard`、`@capacitor/filesystem` 与 `@capacitor/share` 对接原生系统能力。
 - **桌面端（Tauri v2）**：轻量级原生桌面壳，直接复用 `web/dist` 构建 Windows（`.exe` / `.msi`）与 macOS（`.dmg`）安装包，支持调用系统默认浏览器打开官网控制台与本地文件导入导出。
 - **语音模式开关**：语音输入（麦克风）与回复朗读默认关闭，可在 `设置 → 通用设置 → 语音模式` 中按需开启。
+
+> **测试覆盖说明**：开发者日常使用 Android 与 Windows 设备，未持有 iPhone / iPad / Mac 设备进行实机测试；iOS PWA 与 macOS 构建产物基于标准 Web 规范与 GitHub Actions 自动化流程提供，尚未经过苹果端真机实测，欢迎苹果设备用户反馈使用体验。
 
 ---
 

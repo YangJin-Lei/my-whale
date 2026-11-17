@@ -2,7 +2,7 @@
   --modal-header-gap: 7px;
   width: 760px;
   height: 500px;
-  max-height: calc(100vh - 32px);
+  max-height: calc(100% - 24px);
   padding: 19px 24px 22px;
 }
 
@@ -363,7 +363,7 @@
     align-self: flex-end;
     width: 100%;
     max-width: none;
-    height: calc(100% - 64px);
+    height: calc(100% - 32px);
     max-height: 800px;
     border-radius: 24px 24px 0 0;
   }

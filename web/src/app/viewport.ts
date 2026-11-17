@@ -1,4 +1,7 @@
+import { Capacitor } from '@capacitor/core'
 import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react'
+
+const NATIVE_ANDROID = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android'
 
 /** 窄于 768px 按移动端布局 */
 const query = window.matchMedia('not all and (min-width: 768px)')
@@ -48,7 +51,9 @@ export const useMobileViewport = (enabled: boolean) => {
 
   useLayoutEffect(() => {
     const frame = frameRef.current
-    if (!enabled || !frame) {
+    // 原生 Android 端由 MainActivity 的 WindowInsets (systemBars + ime) 直接调整 WebView 尺寸，
+    // 再叠加 visualViewport.height 会导致键盘高度被重复扣减。
+    if (!enabled || !frame || NATIVE_ANDROID) {
       return
     }
     const viewport = window.visualViewport

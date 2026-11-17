@@ -84,6 +84,7 @@
     flex: 1;
     min-height: 0;
     justify-content: flex-end;
+    overflow-y: auto;
     max-width: none;
     margin: 0;
     padding: 0 16px env(safe-area-inset-bottom);

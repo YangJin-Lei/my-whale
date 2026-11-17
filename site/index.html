@@ -249,10 +249,11 @@
       /* Sidebar */
       .appSider {
         width: 240px;
+        height: 100%;
         flex-shrink: 0;
         display: flex;
         flex-direction: column;
-        padding: 14px 12px 12px;
+        padding: 14px 12px 16px;
         background: var(--app-sider);
         border-right: 1px solid var(--app-border);
       }
@@ -261,6 +262,7 @@
         align-items: center;
         justify-content: space-between;
         padding: 2px 4px 14px;
+        flex-shrink: 0;
       }
       .siderBrand {
         display: flex;
@@ -288,6 +290,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
+        flex-shrink: 0;
         gap: 8px;
         width: 100%;
         height: 38px;
@@ -302,14 +305,16 @@
       }
       .siderHistory {
         flex: 1;
-        margin-top: 16px;
+        min-height: 0;
+        margin-top: 12px;
         overflow: hidden;
       }
       .siderFooter {
         display: flex;
         flex-direction: column;
+        flex-shrink: 0;
         gap: 8px;
-        padding-top: 10px;
+        padding-top: 8px;
       }
       .balanceCard {
         display: flex;
@@ -354,6 +359,7 @@
       .appMain {
         flex: 1;
         min-width: 0;
+        min-height: 0;
         position: relative;
         display: flex;
         flex-direction: column;
@@ -411,9 +417,14 @@
         box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05);
       }
       .composerPlaceholder {
-        min-height: 36px;
+        min-height: 34px;
         font-size: 14px;
+        line-height: 22px;
         color: var(--app-sub);
+        word-break: break-word;
+      }
+      .composerPlaceholder.typing {
+        color: var(--app-text);
       }
       .composerRow {
         display: flex;
@@ -444,6 +455,14 @@
         gap: 10px;
         color: var(--app-sub);
       }
+      .iconSlot {
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--app-sub);
+      }
       .sendCircle {
         width: 30px;
         height: 30px;
@@ -451,11 +470,18 @@
         border: none;
         background: #b9ccff;
         color: #ffffff;
-        display: flex;
+        display: inline-flex;
         align-items: center;
         justify-content: center;
-        font-size: 15px;
-        font-weight: 700;
+        transition:
+          background-color 0.14s ease,
+          transform 0.1s ease;
+      }
+      .sendCircle.ready {
+        background: #4d6bfe;
+      }
+      .sendCircle.pressing {
+        transform: scale(0.88);
       }
 
       /* Settings Modal Overlay */
@@ -865,7 +891,6 @@
         display: flex;
         align-items: center;
         gap: 10px;
-        font-size: 12px;
         color: var(--app-sub);
       }
       .streamCursor {
@@ -1040,7 +1065,7 @@
               <span class="dot dotYellow"></span>
               <span class="dot dotGreen"></span>
             </div>
-            <div class="windowTitle" id="demoWindowTitle">my-whale</div>
+            <div class="windowTitle">my-whale</div>
             <span class="windowStageTag" id="demoStageTag">主界面</span>
           </div>
 
@@ -1080,18 +1105,56 @@
                 </div>
                 <div class="welcomeActionsRow">
                   <div class="chipBtn">+ 新建人设</div>
-                  <div class="chipBtn">🕶 无痕会话</div>
+                  <div class="chipBtn">无痕会话</div>
                 </div>
                 <div class="composerWrap">
                   <div class="composerPlaceholder">请输入消息</div>
                   <div class="composerRow">
                     <div class="composerToggles">
-                      <div class="toggleChip">⚛ 深度思考</div>
-                      <div class="toggleChip">🌐 智能搜索</div>
+                      <div class="toggleChip">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                          <path
+                            d="M8.00192 6.64454C8.75026 6.64454 9.35732 7.25169 9.35739 8.00001C9.35739 8.74838 8.7503 9.35548 8.00192 9.35548C7.25367 9.35533 6.64743 8.74829 6.64743 8.00001C6.6475 7.25178 7.25371 6.64468 8.00192 6.64454Z"
+                            fill="currentColor"
+                          />
+                          <path
+                            fill-rule="evenodd"
+                            clip-rule="evenodd"
+                            d="M9.97165 1.29981C11.5853 0.718916 13.271 0.642197 14.3144 1.68555C15.3577 2.72902 15.2811 4.41466 14.7002 6.02833C14.4707 6.66561 14.1504 7.32937 13.75 8.00001C14.1504 8.67062 14.4707 9.33444 14.7002 9.97169C15.2811 11.5854 15.3578 13.271 14.3144 14.3145C13.271 15.3579 11.5854 15.2811 9.97165 14.7002C9.3344 14.4708 8.67059 14.1505 7.99997 13.75C7.32933 14.1505 6.66558 14.4708 6.02829 14.7002C4.41461 15.2811 2.72899 15.3578 1.68552 14.3145C0.642155 13.271 0.71887 11.5854 1.29977 9.97169C1.52915 9.33454 1.84865 8.67049 2.24899 8.00001C1.84866 7.32953 1.52915 6.66544 1.29977 6.02833C0.718852 4.41459 0.64207 2.729 1.68552 1.68555C2.72897 0.642112 4.41456 0.718887 6.02829 1.29981C6.66541 1.52918 7.32949 1.8487 7.99997 2.24903C8.67045 1.84869 9.33451 1.52919 9.97165 1.29981Z"
+                            fill="currentColor"
+                          />
+                        </svg>
+                        <span>深度思考</span>
+                      </div>
+                      <div class="toggleChip">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                          <path
+                            fill-rule="evenodd"
+                            clip-rule="evenodd"
+                            d="M7 0.150391C10.7832 0.150391 13.8496 3.21685 13.8496 7C13.8496 10.7832 10.7832 13.8496 7 13.8496C3.21685 13.8496 0.150391 10.7832 0.150391 7C0.150391 3.21685 3.21685 0.150391 7 0.150391ZM5.37793 7.59961C5.42667 9.03204 5.64751 10.2965 5.97363 11.2197C6.15993 11.7471 6.36943 12.1301 6.57324 12.3701C6.77748 12.6105 6.9234 12.6504 7 12.6504C7.0766 12.6504 7.22252 12.6105 7.42676 12.3701C7.63057 12.1301 7.84007 11.7471 8.02637 11.2197C8.35249 10.2965 8.57333 9.03204 8.62207 7.59961H5.37793ZM1.38184 7.59961C1.61453 9.80492 3.1159 11.6304 5.14258 12.3359C5.03265 12.1128 4.93224 11.8724 4.84277 11.6191C4.46339 10.5451 4.22772 9.13988 4.17871 7.59961H1.38184ZM9.82129 7.59961C9.77228 9.13988 9.53661 10.5451 9.15723 11.6191C9.06771 11.8726 8.96645 12.1127 8.85645 12.3359C10.8836 11.6307 12.3854 9.80524 12.6182 7.59961H9.82129ZM7 1.34961C6.9234 1.34961 6.77748 1.38949 6.57324 1.62988C6.36943 1.86988 6.15993 2.25291 5.97363 2.78027C5.64751 3.70351 5.42667 4.96796 5.37793 6.40039H8.62207C8.57333 4.96796 8.35249 3.70351 8.02637 2.78027C7.84007 2.25291 7.63057 1.86988 7.42676 1.62988C7.22252 1.38949 7.0766 1.34961 7 1.34961ZM8.85645 1.66309C8.9666 1.88656 9.0676 2.12715 9.15723 2.38086C9.53661 3.45487 9.77228 4.86012 9.82129 6.40039H12.6182C12.3854 4.19465 10.8837 2.36828 8.85645 1.66309ZM5.14258 1.66309C3.11575 2.3685 1.61454 4.19497 1.38184 6.40039H4.17871C4.22772 4.86012 4.46339 3.45487 4.84277 2.38086C4.93234 2.1273 5.03249 1.88645 5.14258 1.66309Z"
+                            fill="currentColor"
+                          />
+                        </svg>
+                        <span>智能搜索</span>
+                      </div>
                     </div>
                     <div class="composerIcons">
-                      <span>📎</span>
-                      <span class="sendCircle">↑</span>
+                      <span class="iconSlot">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                          <path
+                            d="M5.5498 9.75V5H6.9502V9.75C6.9502 10.3299 7.4201 10.7998 8 10.7998C8.5799 10.7998 9.0498 10.3299 9.0498 9.75V4.5C9.0498 2.9536 7.7964 1.7002 6.25 1.7002C4.7036 1.7002 3.4502 2.9536 3.4502 4.5V9.75C3.4502 12.2629 5.4871 14.2998 8 14.2998C10.5129 14.2998 12.5498 12.2629 12.5498 9.75V4H13.9502V9.75C13.9502 13.0361 11.2861 15.7002 8 15.7002C4.71391 15.7002 2.0498 13.0361 2.0498 9.75V4.5C2.04981 2.1804 3.9304 0.299806 6.25 0.299805C8.5696 0.299805 10.4502 2.1804 10.4502 4.5V9.75C10.4502 11.1031 9.3531 12.2002 8 12.2002C6.6469 12.2002 5.5498 11.1031 5.5498 9.75Z"
+                            fill="currentColor"
+                          />
+                        </svg>
+                      </span>
+                      <span class="sendCircle">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                          <path
+                            d="M8.3125 0.980206C8.66767 1.05312 8.97902 1.2042 9.2627 1.43235C9.48724 1.613 9.73029 1.85795 9.97949 2.10716L14.707 6.8347L13.293 8.24876L9 3.95579V15.0417H7V3.95579L2.70703 8.24876L1.29297 6.8347L6.02051 2.10716C6.26971 1.85795 6.51277 1.613 6.7373 1.43235C6.97662 1.23988 7.28445 1.04404 7.6875 0.980206C7.8973 0.947029 8.1031 0.955183 8.3125 0.980206Z"
+                            fill="currentColor"
+                          />
+                        </svg>
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1114,15 +1177,53 @@
 
                 <div class="sessionBottom">
                   <div class="composerWrap">
-                    <div class="composerPlaceholder">请输入消息</div>
+                    <div class="composerPlaceholder" id="chatComposerText">请输入消息</div>
                     <div class="composerRow">
                       <div class="composerToggles">
-                        <div class="toggleChip">⚛ 深度思考</div>
-                        <div class="toggleChip">🌐 智能搜索</div>
+                        <div class="toggleChip">
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                            <path
+                              d="M8.00192 6.64454C8.75026 6.64454 9.35732 7.25169 9.35739 8.00001C9.35739 8.74838 8.7503 9.35548 8.00192 9.35548C7.25367 9.35533 6.64743 8.74829 6.64743 8.00001C6.6475 7.25178 7.25371 6.64468 8.00192 6.64454Z"
+                              fill="currentColor"
+                            />
+                            <path
+                              fill-rule="evenodd"
+                              clip-rule="evenodd"
+                              d="M9.97165 1.29981C11.5853 0.718916 13.271 0.642197 14.3144 1.68555C15.3577 2.72902 15.2811 4.41466 14.7002 6.02833C14.4707 6.66561 14.1504 7.32937 13.75 8.00001C14.1504 8.67062 14.4707 9.33444 14.7002 9.97169C15.2811 11.5854 15.3578 13.271 14.3144 14.3145C13.271 15.3579 11.5854 15.2811 9.97165 14.7002C9.3344 14.4708 8.67059 14.1505 7.99997 13.75C7.32933 14.1505 6.66558 14.4708 6.02829 14.7002C4.41461 15.2811 2.72899 15.3578 1.68552 14.3145C0.642155 13.271 0.71887 11.5854 1.29977 9.97169C1.52915 9.33454 1.84865 8.67049 2.24899 8.00001C1.84866 7.32953 1.52915 6.66544 1.29977 6.02833C0.718852 4.41459 0.64207 2.729 1.68552 1.68555C2.72897 0.642112 4.41456 0.718887 6.02829 1.29981C6.66541 1.52918 7.32949 1.8487 7.99997 2.24903C8.67045 1.84869 9.33451 1.52919 9.97165 1.29981Z"
+                              fill="currentColor"
+                            />
+                          </svg>
+                          <span>深度思考</span>
+                        </div>
+                        <div class="toggleChip">
+                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                            <path
+                              fill-rule="evenodd"
+                              clip-rule="evenodd"
+                              d="M7 0.150391C10.7832 0.150391 13.8496 3.21685 13.8496 7C13.8496 10.7832 10.7832 13.8496 7 13.8496C3.21685 13.8496 0.150391 10.7832 0.150391 7C0.150391 3.21685 3.21685 0.150391 7 0.150391ZM5.37793 7.59961C5.42667 9.03204 5.64751 10.2965 5.97363 11.2197C6.15993 11.7471 6.36943 12.1301 6.57324 12.3701C6.77748 12.6105 6.9234 12.6504 7 12.6504C7.0766 12.6504 7.22252 12.6105 7.42676 12.3701C7.63057 12.1301 7.84007 11.7471 8.02637 11.2197C8.35249 10.2965 8.57333 9.03204 8.62207 7.59961H5.37793ZM1.38184 7.59961C1.61453 9.80492 3.1159 11.6304 5.14258 12.3359C5.03265 12.1128 4.93224 11.8724 4.84277 11.6191C4.46339 10.5451 4.22772 9.13988 4.17871 7.59961H1.38184ZM9.82129 7.59961C9.77228 9.13988 9.53661 10.5451 9.15723 11.6191C9.06771 11.8726 8.96645 12.1127 8.85645 12.3359C10.8836 11.6307 12.3854 9.80524 12.6182 7.59961H9.82129ZM7 1.34961C6.9234 1.34961 6.77748 1.38949 6.57324 1.62988C6.36943 1.86988 6.15993 2.25291 5.97363 2.78027C5.64751 3.70351 5.42667 4.96796 5.37793 6.40039H8.62207C8.57333 4.96796 8.35249 3.70351 8.02637 2.78027C7.84007 2.25291 7.63057 1.86988 7.42676 1.62988C7.22252 1.38949 7.0766 1.34961 7 1.34961ZM8.85645 1.66309C8.9666 1.88656 9.0676 2.12715 9.15723 2.38086C9.53661 3.45487 9.77228 4.86012 9.82129 6.40039H12.6182C12.3854 4.19465 10.8837 2.36828 8.85645 1.66309ZM5.14258 1.66309C3.11575 2.3685 1.61454 4.19497 1.38184 6.40039H4.17871C4.22772 4.86012 4.46339 3.45487 4.84277 2.38086C4.93234 2.1273 5.03249 1.88645 5.14258 1.66309Z"
+                              fill="currentColor"
+                            />
+                          </svg>
+                          <span>智能搜索</span>
+                        </div>
                       </div>
                       <div class="composerIcons">
-                        <span>📎</span>
-                        <span class="sendCircle">↑</span>
+                        <span class="iconSlot">
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path
+                              d="M5.5498 9.75V5H6.9502V9.75C6.9502 10.3299 7.4201 10.7998 8 10.7998C8.5799 10.7998 9.0498 10.3299 9.0498 9.75V4.5C9.0498 2.9536 7.7964 1.7002 6.25 1.7002C4.7036 1.7002 3.4502 2.9536 3.4502 4.5V9.75C3.4502 12.2629 5.4871 14.2998 8 14.2998C10.5129 14.2998 12.5498 12.2629 12.5498 9.75V4H13.9502V9.75C13.9502 13.0361 11.2861 15.7002 8 15.7002C4.71391 15.7002 2.0498 13.0361 2.0498 9.75V4.5C2.04981 2.1804 3.9304 0.299806 6.25 0.299805C8.5696 0.299805 10.4502 2.1804 10.4502 4.5V9.75C10.4502 11.1031 9.3531 12.2002 8 12.2002C6.6469 12.2002 5.5498 11.1031 5.5498 9.75Z"
+                              fill="currentColor"
+                            />
+                          </svg>
+                        </span>
+                        <span class="sendCircle" id="chatSendBtn">
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                            <path
+                              d="M8.3125 0.980206C8.66767 1.05312 8.97902 1.2042 9.2627 1.43235C9.48724 1.613 9.73029 1.85795 9.97949 2.10716L14.707 6.8347L13.293 8.24876L9 3.95579V15.0417H7V3.95579L2.70703 8.24876L1.29297 6.8347L6.02051 2.10716C6.26971 1.85795 6.51277 1.613 6.7373 1.43235C6.97662 1.23988 7.28445 1.04404 7.6875 0.980206C7.8973 0.947029 8.1031 0.955183 8.3125 0.980206Z"
+                              fill="currentColor"
+                            />
+                          </svg>
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -1333,6 +1434,11 @@
 
     <script>
       ;(() => {
+        const COPY_SVG =
+          '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6.14929 4.02032C7.11197 4.02032 7.87983 4.02016 8.49597 4.07598C9.12128 4.13269 9.65792 4.25188 10.1415 4.53106C10.7202 4.8653 11.2008 5.3459 11.535 5.92462C11.8142 6.40818 11.9334 6.94481 11.9901 7.57012C12.0459 8.18625 12.0458 8.95419 12.0458 9.9168C12.0458 10.8795 12.0459 11.6473 11.9901 12.2635C11.9334 12.8888 11.8142 13.4254 11.535 13.909C11.2008 14.4877 10.7202 14.9683 10.1415 15.3025C9.65792 15.5817 9.12128 15.7009 8.49597 15.7576C7.87984 15.8134 7.11196 15.8133 6.14929 15.8133C5.18667 15.8133 4.41874 15.8134 3.80261 15.7576C3.1773 15.7009 2.64067 15.5817 2.1571 15.3025C1.5784 14.9683 1.09778 14.4877 0.76355 13.909C0.484366 13.4254 0.365184 12.8888 0.308472 12.2635C0.252649 11.6473 0.252808 10.8795 0.252808 9.9168C0.252808 8.95418 0.252664 8.18625 0.308472 7.57012C0.365184 6.94481 0.484366 6.40818 0.76355 5.92462C1.09777 5.34589 1.57839 4.86529 2.1571 4.53106C2.64067 4.25188 3.1773 4.13269 3.80261 4.07598C4.41874 4.02017 5.18666 4.02032 6.14929 4.02032ZM6.14929 5.37774C5.16181 5.37774 4.46634 5.37761 3.92566 5.42657C3.39434 5.47472 3.07859 5.56574 2.83582 5.70587C2.4632 5.92106 2.15354 6.2307 1.93835 6.60333C1.79823 6.8461 1.70721 7.16185 1.65906 7.69317C1.6101 8.23385 1.61023 8.92933 1.61023 9.9168C1.61023 10.9043 1.61009 11.5998 1.65906 12.1404C1.70721 12.6717 1.79823 12.9875 1.93835 13.2303C2.15356 13.6029 2.46321 13.9126 2.83582 14.1277C3.07859 14.2679 3.39434 14.3589 3.92566 14.407C4.46634 14.456 5.16182 14.4559 6.14929 14.4559C7.13682 14.4559 7.83224 14.456 8.37292 14.407C8.90425 14.3589 9.21999 14.2679 9.46277 14.1277C9.83535 13.9126 10.145 13.6029 10.3602 13.2303C10.5004 12.9875 10.5914 12.6717 10.6395 12.1404C10.6885 11.5998 10.6884 10.9043 10.6884 9.9168C10.6884 8.92934 10.6885 8.23384 10.6395 7.69317C10.5914 7.16185 10.5004 6.8461 10.3602 6.60333C10.1451 6.23071 9.83536 5.92107 9.46277 5.70587C9.21999 5.56574 8.90424 5.47472 8.37292 5.42657C7.83224 5.3776 7.13682 5.37774 6.14929 5.37774Z" fill="currentColor"/></svg>'
+        const REGEN_SVG =
+          '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M7.92136 0.349152C10.3744 0.349234 12.5564 1.5052 13.9557 3.29894L15.1281 2.12759C15.3303 1.92546 15.6767 2.06943 15.6767 2.35538V5.53923C15.6766 5.71626 15.5329 5.85976 15.3559 5.86002H12.171C11.8854 5.8597 11.7426 5.51465 11.9443 5.31249L12.9641 4.29056C11.8237 2.74305 9.98908 1.74106 7.92136 1.74097C4.46436 1.74097 1.66233 4.543 1.66233 8C1.66233 11.457 4.46436 14.259 7.92136 14.259C11.3782 14.2589 14.1804 11.4569 14.1804 8H15.5722C15.5722 12.2251 12.1465 15.6507 7.92136 15.6508C3.69614 15.6508 0.270508 12.2252 0.270508 8C0.270508 3.77478 3.69614 0.349152 7.92136 0.349152Z" fill="currentColor"/></svg>'
+
         const PYTHON_LINES = [
           '<span class="tok-kw">def</span> <span class="tok-fn">bubble_sort</span>(arr):',
           '    n = <span class="tok-fn">len</span>(arr)',
@@ -1410,10 +1516,35 @@
         const openSettingsBtn = document.getElementById('openSettingsBtn')
         const tryCeoBtn = document.getElementById('tryCeoBtn')
         const chatThread = document.getElementById('chatThread')
+        const chatComposerText = document.getElementById('chatComposerText')
+        const chatSendBtn = document.getElementById('chatSendBtn')
 
         const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
         const scrollBottom = () => {
           chatThread.scrollTop = chatThread.scrollHeight
+        }
+
+        const typeAndSendPrompt = async (prompt) => {
+          chatComposerText.classList.add('typing')
+          chatSendBtn.classList.add('ready')
+          const span = document.createElement('span')
+          const cursor = document.createElement('span')
+          cursor.className = 'streamCursor'
+          chatComposerText.textContent = ''
+          chatComposerText.appendChild(span)
+          chatComposerText.appendChild(cursor)
+
+          const speed = prompt.length > 16 ? 24 : 42
+          for (let i = 1; i <= prompt.length; i += 1) {
+            span.textContent = prompt.slice(0, i)
+            await sleep(speed)
+          }
+          await sleep(180)
+          chatSendBtn.classList.add('pressing')
+          await sleep(120)
+          chatSendBtn.classList.remove('pressing', 'ready')
+          chatComposerText.classList.remove('typing')
+          chatComposerText.textContent = '请输入消息'
         }
 
         const createBotShell = () => {
@@ -1428,7 +1559,7 @@
         const addBotTools = (botRow) => {
           const tools = document.createElement('div')
           tools.className = 'msgTools'
-          tools.innerHTML = '<span>❐</span><span>↻</span>'
+          tools.innerHTML = COPY_SVG + REGEN_SVG
           botRow.appendChild(tools)
         }
 
@@ -1442,7 +1573,13 @@
 
         const playChatStream = async () => {
           chatThread.innerHTML = ''
+          chatComposerText.classList.remove('typing')
+          chatComposerText.textContent = '请输入消息'
+          chatSendBtn.classList.remove('ready', 'pressing')
+
           for (const turn of SCRIPT) {
+            await typeAndSendPrompt(turn.user)
+
             const u = document.createElement('div')
             u.className = 'msgRowUser'
             u.innerHTML = '<div class="userBubble"></div>'
@@ -1507,13 +1644,12 @@
             cursor.remove()
             addBotTools(body.parentElement)
             scrollBottom()
-            await sleep(320)
+            await sleep(380)
           }
         }
 
         const runAutoShowcase = async () => {
           while (true) {
-            // Step 1: Home
             stageTag.textContent = '主界面'
             openSettingsBtn.classList.remove('focusHighlight')
             tabPersona.classList.remove('focusHighlight')
@@ -1525,7 +1661,6 @@
             openSettingsBtn.classList.add('focusHighlight')
             await sleep(450)
 
-            // Step 2: Settings -> General
             stageTag.textContent = '设置'
             openSettingsBtn.classList.remove('focusHighlight')
             settingsMask.style.display = 'flex'
@@ -1537,7 +1672,6 @@
             tabPersona.classList.add('focusHighlight')
             await sleep(450)
 
-            // Step 3: Settings -> Personas
             stageTag.textContent = '人设'
             tabPersona.classList.remove('focusHighlight')
             tabGeneral.classList.remove('active')
@@ -1548,7 +1682,6 @@
             tryCeoBtn.classList.add('focusHighlight')
             await sleep(450)
 
-            // Step 4: Live streaming trial chat
             stageTag.textContent = '霸道总裁 · 试聊'
             tryCeoBtn.classList.remove('focusHighlight')
             settingsMask.style.display = 'none'

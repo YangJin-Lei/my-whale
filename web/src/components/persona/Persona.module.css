@@ -305,7 +305,7 @@
 .sessionModal {
   width: 520px;
   max-width: calc(100vw - 24px);
-  max-height: calc(100vh - 32px);
+  max-height: calc(100% - 24px);
 }
 
 .editorMain,
