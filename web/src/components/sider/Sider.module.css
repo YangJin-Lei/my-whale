@@ -225,7 +225,7 @@
 .mobile {
   width: 300px;
   max-width: calc(100vw - 48px);
-  padding-top: calc(6px + env(safe-area-inset-top, 0px));
+  padding-top: calc(6px + var(--safe-top, 0px));
 
   .listWrap {
     margin-top: 16px;
@@ -239,7 +239,7 @@
 
   .bottom {
     height: auto;
-    padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px));
+    padding: 12px 0 calc(12px + var(--safe-bottom, 0px));
   }
 
   .settings {
