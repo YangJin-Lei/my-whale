@@ -4,8 +4,8 @@
   gap: 6px;
   flex-shrink: 0;
   box-sizing: border-box;
-  height: 60px;
-  padding: 12px 10px 4px;
+  min-height: calc(56px + env(safe-area-inset-top, 0px));
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 10px 6px;
 }
 
 .spacer {
