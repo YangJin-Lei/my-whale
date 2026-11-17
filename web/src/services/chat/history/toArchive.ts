@@ -262,6 +262,12 @@ export const toSessionFile = (original: Session, exportImage: ExportImage): Sess
         snapshot: session.persona.snapshot,
         ...(session.persona.note ? { note: session.persona.note } : {}),
         ...(session.persona.incognito ? { incognito: true } : {}),
+        ...(session.persona.memoryScope === 'local_only'
+          ? { memoryScope: 'local_only' as const }
+          : {}),
+        ...(session.persona.localMemories?.length
+          ? { localMemories: session.persona.localMemories }
+          : {}),
       }
     : undefined
   return {

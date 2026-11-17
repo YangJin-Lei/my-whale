@@ -2,7 +2,7 @@ import clsx from 'clsx'
 import { Capacitor } from '@capacitor/core'
 import { useMemo, useRef, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
-import { selectSession } from '../../services/chat/store.js'
+import { extractSessionNow, selectSession, useChatStore } from '../../services/chat/store.js'
 import { exportBlobFile } from '../../services/fileExport.js'
 import { hasSensitiveInfo } from '../../services/memory/sensitive.js'
 import {
@@ -55,7 +55,12 @@ export const MemorySettings = () => {
   const profile = useSettings((state) => state.profile)
   const memories = useMemoryStore((state) => state.memories)
   const undoSnapshot = useMemoryStore((state) => state.undoSnapshot)
+  const activeId = useChatStore((state) => state.activeId)
+  const activeSession = useChatStore((state) =>
+    state.activeId ? state.sessionCache[state.activeId] : undefined
+  )
 
+  const [extracting, setExtracting] = useState(false)
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState<'all' | MemoryCategory>('all')
   const [adding, setAdding] = useState(false)
@@ -137,6 +142,25 @@ export const MemorySettings = () => {
     showToast({ key: 'profileImportedToast' })
   }
 
+  const handleExtractNow = async () => {
+    if (!activeId || extracting) {
+      return
+    }
+    setExtracting(true)
+    try {
+      const count = await extractSessionNow(activeId)
+      if (count > 0) {
+        showToast({ key: 'memoryAutoSavedToast', params: { count } })
+      } else {
+        showToast({ key: 'memoryExtractNoneToast' })
+      }
+    } catch {
+      showToast({ key: 'memoryExtractFailedToast', type: 'error' })
+    } finally {
+      setExtracting(false)
+    }
+  }
+
   return (
     <div className={styles.wrap}>
       <div className={styles.toggleRow}>
@@ -200,6 +224,16 @@ export const MemorySettings = () => {
           <Button variant="primary" size="s" onClick={() => setAdding((v) => !v)}>
             + {t('memoryAdd')}
           </Button>
+          {activeId && activeSession && !activeSession.persona?.incognito ? (
+            <Button
+              variant="outlined"
+              size="s"
+              disabled={extracting}
+              onClick={() => void handleExtractNow()}
+            >
+              {extracting ? t('memoryExtracting') : t('memoryExtractNow')}
+            </Button>
+          ) : null}
         </div>
 
         {adding ? (

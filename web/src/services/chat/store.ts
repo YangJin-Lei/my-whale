@@ -10,14 +10,25 @@ import {
 } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
 import { debouncedRefreshBalance, markInsufficient } from '../balance.js'
-import { flushPendingExtracts, scheduleExtract, seedExtractedBaseline } from '../memory/extract.js'
+import {
+  flushPendingExtracts,
+  registerLocalMemorySink,
+  runExtractNow,
+  scheduleExtract,
+  seedExtractedBaseline,
+} from '../memory/extract.js'
 import { selectMemories } from '../memory/select.js'
 import { initMemories, markMemoriesUsed, useMemoryStore } from '../memory/store.js'
 import type { Memory } from '../memory/types.js'
 import { DEFAULT_PERSONA_ID } from '../persona/builtin.js'
 import { buildSystemPrompt } from '../persona/prompt.js'
 import { findPersona, initPersonas, toPersonaSnapshot, usePersonaStore } from '../persona/store.js'
-import { SESSION_NOTE_MAX, type Persona, type SessionPersona } from '../persona/types.js'
+import {
+  SESSION_NOTE_MAX,
+  type MemoryScope,
+  type Persona,
+  type SessionPersona,
+} from '../persona/types.js'
 import { setSearch, setThinking, useSettings } from '../settings.js'
 import { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
 import * as db from './db.js'
@@ -1102,9 +1113,10 @@ const resolveSessionSystemPrompt = (sessionId: string, query: string): string =>
   const session = getSession(sessionId)
   const { memoryEnabled, profile } = useSettings.getState()
   const incognito = Boolean(session?.persona?.incognito)
+  const memoryScope: MemoryScope = session?.persona?.memoryScope ?? 'global_and_local'
   let chosenMemories: Memory[] = []
 
-  if (memoryEnabled && !incognito) {
+  if (memoryEnabled && !incognito && memoryScope !== 'local_only') {
     const { memories, version } = useMemoryStore.getState()
     const cachedVersion = sessionMemoryVersion.get(sessionId)
     const hasStableIds =
@@ -1142,15 +1154,22 @@ const resolveSessionSystemPrompt = (sessionId: string, query: string): string =>
     sessionNote: session?.persona?.note,
     memoryEnabled,
     incognito,
+    memoryScope,
     profile,
     memories: chosenMemories,
+    localMemories: session?.persona?.localMemories,
   })
 }
 
 export const getSessionUsedMemories = (sessionId: string): Memory[] => {
   const session = getSession(sessionId)
   const { memoryEnabled } = useSettings.getState()
-  if (!session || !memoryEnabled || session.persona?.incognito) {
+  if (
+    !session ||
+    !memoryEnabled ||
+    session.persona?.incognito ||
+    session.persona?.memoryScope === 'local_only'
+  ) {
     return []
   }
   const ids = session.persona?.memoryIds
@@ -1244,6 +1263,97 @@ export const toggleSessionIncognito = (sessionId: string, incognito: boolean) =>
     updatedAt: Date.now(),
   }))
   persist(sessionId)
+}
+
+export const setSessionMemoryScope = (sessionId: string, memoryScope: MemoryScope) => {
+  const session = getSession(sessionId)
+  if (!session) {
+    return
+  }
+  updateSession(sessionId, (current) => ({
+    ...current,
+    persona: {
+      personaId: current.persona?.personaId ?? null,
+      snapshot: current.persona?.snapshot ?? null,
+      ...current.persona,
+      memoryScope,
+      ...(memoryScope === 'local_only' ? { memoryIds: undefined } : {}),
+    },
+    updatedAt: Date.now(),
+  }))
+  persist(sessionId)
+}
+
+export const addSessionLocalMemory = (sessionId: string, content: string) => {
+  const clean = content.trim().slice(0, 200)
+  const session = getSession(sessionId)
+  if (!session || !clean) {
+    return
+  }
+  const normalized = clean.toLowerCase()
+  const existing = session.persona?.localMemories ?? []
+  if (existing.some((m) => m.content.trim().toLowerCase() === normalized)) {
+    return
+  }
+  updateSession(sessionId, (current) => {
+    const prevList = current.persona?.localMemories ?? []
+    return {
+      ...current,
+      persona: {
+        personaId: current.persona?.personaId ?? null,
+        snapshot: current.persona?.snapshot ?? null,
+        ...current.persona,
+        localMemories: [...prevList, { id: createId(), content: clean, createdAt: Date.now() }],
+      },
+      updatedAt: Date.now(),
+    }
+  })
+  persist(sessionId)
+}
+
+export const deleteSessionLocalMemory = (sessionId: string, memoryId: string) => {
+  const session = getSession(sessionId)
+  if (!session) {
+    return
+  }
+  updateSession(sessionId, (current) => ({
+    ...current,
+    persona: {
+      personaId: current.persona?.personaId ?? null,
+      snapshot: current.persona?.snapshot ?? null,
+      ...current.persona,
+      localMemories: (current.persona?.localMemories ?? []).filter((m) => m.id !== memoryId),
+    },
+    updatedAt: Date.now(),
+  }))
+  persist(sessionId)
+}
+
+registerLocalMemorySink((sessionId, contents) => {
+  for (const item of contents) {
+    addSessionLocalMemory(sessionId, item)
+  }
+})
+
+export const extractSessionNow = async (sessionId: string): Promise<number> => {
+  const session = getSession(sessionId)
+  if (!session) {
+    return 0
+  }
+  return runExtractNow(
+    {
+      sessionId,
+      incognito: Boolean(session.persona?.incognito),
+      ephemeral: ephemeralSessions.has(sessionId),
+      memoryScope: session.persona?.memoryScope ?? 'global_and_local',
+      localMemories: (session.persona?.localMemories ?? []).map((m) => ({
+        id: m.id,
+        content: m.content,
+      })),
+      turns: buildExtractTurns(session),
+    },
+    true
+  )
 }
 
 useMemoryStore.subscribe((state, prev) => {
@@ -1428,6 +1538,11 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           sessionId,
           incognito: Boolean(latest.persona?.incognito),
           ephemeral: ephemeralSessions.has(sessionId),
+          memoryScope: latest.persona?.memoryScope ?? 'global_and_local',
+          localMemories: (latest.persona?.localMemories ?? []).map((m) => ({
+            id: m.id,
+            content: m.content,
+          })),
           turns: buildExtractTurns(latest),
         })
       }

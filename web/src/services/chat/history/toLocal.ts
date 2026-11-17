@@ -293,6 +293,10 @@ export const toLocalSession = (file: SessionFile): LocalSession => {
             snapshot: file.persona.snapshot,
             ...(file.persona.note ? { note: file.persona.note } : {}),
             ...(file.persona.incognito ? { incognito: true } : {}),
+            ...(file.persona.memoryScope ? { memoryScope: file.persona.memoryScope } : {}),
+            ...(file.persona.localMemories?.length
+              ? { localMemories: file.persona.localMemories }
+              : {}),
           },
         }
       : {}),

@@ -250,6 +250,17 @@ export const readSessionIndex: Read<SessionIndexEntry[]> = list((value) => {
   }
 })
 
+const memoryScopeValue = oneOf('global_and_local', 'local_only')
+
+const localMemoryEntry: Read<{ id: string; content: string; createdAt: number }> = (value) => {
+  const item = record(value)
+  return {
+    id: string(item.id),
+    content: string(item.content),
+    createdAt: number(item.createdAt),
+  }
+}
+
 const optionalSessionPersona = (value: unknown): ArchiveSessionPersona | undefined => {
   if (value === undefined) {
     return undefined
@@ -273,6 +284,12 @@ const optionalSessionPersona = (value: unknown): ArchiveSessionPersona | undefin
     ...('note' in item && item.note !== undefined ? { note: string(item.note) } : {}),
     ...('incognito' in item && item.incognito !== undefined
       ? { incognito: boolean(item.incognito) }
+      : {}),
+    ...('memoryScope' in item && item.memoryScope !== undefined
+      ? { memoryScope: memoryScopeValue(item.memoryScope) }
+      : {}),
+    ...('localMemories' in item && item.localMemories !== undefined
+      ? { localMemories: list(localMemoryEntry)(item.localMemories) }
       : {}),
   }
 }

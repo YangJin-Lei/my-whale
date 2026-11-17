@@ -1,0 +1,141 @@
+<div align="center">
+  <img src="./web/src/assets/logo.png" width="120" alt="my-whale logo" />
+  <h1>my-whale</h1>
+  <p>基于 <code>deepseek-ai/chat-demo</code> 二次开发的本地优先 DeepSeek 第三方客户端（Web + Android）</p>
+  <p>支持零后端本地直连 DeepSeek API、引导配 Key 与余额监控、自定义人设、全局与单对话局部记忆、历史对话 ZIP v3 无损迁移。</p>
+</div>
+
+---
+
+> **声明 / Notice**：本项目（`my-whale`）基于 [deepseek-ai/chat-demo](https://github.com/deepseek-ai/chat-demo)（MIT 协议）进行二次开发，属于**第三方开源客户端，并非 DeepSeek 官方应用**。所有 API Key、对话记录、人设与记忆数据均仅保存在本地设备，仅在发起对话或后台提炼记忆时直连 DeepSeek 官方 API。
+
+## 界面演示（按使用顺序）
+
+### 1. 首次启动引导与数据迁移
+引导获取、复制并验证 DeepSeek API Key，支持一键粘贴并可在首次启动时直接导入 DeepSeek 网页版导出的历史对话压缩包。
+
+![首次启动引导](./resources/png/1.png)
+
+### 2. 全局记忆、「关于我」与后台提炼设置
+支持配置「使用记忆」与「自动记忆」、填写全局「关于我」档案、搜索/分类/置顶/导入导出全局记忆条目，并支持一键从当前对话提炼记忆。
+
+![记忆设置界面](./resources/png/2.png)
+
+### 3. 导入数据后的对话与人设入口
+支持自定义人设（含头像图片上传、人设提示词与默认开关）、无痕会话，以及单个对话内的「局部记忆 / 仅使用局部记忆」隔离控制。
+
+![对话与人设界面](./resources/png/3%E5%AE%9E%E9%99%85%E5%AF%BC%E5%85%A5%E5%90%8E%E8%AE%B0%E5%BF%86%E5%AD%98%E5%9C%A8.png)
+
+---
+
+## 核心特性
+
+### 1. 引导配 Key 与余额监控
+- **零门槛引导**：内置 DeepSeek 开放平台创建 Key 的步骤指引、系统默认浏览器跳转（适配 Android 与桌面端）、剪贴板一键粘贴与格式校验。
+- **实时余额与安全提示**：侧边栏及设置页实时查询并展示赠金 / 充值余额；附带「官网用量」快捷入口与 API Key 泄露排查提示，支持随时退出/清除本地 API Key。
+
+### 2. 自定义人设与试聊机制
+- **自定义人设**：支持创建、编辑、复制人设，支持上传头像图片（自动压缩并限制体积）、设置默认人设与开场白、配置人设级默认「深度思考 / 智能搜索」开关。
+- **试聊与保存**：试聊会话默认不污染左侧历史列表，支持一键「保存到对话列表」转正为持久会话。
+- **会话级快照与热更新**：历史会话保留创建时的人设快照；当人设模板修改后，会话顶部会提示是否同步更新。
+
+### 3. 双层记忆系统（全局记忆 + 单对话局部记忆）
+- **全局记忆与「关于我」**：在 `设置 → 记忆` 中维护全局「关于我」个人背景与长期记忆条目，跨对话按规则注入系统提示词。
+- **单对话局部记忆与隔离模式**：
+  - 每个对话独立维护自己的 `localMemories`，可在会话人设面板中查看、手动添加或删除。
+  - 默认模式为「全局记忆 + 本对话局部记忆」。
+  - 可在单个对话中勾选**「仅使用本对话局部记忆（不用全局记忆）」**：开启后该对话将跳过「关于我」与全局记忆，且该对话产生的「自动记忆」仅写入本对话的局部记忆。
+  - 在消息操作中点击**「记住这条」**时，可自由选择保存到「全局记忆」或「本对话局部记忆」。
+- **后台自动提炼 + 手动即时提炼**：对话完成一轮后自动在后台静默提炼高价值记忆（打开设置弹窗时立即触发待执行任务）；同时在 `设置 → 记忆` 提供「从当前对话提炼」按钮随时触发并提示结果。
+- **无痕会话**：开启无痕后不读取任何全局/局部记忆，也不写入任何自动记忆。
+
+### 4. 数据迁移与多端互通
+- **ZIP v3 历史归档**：兼容 DeepSeek 官方网页版导出的历史对话 ZIP（v3 格式），完整保留分支树、图片附件、会话人设快照、局部记忆及隔离配置；Android 端支持通过系统文件选择器导入与系统分享/下载目录导出。
+- **人设与记忆备份（`my-whale-profile.json`）**：支持一键导出/导入个人人设、全局记忆与「关于我」，支持合并或替换两种模式。
+
+### 5. Web + Android 双端同构
+- **Web 端**：React 18 + TypeScript + Zustand + IndexedDB（`idb`）+ Rspack，支持流式 SSE、深度思考、智能搜索、链接阅读、GFM Markdown、KaTeX 公式、Prism 代码高亮与 Mermaid 图表。
+- **Android 端**：基于 Capacitor 8 打包为原生 APK，共享 100% Web 业务与渲染能力，通过 `@capacitor/browser`（调用系统默认浏览器）、`@capacitor/clipboard`、`@capacitor/filesystem` 与 `@capacitor/share` 对接原生系统能力。
+
+---
+
+## 目录结构
+
+```text
+my-whale/
+├── web/                              # Web 前端与 Capacitor 公共资源源码
+│   ├── src/
+│   │   ├── components/               # UI 组件（对话、引导、人设、记忆、设置等）
+│   │   ├── services/                 # API、余额、对话状态、历史 ZIP、人设、记忆逻辑
+│   │   ├── styles/                   # 全局样式与主题变量
+│   │   └── i18n/                     # 中英文国际化文案
+│   ├── capacitor.config.ts           # Capacitor Android 工程配置
+│   └── package.json
+├── android/                          # Android 原生工程（Gradle + Capacitor）
+├── docs/                             # 架构与迁移设计文档
+├── resources/png/                    # README 演示截图
+├── 二次开发文档-引导与余额.md         # 引导与余额模块设计规范
+└── 二次开发文档-人设与记忆.md         # 人设与记忆模块设计规范
+```
+
+---
+
+## 快速开始
+
+### 环境要求
+- Node.js >= 20 & pnpm
+- Android 构建（可选）：JDK 21 + Android SDK（Android Studio）
+
+### 1. 运行 Web 端
+
+```bash
+cd web
+pnpm install
+pnpm dev
+```
+
+常用检查与构建命令：
+
+```bash
+pnpm type      # TypeScript 类型检查
+pnpm lint      # Oxlint 代码规范检查
+pnpm build     # 生产构建（输出到 web/dist）
+```
+
+### 2. 构建 Android APK
+
+先编译 Web 产物并同步到 Android 工程：
+
+```bash
+cd web
+pnpm build
+npx cap sync android
+```
+
+然后使用 Gradle 构建 Debug APK（Windows PowerShell 示例，建议使用 Android Studio 自带 JBR）：
+
+```powershell
+cd ..\android
+$env:JAVA_HOME = "C:\Users\App\Google_IDE\Android_Studio\jbr"   # 按本机 JDK 21 / JBR 路径调整
+.\gradlew.bat assembleDebug --no-daemon
+```
+
+构建完成后 APK 位于：
+
+```text
+android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+---
+
+## 隐私与计费提示
+
+1. **本地存储**：API Key、对话历史（IndexedDB）、人设与记忆均保存在用户本机，无第三方中转服务器。
+2. **计费说明**：正常对话以及开启「自动记忆 / 从当前对话提炼」均按 DeepSeek 官方 API 标准计费，请留意余额与官网用量。
+3. **Key 安全**：请勿泄露个人 API Key；若侧边栏余额出现异常变动，请立即前往 DeepSeek 官网查看用量并轮换 Key。
+
+---
+
+## 开源协议
+
+本项目基于 **MIT License** 开源，衍生自 [deepseek-ai/chat-demo](https://github.com/deepseek-ai/chat-demo)（MIT License）。

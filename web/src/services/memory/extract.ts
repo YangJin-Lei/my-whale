@@ -1,6 +1,7 @@
 import { create } from 'zustand'
-import { createMessage } from '../api/client.js'
+import { streamMessage } from '../api/client.js'
 import { useBalance } from '../balance.js'
+import type { MemoryScope } from '../persona/types.js'
 import { useSettings } from '../settings.js'
 import { buildExtractUserPrompt, EXTRACT_SYSTEM_PROMPT } from './extractPrompt.js'
 import { hasSensitiveInfo } from './sensitive.js'
@@ -19,6 +20,8 @@ export type ExtractSnapshot = {
   sessionId: string
   incognito: boolean
   ephemeral: boolean
+  memoryScope: MemoryScope
+  localMemories: { id: string; content: string }[]
   turns: ExtractTurn[]
 }
 
@@ -38,6 +41,11 @@ export const useMemoryToast = create<MemoryToastState>(() => ({
 }))
 
 let toastTimer: number | null = null
+let localMemorySink: ((sessionId: string, contents: string[]) => void) | null = null
+
+export const registerLocalMemorySink = (sink: (sessionId: string, contents: string[]) => void) => {
+  localMemorySink = sink
+}
 
 export const dismissMemoryToast = () => {
   if (toastTimer !== null) {
@@ -69,8 +77,7 @@ const showExtractToast = (batch: UndoBatch) => {
   }
 }
 
-const EXPLICIT_REMEMBER_RE = /(?:记住我|帮我记住|请记住|以后都|从今以后|别忘了我)/
-const DEBOUNCE_MS = 30_000
+const DEBOUNCE_MS = 5_000
 
 const extractedTurnCounts = new Map<string, number>()
 const pendingTimers = new Map<string, number>()
@@ -142,7 +149,7 @@ export const seedExtractedBaseline = (sessionId: string, turnCount: number) => {
   }
 }
 
-const canRunExtract = (snapshot: ExtractSnapshot): boolean => {
+const canRunAutoExtract = (snapshot: ExtractSnapshot): boolean => {
   const { apiKey, memoryEnabled, memoryAuto } = useSettings.getState()
   if (!apiKey || !memoryEnabled || !memoryAuto) {
     return false
@@ -155,46 +162,101 @@ const canRunExtract = (snapshot: ExtractSnapshot): boolean => {
   }
   const completedCount = snapshot.turns.length
   const baseline = extractedTurnCounts.get(snapshot.sessionId) ?? 0
-  const newTurns = completedCount - baseline
-  if (newTurns <= 0) {
-    return false
-  }
-  const latestUser = [...snapshot.turns].reverse().find((t) => t.role === 'user')?.content ?? ''
-  const hasExplicit = EXPLICIT_REMEMBER_RE.test(latestUser)
-  // 至少新增 2 轮（4 条消息）或用户明确说“记住/以后都”时新增 1 轮（2 条消息）
-  return newTurns >= (hasExplicit ? 2 : 4)
+  // 只要完成至少 1 轮新的问答（>= 2 条消息），即可触发提炼判断
+  return completedCount - baseline >= 2
 }
 
-export const runExtractNow = async (snapshot: ExtractSnapshot): Promise<void> => {
+const collectStreamText = async (apiKey: string, userPrompt: string): Promise<string> => {
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), 30_000)
+  let output = ''
+  try {
+    const events = streamMessage(
+      apiKey,
+      {
+        model: 'deepseek-flash',
+        system: EXTRACT_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: userPrompt }],
+        thinking: { type: 'disabled' },
+        safety_check: { level: 'high' },
+      },
+      controller.signal
+    )
+    for await (const event of events) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        output += event.delta.text
+      }
+    }
+    return output
+  } finally {
+    window.clearTimeout(timeout)
+  }
+}
+
+export const runExtractNow = async (snapshot: ExtractSnapshot, manual = false): Promise<number> => {
   const { sessionId } = snapshot
-  if (runningSessions.has(sessionId) || !canRunExtract(snapshot)) {
-    return
+  if (runningSessions.has(sessionId)) {
+    return 0
+  }
+  if (!manual && !canRunAutoExtract(snapshot)) {
+    return 0
   }
   const { apiKey, memoryNoticeShown } = useSettings.getState()
-  if (!apiKey) {
-    return
+  if (!apiKey || snapshot.turns.length < 2) {
+    return 0
   }
   runningSessions.add(sessionId)
   const targetTurnCount = snapshot.turns.length
   try {
-    const existing = useMemoryStore.getState().memories
-    const text = await createMessage(apiKey, {
-      model: 'deepseek-flash',
-      system: EXTRACT_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: buildExtractUserPrompt(existing, snapshot.turns) }],
-      thinking: { type: 'disabled' },
-      safety_check: { level: 'high' },
-      tools: [],
-    })
+    const existingGlobal = useMemoryStore.getState().memories
+    const promptExisting: Memory[] =
+      snapshot.memoryScope === 'local_only'
+        ? snapshot.localMemories.map((m) => ({
+            id: m.id,
+            content: m.content,
+            category: 'other',
+            source: 'auto',
+            pinned: false,
+            enabled: true,
+            createdAt: 0,
+            updatedAt: 0,
+          }))
+        : existingGlobal
+
+    const text = await collectStreamText(
+      apiKey,
+      buildExtractUserPrompt(promptExisting, snapshot.turns)
+    )
     extractedTurnCounts.set(sessionId, targetTurnCount)
 
     const ops = parseExtractOps(text)
     if (ops.length === 0) {
-      return
+      return 0
     }
 
-    const currentMemories = useMemoryStore.getState().memories
-    const byId = new Map(currentMemories.map((m) => [m.id, m]))
+    if (snapshot.memoryScope === 'local_only') {
+      const additions: string[] = []
+      for (const item of ops) {
+        if ((item.op === 'add' || item.op === 'update') && typeof item.content === 'string') {
+          const content = item.content.trim().slice(0, 80)
+          if (!content || hasSensitiveInfo(content)) {
+            continue
+          }
+          const dup =
+            snapshot.localMemories.some((m) => similarity(m.content, content) >= 0.8) ||
+            additions.some((c) => similarity(c, content) >= 0.8)
+          if (!dup) {
+            additions.push(content)
+          }
+        }
+      }
+      if (additions.length > 0) {
+        localMemorySink?.(sessionId, additions)
+      }
+      return additions.length
+    }
+
+    const byId = new Map(existingGlobal.map((m) => [m.id, m]))
     const addedIds: string[] = []
     const previousMap = new Map<string, Memory>()
     let changeCount = 0
@@ -258,8 +320,12 @@ export const runExtractNow = async (snapshot: ExtractSnapshot): Promise<void> =>
         showCostNotice: !memoryNoticeShown,
       })
     }
-  } catch {
-    // 后台提炼静默失败，不打断正常对话
+    return changeCount
+  } catch (error) {
+    if (manual) {
+      throw error
+    }
+    return 0
   } finally {
     runningSessions.delete(sessionId)
   }
@@ -272,21 +338,19 @@ export const scheduleExtract = (snapshot: ExtractSnapshot) => {
     window.clearTimeout(existingTimer)
     pendingTimers.delete(sessionId)
   }
-  if (!canRunExtract(snapshot)) {
+  if (!canRunAutoExtract(snapshot)) {
     pendingSnapshots.delete(sessionId)
     return
   }
   pendingSnapshots.set(sessionId, snapshot)
-  const latestUser = [...snapshot.turns].reverse().find((t) => t.role === 'user')?.content ?? ''
-  const delay = EXPLICIT_REMEMBER_RE.test(latestUser) ? 1500 : DEBOUNCE_MS
   const timer = window.setTimeout(() => {
     pendingTimers.delete(sessionId)
     const latest = pendingSnapshots.get(sessionId)
     pendingSnapshots.delete(sessionId)
     if (latest) {
-      void runExtractNow(latest)
+      void runExtractNow(latest, false)
     }
-  }, delay)
+  }, DEBOUNCE_MS)
   pendingTimers.set(sessionId, timer)
 }
 
@@ -306,7 +370,7 @@ export const flushPendingExtracts = (onlySessionId?: string) => {
     const snapshot = pendingSnapshots.get(id)
     pendingSnapshots.delete(id)
     if (snapshot) {
-      void runExtractNow(snapshot)
+      void runExtractNow(snapshot, false)
     }
   }
 }

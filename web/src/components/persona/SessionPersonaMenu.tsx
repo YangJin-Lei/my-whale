@@ -2,15 +2,19 @@ import clsx from 'clsx'
 import { useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import {
+  addSessionLocalMemory,
+  deleteSessionLocalMemory,
   getSessionUsedMemories,
   isEphemeralSession,
   promoteTrialSession,
+  setSessionMemoryScope,
   switchSessionPersona,
   syncSessionPersonaSnapshot,
   toggleSessionIncognito,
   updateSessionNote,
 } from '../../services/chat/store.js'
 import type { Session } from '../../services/chat/types.js'
+import { MEMORY_CONTENT_MAX } from '../../services/memory/types.js'
 import { DEFAULT_PERSONA_ID } from '../../services/persona/builtin.js'
 import { findPersona, getAllPersonas, usePersonaStore } from '../../services/persona/store.js'
 import { SESSION_NOTE_MAX } from '../../services/persona/types.js'
@@ -34,6 +38,7 @@ export const SessionPersonaMenu = ({
   const customPersonas = usePersonaStore((state) => state.personas)
   const [open, setOpen] = useState(false)
   const [noteDraft, setNoteDraft] = useState('')
+  const [localDraft, setLocalDraft] = useState('')
   const [showMemories, setShowMemories] = useState(false)
 
   const allPersonas = getAllPersonas(customPersonas, locale)
@@ -45,6 +50,8 @@ export const SessionPersonaMenu = ({
   const isDefaultPersona =
     (currentId ?? DEFAULT_PERSONA_ID) === DEFAULT_PERSONA_ID && !session.persona?.snapshot
   const incognito = Boolean(session.persona?.incognito)
+  const localOnly = session.persona?.memoryScope === 'local_only'
+  const localMemories = session.persona?.localMemories ?? []
   const ephemeral = isEphemeralSession(session.id)
 
   // 会话内切换仅展示默认助手 + 用户自定义人设（及当前会话自身引用的内置人设）
@@ -63,8 +70,17 @@ export const SessionPersonaMenu = ({
 
   const openMenu = () => {
     setNoteDraft(session.persona?.note ?? '')
+    setLocalDraft('')
     setShowMemories(false)
     setOpen(true)
+  }
+
+  const submitLocalMemory = () => {
+    if (!localDraft.trim()) {
+      return
+    }
+    addSessionLocalMemory(session.id, localDraft)
+    setLocalDraft('')
   }
 
   return (
@@ -198,6 +214,74 @@ export const SessionPersonaMenu = ({
                 checked={incognito}
                 onChange={(event) => toggleSessionIncognito(session.id, event.target.checked)}
               />
+            </div>
+          </div>
+
+          <div className={styles.modalSection}>
+            <div className={styles.toggleRow}>
+              <div>
+                <div className={styles.fieldLabel}>{t('memoryScopeLocalOnly')}</div>
+                <div className={styles.hint}>{t('memoryScopeLocalOnlyDesc')}</div>
+              </div>
+              <input
+                type="checkbox"
+                disabled={incognito}
+                checked={localOnly}
+                onChange={(event) =>
+                  setSessionMemoryScope(
+                    session.id,
+                    event.target.checked ? 'local_only' : 'global_and_local'
+                  )
+                }
+              />
+            </div>
+          </div>
+
+          <div className={styles.modalSection}>
+            <div className={styles.fieldLabel}>
+              {t('personaLocalMemories')} ({localMemories.length})
+            </div>
+            {localMemories.length > 0 ? (
+              <ul className={styles.localMemoryList}>
+                {localMemories.map((item) => (
+                  <li key={item.id} className={styles.localMemoryItem}>
+                    <span>{item.content}</span>
+                    <button
+                      type="button"
+                      className={styles.localMemoryDel}
+                      aria-label={t('delete')}
+                      onClick={() => deleteSessionLocalMemory(session.id, item.id)}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className={styles.hint}>{t('personaNoLocalMemories')}</div>
+            )}
+            <div className={styles.localMemoryAddRow}>
+              <input
+                className={styles.input}
+                maxLength={MEMORY_CONTENT_MAX}
+                placeholder={t('personaLocalMemoryPlaceholder')}
+                value={localDraft}
+                onChange={(event) => setLocalDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    submitLocalMemory()
+                  }
+                }}
+              />
+              <Button
+                variant="outlined"
+                size="s"
+                disabled={!localDraft.trim()}
+                onClick={submitLocalMemory}
+              >
+                {t('personaLocalMemoryAdd')}
+              </Button>
             </div>
           </div>
 

@@ -502,3 +502,46 @@
   line-height: 20px;
   color: var(--dsw-alias-label-secondary);
 }
+
+.localMemoryList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.localMemoryItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background-color: var(--dsw-specific-login-input);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.localMemoryDel {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  padding: 0 4px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+.localMemoryAddRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

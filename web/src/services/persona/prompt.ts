@@ -1,5 +1,5 @@
 import type { Memory } from '../memory/types.js'
-import type { PersonaSnapshot } from './types.js'
+import type { LocalMemory, MemoryScope, PersonaSnapshot } from './types.js'
 
 /** 与上游完全一致的默认助手身份说明 */
 export const DEFAULT_IDENTITY = '该助手为DeepSeek，由深度求索公司创造。'
@@ -21,8 +21,10 @@ export type PromptContext = {
   sessionNote?: string
   memoryEnabled: boolean
   incognito?: boolean
+  memoryScope?: MemoryScope
   profile?: string
   memories: Pick<Memory, 'content'>[]
+  localMemories?: Pick<LocalMemory, 'content'>[]
 }
 
 const sanitizeMemoryLine = (content: string): string =>
@@ -35,13 +37,23 @@ export const buildSystemPrompt = (ctx: PromptContext): string => {
   const instructions = ctx.persona?.instructions?.trim() || ''
   const sessionNote = ctx.sessionNote?.trim() || ''
   const useMemory = ctx.memoryEnabled && !ctx.incognito
-  const profile = useMemory ? ctx.profile?.trim() || '' : ''
-  const memories = useMemory
+  const useGlobal = useMemory && ctx.memoryScope !== 'local_only'
+  const profile = useGlobal ? ctx.profile?.trim() || '' : ''
+  const globalMemories = useGlobal
     ? ctx.memories.map((m) => sanitizeMemoryLine(m.content)).filter(Boolean)
+    : []
+  const localMemories = useMemory
+    ? (ctx.localMemories ?? []).map((m) => sanitizeMemoryLine(m.content)).filter(Boolean)
     : []
 
   // 未选自定义人设、无补充指令、且未注入任何个人资料或记忆时，保持与上游完全一致
-  if (!instructions && !sessionNote && !profile && memories.length === 0) {
+  if (
+    !instructions &&
+    !sessionNote &&
+    !profile &&
+    globalMemories.length === 0 &&
+    localMemories.length === 0
+  ) {
     return DEFAULT_IDENTITY
   }
 
@@ -55,9 +67,18 @@ export const buildSystemPrompt = (ctx: PromptContext): string => {
     parts.push(`## 关于用户\n${profile}`)
   }
 
-  if (memories.length > 0) {
-    const list = memories.map((line, index) => `${index + 1}. ${line}`).join('\n')
-    parts.push(`## 关于用户的记忆\n${list}\n\n${MEMORY_USAGE_RULES}`)
+  if (globalMemories.length > 0) {
+    const list = globalMemories.map((line, index) => `${index + 1}. ${line}`).join('\n')
+    parts.push(`## 关于用户的记忆\n${list}`)
+  }
+
+  if (localMemories.length > 0) {
+    const list = localMemories.map((line, index) => `${index + 1}. ${line}`).join('\n')
+    parts.push(`## 本对话的局部记忆\n${list}`)
+  }
+
+  if (globalMemories.length > 0 || localMemories.length > 0) {
+    parts.push(MEMORY_USAGE_RULES)
   }
 
   return parts.join('\n\n')

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { flushPendingExtracts } from '../../services/memory/extract.js'
 import { useSettings } from '../../services/settings.js'
 import { openOnboarding } from '../onboarding/onboardingState.js'
 
@@ -11,8 +12,10 @@ export const useSettingsDialog = create(() => ({
   section: 'general' as SettingsSection,
 }))
 
-export const openSettings = (section: SettingsSection) =>
+export const openSettings = (section: SettingsSection) => {
+  flushPendingExtracts()
   useSettingsDialog.setState({ open: true, section })
+}
 
 export const closeSettings = () => useSettingsDialog.setState({ open: false })
 

@@ -19,12 +19,24 @@ export type Persona = {
 
 export type PersonaSnapshot = Pick<Persona, 'name' | 'avatar' | 'instructions'>
 
+export type LocalMemory = {
+  id: string
+  content: string
+  createdAt: number
+}
+
+export type MemoryScope = 'global_and_local' | 'local_only'
+
 export type SessionPersona = {
   personaId: string | null
   snapshot: PersonaSnapshot | null
   note?: string
   incognito?: boolean
   memoryIds?: string[]
+  /** 单会话记忆作用域：默认读取全局+局部；设为 local_only 时不读取全局记忆 */
+  memoryScope?: MemoryScope
+  /** 仅属于当前会话的局部记忆 */
+  localMemories?: LocalMemory[]
 }
 
 export const PERSONA_NAME_MAX = 20

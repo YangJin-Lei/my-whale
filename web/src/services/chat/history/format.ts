@@ -34,6 +34,12 @@ export type ArchiveSessionPersona = {
   } | null
   note?: string
   incognito?: boolean
+  memoryScope?: 'global_and_local' | 'local_only'
+  localMemories?: {
+    id: string
+    content: string
+    createdAt: number
+  }[]
 }
 
 export type SessionFile = {
