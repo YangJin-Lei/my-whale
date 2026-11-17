@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core'
 import { formatDate } from '../../utils/format.js'
 import * as db from './db.js'
 import { replaceHistory, useChatStore } from './store.js'
@@ -39,15 +40,28 @@ export const exportHistory = (): Promise<{ name: string; blob: Blob }> =>
     return { name: backupFileName(now), blob }
   })
 
+const normalizePickedFile = async (file: File): Promise<File> => {
+  if (!Capacitor.isNativePlatform()) {
+    return file
+  }
+  // Android WebView 对部分 content:// URI 的 File.slice() 支持不稳定，先读入内存再分片校验
+  const buffer = await file.arrayBuffer()
+  return new File([buffer], file.name, {
+    type: file.type || 'application/zip',
+    lastModified: file.lastModified,
+  })
+}
+
 /**
  * 确认覆盖后调用：先检查 ZIP 格式与版本，校验失败时保留正在生成的回答；
  * 通过后从 ZIP 流式写入暂存，成功才替换原有会话与图片原件。返回导入的会话数。
  */
 export const importHistory = (file: File): Promise<number> =>
   enqueueBackup(async () => {
+    const stableFile = await normalizePickedFile(file)
     const { checkArchiveFormat, importArchive } = await import('./history/importArchive.js')
-    await checkArchiveFormat(file)
-    return replaceHistory(() => importArchive(file))
+    await checkArchiveFormat(stableFile)
+    return replaceHistory(() => importArchive(stableFile))
   })
 
 /** 确认删除后调用：以空历史原子替换全部本地会话与附件，保留 API Key 和其他设置。 */

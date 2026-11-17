@@ -1,4 +1,5 @@
 import clsx from 'clsx'
+import { Capacitor } from '@capacitor/core'
 import { useRef, useState, type ReactNode } from 'react'
 import {
   IconDarkOutline16,
@@ -487,9 +488,13 @@ const useHistoryImport = () => {
     setStatus(null)
     try {
       const count = await importHistory(file)
-      setStatus({ key: count === 1 ? 'historyImportedOne' : 'historyImported', params: { count } })
+      const key = count === 1 ? 'historyImportedOne' : 'historyImported'
+      const params = { count }
+      setStatus({ key, params })
+      showToast({ key, params })
     } catch {
       setStatus({ key: 'historyImportFailed', error: true })
+      showToast({ key: 'historyImportFailed', type: 'error' })
     } finally {
       importing.current = false
       setBusy(false)
@@ -530,7 +535,11 @@ const ImportHistory = ({
           <input
             ref={inputRef}
             type="file"
-            accept=".zip,application/zip,application/x-zip-compressed"
+            accept={
+              Capacitor.isNativePlatform()
+                ? '*/*'
+                : '.zip,application/zip,application/x-zip-compressed'
+            }
             hidden
             onChange={(event) => {
               const file = event.target.files?.[0]

@@ -1,4 +1,5 @@
 import clsx from 'clsx'
+import { Capacitor } from '@capacitor/core'
 import { useMemo, useRef, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { selectSession } from '../../services/chat/store.js'
@@ -384,7 +385,7 @@ export const MemorySettings = () => {
           <input
             ref={profileFileRef}
             type="file"
-            accept=".json,application/json"
+            accept={Capacitor.isNativePlatform() ? '*/*' : '.json,application/json'}
             hidden
             onChange={(event) => {
               const file = event.target.files?.[0]

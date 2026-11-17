@@ -189,7 +189,7 @@ export const en = {
   noApiKeyCta: 'No API Key? Click here',
   noApiKeyHint: 'New users will be asked to sign up or log in first',
   onboardingStep2: 'Click "Create API Key" on the platform, enter any name, then copy it',
-  onboardingStep3: 'Come back here and paste your key:',
+  onboardingStep3: 'Come back here, paste your key, optionally import history, and confirm:',
   pasteFromClipboard: 'Paste',
   clipboardKeyDetected: 'API Key detected in clipboard and filled in',
   clipboardReadFailed: 'Unable to read clipboard. Please paste manually.',
@@ -212,13 +212,12 @@ export const en = {
     'my-whale is a third-party client modified from deepseek-ai/chat-demo (MIT License), NOT an official DeepSeek app.',
   settingsNoticeItem2:
     'Your API Key, chats, personas, and memories stay local and connect directly to DeepSeek API. Keep your Key safe and check official usage if balance changes unexpectedly.',
-  settingsNoticeItem3:
-    'Chats and background Auto Memory extraction consume DeepSeek API credits.',
+  settingsNoticeItem3: 'Chats and background Auto Memory extraction consume DeepSeek API credits.',
   startChatting: 'Start chatting',
   skipTopUp: 'Top up later',
   onboardingHistoryTitle: 'Migrate chat history (optional)',
   onboardingHistoryGuide:
-    'How to export from DeepSeek Web: Click Avatar → Settings → Data → Export all chats',
+    'How to export from DeepSeek Web: Click Avatar → Settings → Data → Export all chats → Export → Download',
 
   // Settings sections
   settingDialogAsidePersonaOptionLabel: 'Personas',
@@ -273,7 +272,8 @@ export const en = {
   memoryEnabledLabel: 'Use memory',
   memoryEnabledDesc: 'Inject your profile and saved memories when starting or continuing chats',
   memoryAutoLabel: 'Auto memory',
-  memoryAutoDesc: 'On by default; extracts durable facts after chats (uses a small amount of API credits)',
+  memoryAutoDesc:
+    'On by default; extracts durable facts after chats (uses a small amount of API credits)',
   memoryAutoSavedToast: 'Remembered {count} new item(s)',
   memoryToastView: 'View',
   memoryFirstNotice:

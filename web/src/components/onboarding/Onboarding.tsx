@@ -1,4 +1,5 @@
 import clsx from 'clsx'
+import { Capacitor } from '@capacitor/core'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import logoUrl from '../../assets/logo.png'
 import { useTranslate } from '../../i18n/index.js'
@@ -17,6 +18,7 @@ import { setApiKey, useSettings } from '../../services/settings.js'
 import { Button } from '../base/Button.js'
 import { IconDownloadOutline16, IconUploadOutline14 } from '../base/icons.js'
 import { Modal } from '../base/Modal.js'
+import { showToast } from '../base/toastState.js'
 import { useApiKeyForm } from '../settings/useApiKeyForm.js'
 import { closeOnboarding, useOnboarding } from './onboardingState.js'
 import styles from './Onboarding.module.css'
@@ -110,11 +112,13 @@ const OnboardingContent = () => {
     setHistoryStatus(null)
     try {
       const count = await importHistory(file)
-      setHistoryStatus({
-        text: t(count === 1 ? 'historyImportedOne' : 'historyImported', { count }),
-      })
+      const key = count === 1 ? 'historyImportedOne' : 'historyImported'
+      const params = { count }
+      setHistoryStatus({ text: t(key, params) })
+      showToast({ key, params })
     } catch {
       setHistoryStatus({ text: t('historyImportFailed'), error: true })
+      showToast({ key: 'historyImportFailed', type: 'error' })
     } finally {
       setHistoryBusy(false)
     }
@@ -354,7 +358,11 @@ const OnboardingContent = () => {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".zip,application/zip,application/x-zip-compressed"
+              accept={
+                Capacitor.isNativePlatform()
+                  ? '*/*'
+                  : '.zip,application/zip,application/x-zip-compressed'
+              }
               hidden
               onChange={(event) => {
                 const file = event.target.files?.[0]

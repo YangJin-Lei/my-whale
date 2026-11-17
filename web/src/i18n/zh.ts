@@ -180,7 +180,7 @@ export const zh = {
   noApiKeyCta: '没有 API Key？点击这里',
   noApiKeyHint: '新用户会先进入注册/登录页面',
   onboardingStep2: '在官网点击「创建 API Key」，名称随便填，创建后复制',
-  onboardingStep3: '回到这里粘贴并确认：',
+  onboardingStep3: '回到这里点击粘贴后并且导入数据并确认（可选）：',
   pasteFromClipboard: '粘贴',
   clipboardKeyDetected: '检测到剪贴板中的 API Key，已为你填入',
   clipboardReadFailed: '未能读取剪贴板，请手动粘贴到输入框',
@@ -207,7 +207,7 @@ export const zh = {
   skipTopUp: '稍后充值，先进入',
   onboardingHistoryTitle: '迁移历史对话（可选）',
   onboardingHistoryGuide:
-    'DeepSeek 网页版导出数据流程：点击头像 → 系统设置 → 数据管理 → 导出所有历史对话',
+    'DeepSeek 网页版导出数据流程：点击头像 → 系统设置 → 数据管理 → 导出所有历史对话 → 导出 → 下载',
 
   // 设置分组
   settingDialogAsidePersonaOptionLabel: '人设',
@@ -276,7 +276,8 @@ export const zh = {
   profileImportMerge: '合并导入',
   profileImportReplace: '替换现有',
   memoryAboutMe: '关于我',
-  memoryAboutMePlaceholder: '填写你的称呼、职业、偏好或常用回答风格（如：叫我小杨，前端工程师，回答尽量简洁）',
+  memoryAboutMePlaceholder:
+    '填写你的称呼、职业、偏好或常用回答风格（如：叫我小杨，前端工程师，回答尽量简洁）',
   memorySearchPlaceholder: '搜索记忆',
   memoryAdd: '添加记忆',
   memoryAddPlaceholder: '输入一条长期有效的事实或偏好（例如：用户不吃香菜）',
