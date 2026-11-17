@@ -21,7 +21,7 @@
         --brand: #4d6bfe;
         --brand-hover: #3b57e8;
         --brand-soft: rgba(77, 107, 254, 0.12);
-        --shadow: 0 20px 50px rgba(15, 23, 42, 0.1);
+        --shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
       }
       @media (prefers-color-scheme: dark) {
         :root {
@@ -33,7 +33,7 @@
           --text-muted: #94a3b8;
           --border: #262f40;
           --brand-soft: rgba(77, 107, 254, 0.22);
-          --shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+          --shadow: 0 24px 60px rgba(0, 0, 0, 0.52);
         }
       }
       * {
@@ -57,7 +57,7 @@
         text-decoration: none;
       }
       .container {
-        max-width: 1120px;
+        max-width: 1140px;
         margin: 0 auto;
         padding: 0 20px;
       }
@@ -106,7 +106,9 @@
         font-size: 14px;
         color: var(--text-secondary);
         border-radius: 8px;
-        transition: color 0.15s ease, background-color 0.15s ease;
+        transition:
+          color 0.15s ease,
+          background-color 0.15s ease;
       }
       .navAnchor:hover {
         color: var(--text);
@@ -148,13 +150,15 @@
         font-size: 13px;
         border-radius: 10px;
       }
+
+      /* Hero */
       .hero {
-        padding: 44px 0 24px;
+        padding: 40px 0 24px;
         text-align: center;
       }
       .heroLogo {
-        width: 84px;
-        height: 84px;
+        width: 82px;
+        height: 82px;
         object-fit: contain;
         margin-bottom: 10px;
       }
@@ -166,7 +170,7 @@
       }
       .heroSub {
         max-width: 720px;
-        margin: 0 auto 24px;
+        margin: 0 auto 22px;
         font-size: 16px;
         color: var(--text-secondary);
       }
@@ -175,7 +179,7 @@
         flex-wrap: wrap;
         justify-content: center;
         gap: 12px;
-        margin-bottom: 18px;
+        margin-bottom: 16px;
       }
       .iosTip {
         max-width: 740px;
@@ -192,13 +196,13 @@
         color: var(--text);
       }
 
-      /* Interactive Desktop Walkthrough */
+      /* Live Coded Interactive Desktop App Replica */
       .demoSection {
-        padding: 20px 0 40px;
+        padding: 20px 0 44px;
       }
       .demoHeader {
         text-align: center;
-        margin-bottom: 18px;
+        margin-bottom: 16px;
       }
       .demoHeader h2 {
         margin: 0 0 6px;
@@ -215,7 +219,7 @@
         align-items: center;
         justify-content: center;
         gap: 8px;
-        margin-bottom: 16px;
+        margin-bottom: 14px;
       }
       .stepPill {
         display: inline-flex;
@@ -260,9 +264,10 @@
       .desktopShell {
         border-radius: 18px;
         overflow: hidden;
-        background: var(--surface);
+        background: #ffffff;
         border: 1px solid var(--border);
         box-shadow: var(--shadow);
+        color: #0f172a;
       }
       .windowChrome {
         display: flex;
@@ -272,6 +277,7 @@
         padding: 10px 16px;
         background: var(--surface-soft);
         border-bottom: 1px solid var(--border);
+        color: var(--text);
       }
       .trafficLights {
         display: flex;
@@ -322,16 +328,22 @@
         justify-content: space-between;
         flex-wrap: wrap;
         gap: 10px;
-        padding: 10px 16px;
+        padding: 9px 16px;
         background: color-mix(in srgb, var(--brand) 8%, var(--surface));
         border-bottom: 1px solid var(--border);
         font-size: 13px;
+        color: var(--text);
       }
       .guideText strong {
         color: var(--brand);
       }
+      .guideControls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
       .guideHintBtn {
-        padding: 4px 12px;
+        padding: 5px 12px;
         border-radius: 999px;
         border: none;
         background: var(--brand);
@@ -345,147 +357,830 @@
         background: var(--brand-hover);
       }
 
-      .stage {
+      /* App Canvas Replica (matches desktop app 1:1) */
+      .appCanvas {
+        --app-bg: #ffffff;
+        --app-sider: #f9fafb;
+        --app-surface: #ffffff;
+        --app-input: #f8fafc;
+        --app-border: #e5e7eb;
+        --app-text: #0f172a;
+        --app-sub: #64748b;
+        --app-bubble: #eff4ff;
+        --app-hover: #f1f5f9;
         position: relative;
-        width: 100%;
-        background: #ffffff;
+        display: flex;
+        height: 620px;
+        background: var(--app-bg);
+        color: var(--app-text);
+        overflow: hidden;
+        text-align: left;
       }
-      .stepView {
-        display: none;
-        position: relative;
-        width: 100%;
-      }
-      .stepView.active {
-        display: block;
-        animation: fadeIn 0.22s ease;
-      }
-      @keyframes fadeIn {
-        from {
-          opacity: 0.45;
-          transform: scale(0.995);
-        }
-        to {
-          opacity: 1;
-          transform: scale(1);
-        }
-      }
-      .shotFrame {
-        position: relative;
-        width: 100%;
-      }
-      .shotFrame img {
-        display: block;
-        width: 100%;
-        height: auto;
-        user-select: none;
+      .appCanvas.appDark {
+        --app-bg: #14161b;
+        --app-sider: #191c23;
+        --app-surface: #1e222b;
+        --app-input: #232833;
+        --app-border: #2c3342;
+        --app-text: #f1f5f9;
+        --app-sub: #94a3b8;
+        --app-bubble: #253352;
+        --app-hover: #262b36;
       }
 
-      /* Interactive Hotspots */
-      .hotspot {
-        position: absolute;
-        border: 2px solid var(--brand);
-        border-radius: 10px;
-        background: rgba(77, 107, 254, 0.14);
+      /* Sidebar */
+      .appSider {
+        width: 240px;
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        padding: 14px 12px 12px;
+        background: var(--app-sider);
+        border-right: 1px solid var(--app-border);
+      }
+      .siderBrandRow {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 2px 4px 14px;
+      }
+      .siderBrand {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 18px;
+        font-weight: 700;
+        color: #4d6bfe;
+      }
+      .siderBrand img {
+        width: 24px;
+        height: 24px;
+        object-fit: contain;
+      }
+      .siderIcon {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--app-sub);
+      }
+      .newChatBtn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        height: 38px;
+        border-radius: 999px;
+        border: 1px solid var(--app-border);
+        background: var(--app-surface);
+        color: var(--app-text);
+        font: inherit;
+        font-size: 13px;
+        font-weight: 500;
         cursor: pointer;
-        padding: 0;
-        transition:
-          background-color 0.15s ease,
-          transform 0.15s ease;
-        z-index: 5;
+        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
       }
-      .hotspot:hover {
-        background: rgba(77, 107, 254, 0.28);
-        transform: scale(1.03);
+      .newChatBtn:hover {
+        background: var(--app-hover);
       }
-      .hotspot::after {
+      .siderHistory {
+        flex: 1;
+        margin-top: 16px;
+        overflow-y: auto;
+      }
+      .siderSectionLabel {
+        padding: 4px 8px;
+        font-size: 12px;
+        color: var(--app-sub);
+      }
+      .siderSessionItem {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        font-size: 13px;
+        color: var(--app-text);
+        background: var(--app-hover);
+        margin-top: 4px;
+        cursor: pointer;
+      }
+      .siderFooter {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding-top: 10px;
+      }
+      .balanceCard {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        padding: 7px 10px;
+        border-radius: 12px;
+        border: 1px solid var(--app-border);
+        background: var(--app-surface);
+        font-size: 12px;
+      }
+      .balanceVal {
+        font-weight: 600;
+      }
+      .balanceUsageLink {
+        color: #4d6bfe;
+        font-size: 11px;
+      }
+      .siderSettingsBtn {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 8px 10px;
+        border-radius: 10px;
+        border: none;
+        background: transparent;
+        color: var(--app-text);
+        font: inherit;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        text-align: left;
+      }
+      .siderSettingsBtn:hover {
+        background: var(--app-hover);
+      }
+
+      /* Pulse Guide Target */
+      .pulseTarget {
+        position: relative;
+        box-shadow: 0 0 0 2px #4d6bfe;
+        background: rgba(77, 107, 254, 0.1) !important;
+      }
+      .pulseTarget::after {
         content: '';
         position: absolute;
-        inset: -6px;
-        border-radius: 14px;
-        border: 2px solid var(--brand);
-        opacity: 0.65;
-        animation: pulseRing 1.6s infinite;
+        inset: -4px;
+        border-radius: inherit;
+        border: 2px solid #4d6bfe;
+        animation: pulseRing 1.5s infinite;
         pointer-events: none;
       }
       @keyframes pulseRing {
         0% {
-          transform: scale(0.96);
-          opacity: 0.85;
+          transform: scale(0.98);
+          opacity: 0.9;
         }
-        70% {
-          transform: scale(1.12);
+        75% {
+          transform: scale(1.08);
           opacity: 0;
         }
         100% {
-          transform: scale(1.12);
+          transform: scale(1.08);
           opacity: 0;
         }
       }
-      .hotspotTip {
+      .cursorCoach {
         position: absolute;
+        z-index: 6;
         padding: 4px 10px;
         border-radius: 8px;
         background: #0f172a;
         color: #ffffff;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 600;
         white-space: nowrap;
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
         pointer-events: none;
       }
-      .tipTopRight {
-        left: 0;
-        bottom: calc(100% + 10px);
-      }
-      .tipRight {
-        left: calc(100% + 12px);
-        top: 50%;
-        transform: translateY(-50%);
-      }
-      .tipTopCenter {
-        left: 50%;
-        bottom: calc(100% + 10px);
-        transform: translateX(-50%);
-      }
-      .invisibleHotspot {
-        position: absolute;
-        background: transparent;
-        border: none;
-        cursor: pointer;
-        z-index: 4;
+
+      /* Main area */
+      .appMain {
+        flex: 1;
+        min-width: 0;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        background: var(--app-bg);
       }
 
-      /* Scrollable continuous trial chat view (Step 4) */
-      .chatScrollBox {
-        max-height: 600px;
-        overflow-y: auto;
-        background: #ffffff;
-        scroll-behavior: smooth;
+      /* Welcome State */
+      .welcomeView {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 24px 28px;
+        gap: 18px;
       }
-      .chatScrollBox img {
-        display: block;
+      .welcomeTitleRow {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 24px;
+        font-weight: 600;
+      }
+      .welcomeTitleRow img {
+        width: 34px;
+        height: 34px;
+        object-fit: contain;
+      }
+      .welcomeActionsRow {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .chipBtn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: 999px;
+        border: 1px solid var(--app-border);
+        background: var(--app-surface);
+        color: var(--app-text);
+        font: inherit;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      .chipBtn:hover {
+        border-color: #4d6bfe;
+      }
+
+      /* Composer Box */
+      .composerWrap {
         width: 100%;
-        height: auto;
+        max-width: 680px;
+        padding: 14px 16px 12px;
+        border-radius: 22px;
+        border: 1px solid var(--app-border);
+        background: var(--app-surface);
+        box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05);
       }
-      .chatFloatControls {
+      .composerPlaceholder {
+        min-height: 36px;
+        font-size: 14px;
+        color: var(--app-sub);
+        outline: none;
+      }
+      .composerRow {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 10px;
-        padding: 10px 16px;
-        background: var(--surface-soft);
-        border-top: 1px solid var(--border);
-        font-size: 13px;
-        color: var(--text-secondary);
+        margin-top: 10px;
       }
-      .chatFloatBtns {
+      .composerToggles {
         display: flex;
         align-items: center;
         gap: 8px;
       }
+      .toggleChip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 11px;
+        border-radius: 999px;
+        border: 1px solid var(--app-border);
+        background: transparent;
+        color: var(--app-text);
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .toggleChip.on {
+        background: rgba(77, 107, 254, 0.12);
+        border-color: rgba(77, 107, 254, 0.45);
+        color: #4d6bfe;
+      }
+      .composerIcons {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--app-sub);
+      }
+      .sendCircle {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        border: none;
+        background: #b9ccff;
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 15px;
+        font-weight: 700;
+      }
+      .sendCircle.ready {
+        background: #4d6bfe;
+        cursor: pointer;
+      }
 
-      /* Features & Extra Shots */
+      /* Settings Modal Overlay */
+      .modalMask {
+        position: absolute;
+        inset: 0;
+        z-index: 20;
+        background: rgba(15, 23, 42, 0.36);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        animation: fadeMask 0.18s ease;
+      }
+      @keyframes fadeMask {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      .settingsModal {
+        width: 100%;
+        max-width: 720px;
+        height: 490px;
+        background: var(--app-surface);
+        border-radius: 22px;
+        border: 1px solid var(--app-border);
+        box-shadow: 0 24px 64px rgba(15, 23, 42, 0.24);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        color: var(--app-text);
+      }
+      .modalHeader {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 22px 10px;
+        font-size: 17px;
+        font-weight: 600;
+      }
+      .modalCloseBtn {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        border: none;
+        background: transparent;
+        color: var(--app-sub);
+        font-size: 18px;
+        cursor: pointer;
+      }
+      .modalCloseBtn:hover {
+        background: var(--app-hover);
+      }
+      .modalBody {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        padding: 4px 18px 18px;
+        gap: 16px;
+      }
+      .modalNav {
+        width: 154px;
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .modalNavItem {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 12px;
+        border-radius: 10px;
+        border: none;
+        background: transparent;
+        color: var(--app-text);
+        font: inherit;
+        font-size: 13px;
+        cursor: pointer;
+        text-align: left;
+      }
+      .modalNavItem:hover {
+        background: var(--app-hover);
+      }
+      .modalNavItem.active {
+        background: var(--app-hover);
+        font-weight: 600;
+      }
+      .modalContent {
+        flex: 1;
+        min-width: 0;
+        overflow-y: auto;
+        padding-right: 4px;
+      }
+      .settingGroupTitle {
+        font-size: 13px;
+        font-weight: 500;
+        margin-bottom: 10px;
+      }
+      .themeGrid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin-bottom: 16px;
+      }
+      .themeCard {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        padding: 14px 8px;
+        border-radius: 12px;
+        border: 1px solid var(--app-border);
+        background: transparent;
+        color: var(--app-text);
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .themeCard.selected {
+        background: var(--app-hover);
+        border-color: #4d6bfe;
+        font-weight: 600;
+      }
+      .settingRow {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 0;
+        border-top: 1px solid var(--app-border);
+        font-size: 13px;
+      }
+      .fakeSelect {
+        padding: 5px 12px;
+        border-radius: 10px;
+        background: var(--app-input);
+        border: 1px solid var(--app-border);
+        color: var(--app-text);
+        font-size: 12px;
+      }
+      .noticeCard {
+        margin-top: 12px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: var(--app-input);
+        border: 1px solid var(--app-border);
+        font-size: 12px;
+        color: var(--app-sub);
+      }
+      .noticeCardTitle {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--app-text);
+        margin-bottom: 6px;
+      }
+      .noticeCard ul {
+        margin: 0;
+        padding-left: 16px;
+      }
+
+      /* Personas Tab */
+      .personaHeaderRow {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+      .personaPrivacy {
+        font-size: 12px;
+        color: var(--app-sub);
+        line-height: 1.5;
+      }
+      .newPersonaBtn {
+        flex-shrink: 0;
+        padding: 7px 14px;
+        border-radius: 999px;
+        border: none;
+        background: #4d6bfe;
+        color: #ffffff;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .personaCard {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 1px solid var(--app-border);
+        margin-bottom: 10px;
+      }
+      .personaLeft {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+      .avatarCircle {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        background: #e6efff;
+        color: #4d6bfe;
+        font-weight: 700;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .avatarCircle.sm {
+        width: 20px;
+        height: 20px;
+        font-size: 11px;
+      }
+      .personaNameRow {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .builtinTag {
+        padding: 1px 6px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 500;
+        background: var(--app-input);
+        color: var(--app-sub);
+      }
+      .personaDesc {
+        font-size: 12px;
+        color: var(--app-sub);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 240px;
+      }
+      .personaActions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-shrink: 0;
+        font-size: 12px;
+      }
+      .personaLink {
+        position: relative;
+        border: none;
+        background: transparent;
+        padding: 4px 6px;
+        border-radius: 6px;
+        color: #4d6bfe;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      .personaLink:hover {
+        background: rgba(77, 107, 254, 0.1);
+      }
+
+      /* Trial Chat Session View (Live Streaming) */
+      .sessionView {
+        display: none;
+        flex-direction: column;
+        height: 100%;
+      }
+      .sessionView.active {
+        display: flex;
+      }
+      .sessionTopBar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 20px;
+        border-bottom: 1px solid var(--app-border);
+        flex-shrink: 0;
+      }
+      .sessionTitle {
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .trialPill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        border: 1px solid #f59e0b;
+        background: rgba(245, 158, 11, 0.08);
+        font-size: 12px;
+      }
+      .trialTag {
+        color: #d97706;
+        font-weight: 500;
+      }
+      .saveToListBtn {
+        padding: 4px 12px;
+        border-radius: 999px;
+        border: 1px solid #93c5fd;
+        background: transparent;
+        color: #3b82f6;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      .saveToListBtn:hover {
+        background: rgba(59, 130, 246, 0.08);
+      }
+      .saveToListBtn.saved {
+        border-color: #22c55e;
+        color: #16a34a;
+      }
+      .chatThread {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 18px 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .msgRowUser {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 4px;
+        animation: msgRise 0.18s ease;
+      }
+      .userBubble {
+        max-width: 78%;
+        padding: 10px 15px;
+        border-radius: 16px;
+        background: var(--app-bubble);
+        color: var(--app-text);
+        font-size: 14px;
+        line-height: 1.55;
+      }
+      .msgRowBot {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+        max-width: 92%;
+        animation: msgRise 0.18s ease;
+      }
+      @keyframes msgRise {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .botMeta {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 12px;
+        color: var(--app-sub);
+        font-weight: 500;
+      }
+      .botContent {
+        padding-left: 27px;
+        font-size: 14px;
+        line-height: 1.7;
+        width: 100%;
+      }
+      .botContent p {
+        margin: 0 0 8px;
+      }
+      .botContent p:last-child {
+        margin-bottom: 0;
+      }
+      .stageNote {
+        color: var(--app-sub);
+        font-style: italic;
+      }
+      .inlineCode {
+        padding: 1px 6px;
+        border-radius: 5px;
+        background: var(--app-input);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12.5px;
+      }
+      .codeBlock {
+        margin: 10px 0;
+        border-radius: 12px;
+        border: 1px solid var(--app-border);
+        background: var(--app-input);
+        overflow: hidden;
+      }
+      .codeHeader {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 7px 14px;
+        border-bottom: 1px solid var(--app-border);
+        font-size: 12px;
+        color: var(--app-sub);
+      }
+      .codeCopyBtn {
+        border: none;
+        background: transparent;
+        color: var(--app-sub);
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .codeCopyBtn:hover {
+        color: var(--app-text);
+      }
+      .codeBlock pre {
+        margin: 0;
+        padding: 12px 14px;
+        overflow-x: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12.5px;
+        line-height: 1.55;
+      }
+      .tok-kw {
+        color: #a855f7;
+      }
+      .tok-fn {
+        color: #2563eb;
+      }
+      .tok-lit {
+        color: #0891b2;
+      }
+      .mathFormula {
+        margin: 10px 0;
+        font-family: 'Cambria Math', 'Times New Roman', Georgia, serif;
+        font-size: 15.5px;
+      }
+      .msgTools {
+        padding-left: 27px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 12px;
+        color: var(--app-sub);
+      }
+      .streamCursor {
+        display: inline-block;
+        width: 7px;
+        height: 15px;
+        margin-left: 2px;
+        vertical-align: -2px;
+        background: #4d6bfe;
+        animation: blink 0.8s steps(2) infinite;
+      }
+      @keyframes blink {
+        0%,
+        50% {
+          opacity: 1;
+        }
+        51%,
+        100% {
+          opacity: 0;
+        }
+      }
+      .sessionBottom {
+        padding: 10px 24px 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+        background: var(--app-bg);
+      }
+      .caveat {
+        font-size: 11px;
+        color: var(--app-sub);
+      }
+      .demoToast {
+        position: absolute;
+        left: 50%;
+        top: 16px;
+        transform: translateX(-50%);
+        z-index: 30;
+        padding: 7px 14px;
+        border-radius: 10px;
+        background: #0f172a;
+        color: #ffffff;
+        font-size: 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+        display: none;
+      }
+      .demoToast.show {
+        display: block;
+      }
+
+      /* Features & Gallery */
       .section {
         padding: 36px 0;
       }
@@ -561,19 +1256,21 @@
         max-width: 780px;
         margin: 0 auto 10px;
       }
-      @media (max-width: 680px) {
+      @media (max-width: 820px) {
         .hideMobile {
           display: none;
         }
-        .hero {
-          padding: 28px 0 18px;
+        .appSider {
+          display: none;
         }
-        .hotspotTip {
-          font-size: 10px;
-          padding: 2px 6px;
+        .appCanvas {
+          height: 540px;
         }
-        .chatScrollBox {
-          max-height: 440px;
+        .personaDesc {
+          max-width: 140px;
+        }
+        .modalNav {
+          width: 105px;
         }
       }
     </style>
@@ -587,7 +1284,7 @@
           <span class="badge">v0.1.0</span>
         </a>
         <div class="navLinks">
-          <a class="navAnchor hideMobile" href="#demo">交互演示</a>
+          <a class="navAnchor hideMobile" href="#demo">实时交互演示</a>
           <a class="navAnchor hideMobile" href="#features">核心能力</a>
           <a class="navAnchor hideMobile" href="#gallery">更多界面</a>
           <a
@@ -632,11 +1329,14 @@
         </div>
       </section>
 
-      <!-- Interactive Desktop Walkthrough -->
+      <!-- Live Coded Interactive Desktop Replica -->
       <section id="demo" class="demoSection">
         <div class="demoHeader">
-          <h2>桌面端交互演示（点击界面高亮点亲自体验）</h2>
-          <p>按真实操作路径依次点击：<strong>左下角「设置」</strong> → <strong>左侧「人设」</strong> → <strong>霸道总裁「试聊」</strong>，即可进入连续试聊窗口</p>
+          <h2>桌面端实时交互演示（1:1 组件复原 · 流式对话输出）</h2>
+          <p>
+            可亲自点击界面里的 <strong>「⚙ 设置」</strong> → <strong>「人设」</strong> →
+            霸道总裁<strong>「试聊」</strong>，观察实时流式输出与代码/公式渲染
+          </p>
         </div>
 
         <div class="stepBar" role="tablist" aria-label="交互演示步骤">
@@ -644,13 +1344,13 @@
             <span class="stepNum">1</span>主界面
           </button>
           <button type="button" class="stepPill" data-step-btn="2">
-            <span class="stepNum">2</span>打开设置
+            <span class="stepNum">2</span>通用设置
           </button>
           <button type="button" class="stepPill" data-step-btn="3">
-            <span class="stepNum">3</span>人设列表
+            <span class="stepNum">3</span>人设广场
           </button>
           <button type="button" class="stepPill" data-step-btn="4">
-            <span class="stepNum">4</span>霸道总裁试聊
+            <span class="stepNum">4</span>霸道总裁实时试聊
           </button>
         </div>
 
@@ -661,106 +1361,297 @@
               <span class="dot dotYellow"></span>
               <span class="dot dotGreen"></span>
             </div>
-            <div class="windowTitle" id="demoWindowTitle">my-whale Desktop — 欢迎主页</div>
+            <div class="windowTitle" id="demoWindowTitle">my-whale Desktop — 主界面</div>
             <div class="windowActions">
-              <button type="button" class="miniBtn" id="demoResetBtn">回到首页</button>
+              <button type="button" class="miniBtn" id="autoPlayBtn">▶ 自动演示全程</button>
+              <button type="button" class="miniBtn" id="demoResetBtn">重置</button>
               <a class="miniBtn" href="./app/">体验真机网页版 ↗</a>
             </div>
           </div>
 
           <div class="guideBanner">
             <div class="guideText" id="demoGuideText">
-              <strong>第 1/4 步：</strong>请点击画面左下角的 <strong>「⚙ 设置」</strong> 按钮，打开系统设置弹窗。
+              <strong>第 1/4 步：</strong>请点击左下角 <strong>「⚙ 设置」</strong> 按钮，体验人设选择与实时流式试聊。
             </div>
-            <button type="button" class="guideHintBtn" id="demoNextBtn">点击前往下一步 →</button>
+            <div class="guideControls">
+              <button type="button" class="miniBtn" id="skipStreamBtn" style="display: none">
+                立即显示完整对话
+              </button>
+              <button type="button" class="guideHintBtn" id="demoNextBtn">前往第 2 步（打开设置） →</button>
+            </div>
           </div>
 
-          <div class="stage">
-            <!-- Step 1: Home -->
-            <div class="stepView active" data-step="1">
-              <div class="shotFrame">
-                <img src="./assets/demo/step-1-home.png" alt="my-whale 桌面端主界面" />
-                <button
-                  type="button"
-                  class="hotspot"
-                  style="left: 0.6%; top: 93.2%; width: 14%; height: 6.4%"
-                  aria-label="点击打开设置"
-                  data-goto="2"
-                >
-                  <span class="hotspotTip tipTopRight">① 点击「设置」</span>
+          <!-- Real Coded Desktop App UI -->
+          <div class="appCanvas" id="appCanvas">
+            <div class="demoToast" id="demoToast"></div>
+
+            <!-- Left Sidebar -->
+            <aside class="appSider">
+              <div class="siderBrandRow">
+                <div class="siderBrand">
+                  <img src="./assets/logo.png" alt="" />
+                  <span>my-whale</span>
+                </div>
+                <div class="siderIcon" title="收起侧边栏">◧</div>
+              </div>
+
+              <button type="button" class="newChatBtn" id="siderNewChatBtn">⊕ 开启新对话</button>
+
+              <div class="siderHistory" id="siderHistory">
+                <div class="siderSectionLabel" id="savedListLabel" style="display: none">今天</div>
+                <div class="siderSessionItem" id="savedCeoSession" style="display: none">
+                  <span class="avatarCircle sm">霸</span>
+                  <span>霸道总裁</span>
+                </div>
+              </div>
+
+              <div class="siderFooter">
+                <div class="balanceCard">
+                  <span>余额 <span class="balanceVal">¥1.01</span></span>
+                  <span class="balanceUsageLink">官网用量 ↗ ↻</span>
+                </div>
+                <button type="button" class="siderSettingsBtn pulseTarget" id="openSettingsBtn">
+                  <span>⚙</span>
+                  <span>设置</span>
+                  <span class="cursorCoach" id="coachStep1" style="left: 96px; top: 4px">
+                    ← ① 点这里
+                  </span>
                 </button>
+              </div>
+            </aside>
+
+            <!-- Main Content -->
+            <div class="appMain">
+              <!-- Welcome Screen (Step 1 & modal backdrop for Step 2/3) -->
+              <div class="welcomeView" id="welcomeView">
+                <div class="welcomeTitleRow">
+                  <img src="./assets/logo.png" alt="my-whale" />
+                  <span>今天有什么可以帮到你？</span>
+                </div>
+                <div class="welcomeActionsRow">
+                  <button type="button" class="chipBtn" id="quickPersonaBtn">+ 新建人设</button>
+                  <button type="button" class="chipBtn" id="quickIncognitoBtn">🕶 无痕会话</button>
+                </div>
+                <div class="composerWrap">
+                  <div class="composerPlaceholder">请输入消息</div>
+                  <div class="composerRow">
+                    <div class="composerToggles">
+                      <button type="button" class="toggleChip" data-toggle>⚛ 深度思考</button>
+                      <button type="button" class="toggleChip" data-toggle>🌐 智能搜索</button>
+                    </div>
+                    <div class="composerIcons">
+                      <span>📎</span>
+                      <span class="sendCircle">↑</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Live Trial Chat Screen (Step 4) -->
+              <div class="sessionView" id="sessionView">
+                <div class="sessionTopBar">
+                  <span class="sessionTitle">霸道总裁</span>
+                  <span class="trialPill">
+                    <span class="avatarCircle sm">霸</span>
+                    <span>霸道总裁</span>
+                    <span class="trialTag" id="trialStatusTag">试聊·不保存</span>
+                    <span>▾</span>
+                  </span>
+                  <button type="button" class="saveToListBtn" id="saveSessionBtn">
+                    保存到对话列表
+                  </button>
+                </div>
+
+                <div class="chatThread" id="chatThread"></div>
+
+                <div class="sessionBottom">
+                  <div class="composerWrap">
+                    <div class="composerPlaceholder">请输入消息</div>
+                    <div class="composerRow">
+                      <div class="composerToggles">
+                        <button type="button" class="toggleChip" data-toggle>⚛ 深度思考</button>
+                        <button type="button" class="toggleChip" data-toggle>🌐 智能搜索</button>
+                      </div>
+                      <div class="composerIcons">
+                        <span>📎</span>
+                        <span class="sendCircle">↑</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="caveat">内容由 AI 生成，请仔细甄别</div>
+                </div>
               </div>
             </div>
 
-            <!-- Step 2: Settings -> General -->
-            <div class="stepView" data-step="2">
-              <div class="shotFrame">
-                <img src="./assets/demo/step-2-settings.png" alt="设置弹窗 - 通用设置" />
-                <button
-                  type="button"
-                  class="hotspot"
-                  style="left: 3.4%; top: 20.8%; width: 19.2%; height: 6.8%"
-                  aria-label="点击切换到人设"
-                  data-goto="3"
-                >
-                  <span class="hotspotTip tipRight">② 点击「人设」</span>
-                </button>
-                <button
-                  type="button"
-                  class="invisibleHotspot"
-                  style="left: 81%; top: 4%; width: 5%; height: 7%"
-                  title="关闭弹窗返回主界面"
-                  aria-label="关闭弹窗返回主界面"
-                  data-goto="1"
-                ></button>
-              </div>
-            </div>
+            <!-- Settings Modal (Step 2 & Step 3) -->
+            <div class="modalMask" id="settingsMask" style="display: none">
+              <div class="settingsModal" role="dialog" aria-label="设置">
+                <div class="modalHeader">
+                  <span>设置</span>
+                  <button type="button" class="modalCloseBtn" id="closeModalBtn" aria-label="关闭">
+                    ×
+                  </button>
+                </div>
+                <div class="modalBody">
+                  <nav class="modalNav">
+                    <button type="button" class="modalNavItem active" id="tabGeneral">
+                      <span>⚙</span><span>通用设置</span>
+                    </button>
+                    <button type="button" class="modalNavItem pulseTarget" id="tabPersona">
+                      <span>👤</span><span>人设</span>
+                      <span class="cursorCoach" id="coachStep2" style="left: 142px; top: 6px">
+                        ← ② 点人设
+                      </span>
+                    </button>
+                    <button type="button" class="modalNavItem" id="tabMemory">
+                      <span>▤</span><span>记忆</span>
+                    </button>
+                    <button type="button" class="modalNavItem" id="tabData">
+                      <span>⛁</span><span>数据管理</span>
+                    </button>
+                  </nav>
 
-            <!-- Step 3: Settings -> Personas -->
-            <div class="stepView" data-step="3">
-              <div class="shotFrame">
-                <img src="./assets/demo/step-3-personas.jpg" alt="设置弹窗 - 人设列表" />
-                <button
-                  type="button"
-                  class="hotspot"
-                  style="left: 65.8%; top: 27%; width: 4%; height: 5.5%"
-                  aria-label="点击霸道总裁试聊"
-                  data-goto="4"
-                >
-                  <span class="hotspotTip tipTopCenter">③ 点击「试聊」进入霸道总裁对话</span>
-                </button>
-                <button
-                  type="button"
-                  class="invisibleHotspot"
-                  style="left: 6%; top: 15.6%; width: 19%; height: 6%"
-                  title="返回通用设置"
-                  aria-label="返回通用设置"
-                  data-goto="2"
-                ></button>
-                <button
-                  type="button"
-                  class="invisibleHotspot"
-                  style="left: 87.5%; top: 8.5%; width: 4%; height: 5.5%"
-                  title="关闭弹窗返回主界面"
-                  aria-label="关闭弹窗返回主界面"
-                  data-goto="1"
-                ></button>
-              </div>
-            </div>
+                  <!-- Tab 1: General Settings (Step 2) -->
+                  <div class="modalContent" id="paneGeneral">
+                    <div class="settingGroupTitle">主题</div>
+                    <div class="themeGrid">
+                      <button type="button" class="themeCard" id="themeLightBtn">☀ 浅色</button>
+                      <button type="button" class="themeCard" id="themeDarkBtn">☾ 深色</button>
+                      <button type="button" class="themeCard selected" id="themeSystemBtn">
+                        🖥 跟随系统
+                      </button>
+                    </div>
+                    <div class="settingRow">
+                      <span>语言</span>
+                      <span class="fakeSelect">简体中文 ▾</span>
+                    </div>
+                    <div class="settingRow">
+                      <span>语音模式（默认关闭）</span>
+                      <input type="checkbox" disabled aria-label="语音模式开关" />
+                    </div>
+                    <div class="settingRow">
+                      <span>位置信息</span>
+                      <span class="fakeSelect">请选择省份/地... ▾</span>
+                    </div>
+                    <div class="noticeCard">
+                      <div class="noticeCardTitle">注意事项与说明</div>
+                      <ul>
+                        <li>
+                          本应用（my-whale）基于 deepseek-ai/chat-demo（MIT
+                          协议）二次开发，为第三方客户端，非 DeepSeek 官方应用。
+                        </li>
+                        <li>
+                          API Key、历史对话、人设与记忆仅保存在本地，仅在请求时直连官方 API。
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
 
-            <!-- Step 4: Continuous Stitched Trial Chat (3 screenshots combined) -->
-            <div class="stepView" data-step="4">
-              <div class="chatScrollBox" id="chatScrollBox">
-                <img
-                  src="./assets/demo/step-4-chat.png"
-                  alt="霸道总裁连续试聊对话（支持Python代码高亮与LaTeX公式）"
-                />
-              </div>
-              <div class="chatFloatControls">
-                <span>④ 已进入「霸道总裁 · 试聊·不保存」模式，支持上下滚动阅读完整连贯对话（含角色演绎、Python 冒泡排序与数学积分推导）</span>
-                <div class="chatFloatBtns">
-                  <button type="button" class="miniBtn" id="scrollChatBtn">向下滚动看代码与公式 ↓</button>
-                  <button type="button" class="miniBtn" data-goto="3">返回人设列表</button>
+                  <!-- Tab 2: Persona List (Step 3) -->
+                  <div class="modalContent" id="panePersona" style="display: none">
+                    <div class="personaHeaderRow">
+                      <div class="personaPrivacy">
+                        人设、记忆与关于我仅保存在本机，仅在发起请求时提交给 DeepSeek API。
+                      </div>
+                      <button type="button" class="newPersonaBtn">+ 新建人设</button>
+                    </div>
+
+                    <div class="personaCard">
+                      <div class="personaLeft">
+                        <span class="avatarCircle">霸</span>
+                        <div>
+                          <div class="personaNameRow">
+                            <span>霸道总裁</span>
+                            <span class="builtinTag">内置</span>
+                          </div>
+                          <div class="personaDesc">冷静强势、护短嘴硬，把偏爱藏在行动与结果里…</div>
+                        </div>
+                      </div>
+                      <div class="personaActions">
+                        <span class="personaLink" style="opacity: 0.75">开始对话</span>
+                        <button type="button" class="personaLink pulseTarget" id="tryCeoBtn">
+                          试聊
+                          <span class="cursorCoach" id="coachStep3" style="left: -18px; top: -30px">
+                            ③ 点这里试聊 ↓
+                          </span>
+                        </button>
+                        <span class="personaLink" style="opacity: 0.75">设为默认</span>
+                        <span class="personaLink" style="opacity: 0.75">复制为我的人设</span>
+                      </div>
+                    </div>
+
+                    <div class="personaCard">
+                      <div class="personaLeft">
+                        <span class="avatarCircle">清</span>
+                        <div>
+                          <div class="personaNameRow">
+                            <span>清纯害羞男大</span>
+                            <span class="builtinTag">内置</span>
+                          </div>
+                          <div class="personaDesc">阳光真诚的计算机系学弟，一被夸就容易脸红…</div>
+                        </div>
+                      </div>
+                      <div class="personaActions">
+                        <span class="personaLink" style="opacity: 0.75">开始对话</span>
+                        <span class="personaLink" style="opacity: 0.75">试聊</span>
+                        <span class="personaLink" style="opacity: 0.75">设为默认</span>
+                      </div>
+                    </div>
+
+                    <div class="personaCard">
+                      <div class="personaLeft">
+                        <span class="avatarCircle">温</span>
+                        <div>
+                          <div class="personaNameRow">
+                            <span>温柔大方御姐</span>
+                            <span class="builtinTag">内置</span>
+                          </div>
+                          <div class="personaDesc">情绪稳定、从容通透的倾听者，给你恰到好处…</div>
+                        </div>
+                      </div>
+                      <div class="personaActions">
+                        <span class="personaLink" style="opacity: 0.75">开始对话</span>
+                        <span class="personaLink" style="opacity: 0.75">试聊</span>
+                        <span class="personaLink" style="opacity: 0.75">设为默认</span>
+                      </div>
+                    </div>
+
+                    <div class="personaCard">
+                      <div class="personaLeft">
+                        <span class="avatarCircle">元</span>
+                        <div>
+                          <div class="personaNameRow">
+                            <span>元气少女</span>
+                            <span class="builtinTag">内置</span>
+                          </div>
+                          <div class="personaDesc">行动力满分的小太阳，总能用好情绪带飞全场…</div>
+                        </div>
+                      </div>
+                      <div class="personaActions">
+                        <span class="personaLink" style="opacity: 0.75">开始对话</span>
+                        <span class="personaLink" style="opacity: 0.75">试聊</span>
+                        <span class="personaLink" style="opacity: 0.75">设为默认</span>
+                      </div>
+                    </div>
+
+                    <div class="personaCard">
+                      <div class="personaLeft">
+                        <span class="avatarCircle">高</span>
+                        <div>
+                          <div class="personaNameRow">
+                            <span>高冷学霸</span>
+                            <span class="builtinTag">内置</span>
+                          </div>
+                          <div class="personaDesc">毒舌少言却极其靠谱，讲题和做工程都一针见血…</div>
+                        </div>
+                      </div>
+                      <div class="personaActions">
+                        <span class="personaLink" style="opacity: 0.75">开始对话</span>
+                        <span class="personaLink" style="opacity: 0.75">试聊</span>
+                        <span class="personaLink" style="opacity: 0.75">设为默认</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -835,95 +1726,455 @@
       ;(() => {
         const META = {
           1: {
-            title: 'my-whale Desktop — 欢迎主页',
+            title: 'my-whale Desktop — 主界面',
             guide:
-              '<strong>第 1/4 步：</strong>请点击画面左下角的 <strong>「⚙ 设置」</strong> 按钮，打开系统设置弹窗。',
-            nextLabel: '点击前往第 2 步（打开设置） →',
+              '<strong>第 1/4 步：</strong>请点击左下角 <strong>「⚙ 设置」</strong> 按钮，打开系统设置弹窗。',
+            nextLabel: '前往第 2 步（打开设置） →',
             nextStep: 2,
           },
           2: {
             title: 'my-whale Desktop — 通用设置',
             guide:
-              '<strong>第 2/4 步：</strong>请点击设置弹窗左侧栏的 <strong>「人设」</strong>，切换至人设管理列表。',
-            nextLabel: '点击前往第 3 步（人设列表） →',
+              '<strong>第 2/4 步：</strong>请点击弹窗左侧栏的 <strong>「人设」</strong>，切换至人设列表。',
+            nextLabel: '前往第 3 步（人设列表） →',
             nextStep: 3,
           },
           3: {
-            title: 'my-whale Desktop — 人设广场与自定义',
+            title: 'my-whale Desktop — 人设列表',
             guide:
-              '<strong>第 3/4 步：</strong>请点击 <strong>「霸道总裁」</strong> 右侧的 <strong>「试聊」</strong>，立即开启无痕试聊体验。',
-            nextLabel: '点击前往第 4 步（霸道总裁试聊） →',
+              '<strong>第 3/4 步：</strong>请点击 <strong>「霸道总裁」</strong> 右侧的 <strong>「试聊」</strong>，观看实时流式对话！',
+            nextLabel: '前往第 4 步（霸道总裁试聊） →',
             nextStep: 4,
           },
           4: {
             title: 'my-whale Desktop — 霸道总裁 · 试聊·不保存',
             guide:
-              '<strong>第 4/4 步：</strong>已进入连贯试聊对话！可在下方窗口内 <strong>上下滚动</strong> 查看完整对话、Python 代码与数学公式。',
-            nextLabel: '回到第 1 步重新演示 ↺',
-            nextStep: 1,
+              '<strong>第 4/4 步：</strong>正在实时流式输出「霸道总裁」试聊对话（含角色演绎、Python 代码高亮与数学公式）。',
+            nextLabel: '重播完整对话 ↺',
+            nextStep: 4,
           },
         }
 
-        let currentStep = 1
+        const PYTHON_LINES = [
+          '<span class="tok-kw">def</span> <span class="tok-fn">bubble_sort</span>(arr):',
+          '    n = <span class="tok-fn">len</span>(arr)',
+          '    <span class="tok-kw">for</span> i <span class="tok-kw">in</span> <span class="tok-fn">range</span>(n - 1):',
+          '        swapped = <span class="tok-lit">False</span>',
+          '        <span class="tok-kw">for</span> j <span class="tok-kw">in</span> <span class="tok-fn">range</span>(n - 1 - i):',
+          '            <span class="tok-kw">if</span> arr[j] &gt; arr[j + 1]:',
+          '                arr[j], arr[j + 1] = arr[j + 1], arr[j]',
+          '                swapped = <span class="tok-lit">True</span>',
+          '        <span class="tok-kw">if not</span> swapped:',
+          '            <span class="tok-kw">break</span>',
+          '    <span class="tok-kw">return</span> arr',
+        ]
+
+        const SCRIPT = [
+          {
+            user: '你好',
+            parts: [
+              { type: 'stage', text: '(从文件上抬起眼，看了你一眼，手里的笔放下) ' },
+              { type: 'text', text: '来了。坐。' },
+            ],
+          },
+          {
+            user: '这么装逼？',
+            parts: [
+              { type: 'stage', text: '(没恼，靠回椅背，淡淡看你) ' },
+              { type: 'text', text: '装不装不重要。事办成了才作数。找我什么事，说。' },
+            ],
+          },
+          {
+            user: '给我一百万',
+            parts: [
+              { type: 'stage', text: '(顿了一下，视线在你脸上停了两秒) ' },
+              { type: 'text', text: '理由。' },
+            ],
+          },
+          {
+            user: '爱一个人需要理由吗？需要吗？不需要吗？',
+            parts: [
+              { type: 'p_stage', text: '(挑眉，指节在桌面上轻叩了两下)' },
+              { type: 'p', text: '我问的是钱。别跟我绕。' },
+              { type: 'p', text: '要一百万，说清楚给谁、做什么。' },
+            ],
+          },
+          {
+            user: '给我写一个冒泡排序，并且解答cosx的积分求解过程',
+            parts: [
+              { type: 'p_stage', text: '(看了你一会儿，收回视线，把笔拿起来)' },
+              { type: 'p', text: '行，先把正事说了。排序和积分，一样给你。' },
+              { type: 'p', text: '冒泡排序：' },
+              { type: 'code', lang: 'python', lines: PYTHON_LINES },
+              {
+                type: 'p_html',
+                html: '逐轮把相邻的逆序元素交换，每轮结束最大的元素沉到末尾。加 <span class="inlineCode">swapped</span> 是为了提前收敛，已经有序就直接退出。',
+              },
+              { type: 'math', text: '∫cos x dx = sin x + C。' },
+              {
+                type: 'p',
+                text: '推法很直接：sin x 求导是 cos x，所以反向就能立刻得出。要是换成 ∫cos(ax+b) dx，就是 (1/a)·sin(ax+b) + C，别漏那个 1/a。',
+              },
+              { type: 'p_stage', text: '(把笔放下，看你)' },
+              { type: 'p', text: '题答完了。一百万的事，现在说清楚。' },
+            ],
+          },
+        ]
+
+        const appCanvas = document.getElementById('appCanvas')
+        const welcomeView = document.getElementById('welcomeView')
+        const sessionView = document.getElementById('sessionView')
+        const settingsMask = document.getElementById('settingsMask')
+        const paneGeneral = document.getElementById('paneGeneral')
+        const panePersona = document.getElementById('panePersona')
+        const tabGeneral = document.getElementById('tabGeneral')
+        const tabPersona = document.getElementById('tabPersona')
+        const openSettingsBtn = document.getElementById('openSettingsBtn')
+        const tryCeoBtn = document.getElementById('tryCeoBtn')
+        const closeModalBtn = document.getElementById('closeModalBtn')
+        const chatThread = document.getElementById('chatThread')
+        const demoToast = document.getElementById('demoToast')
+        const saveSessionBtn = document.getElementById('saveSessionBtn')
+        const trialStatusTag = document.getElementById('trialStatusTag')
+        const savedListLabel = document.getElementById('savedListLabel')
+        const savedCeoSession = document.getElementById('savedCeoSession')
+
         const titleEl = document.getElementById('demoWindowTitle')
         const guideEl = document.getElementById('demoGuideText')
         const nextBtn = document.getElementById('demoNextBtn')
         const resetBtn = document.getElementById('demoResetBtn')
-        const scrollChatBtn = document.getElementById('scrollChatBtn')
-        const chatScrollBox = document.getElementById('chatScrollBox')
-        const stepViews = document.querySelectorAll('[data-step]')
+        const autoPlayBtn = document.getElementById('autoPlayBtn')
+        const skipStreamBtn = document.getElementById('skipStreamBtn')
         const stepBtns = document.querySelectorAll('[data-step-btn]')
 
-        const setStep = (step) => {
-          currentStep = Number(step) || 1
-          stepViews.forEach((el) => {
-            el.classList.toggle('active', Number(el.dataset.step) === currentStep)
+        const coachStep1 = document.getElementById('coachStep1')
+        const coachStep2 = document.getElementById('coachStep2')
+        const coachStep3 = document.getElementById('coachStep3')
+
+        let currentStep = 1
+        let streamRunId = 0
+        let autoTimers = []
+
+        const clearAutoTimers = () => {
+          autoTimers.forEach((id) => clearTimeout(id))
+          autoTimers = []
+        }
+
+        const showToastMsg = (msg) => {
+          demoToast.textContent = msg
+          demoToast.classList.add('show')
+          setTimeout(() => demoToast.classList.remove('show'), 2000)
+        }
+
+        const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+        const scrollBottom = () => {
+          chatThread.scrollTop = chatThread.scrollHeight
+        }
+
+        const createBotShell = () => {
+          const wrap = document.createElement('div')
+          wrap.className = 'msgRowBot'
+          wrap.innerHTML =
+            '<div class="botMeta"><span class="avatarCircle sm">霸</span><span>霸道总裁</span></div><div class="botContent"></div>'
+          chatThread.appendChild(wrap)
+          return wrap.querySelector('.botContent')
+        }
+
+        const addBotTools = (botRow) => {
+          const tools = document.createElement('div')
+          tools.className = 'msgTools'
+          tools.innerHTML = '<span>❐</span><span>↻</span>'
+          botRow.appendChild(tools)
+        }
+
+        const renderCompleteParts = (container, parts) => {
+          parts.forEach((part) => {
+            if (part.type === 'stage') {
+              let p = container.lastElementChild
+              if (!p || p.tagName !== 'P') {
+                p = document.createElement('p')
+                container.appendChild(p)
+              }
+              const span = document.createElement('span')
+              span.className = 'stageNote'
+              span.textContent = part.text
+              p.appendChild(span)
+            } else if (part.type === 'text') {
+              let p = container.lastElementChild
+              if (!p || p.tagName !== 'P') {
+                p = document.createElement('p')
+                container.appendChild(p)
+              }
+              p.appendChild(document.createTextNode(part.text))
+            } else if (part.type === 'p_stage') {
+              const p = document.createElement('p')
+              p.className = 'stageNote'
+              p.textContent = part.text
+              container.appendChild(p)
+            } else if (part.type === 'p') {
+              const p = document.createElement('p')
+              p.textContent = part.text
+              container.appendChild(p)
+            } else if (part.type === 'p_html') {
+              const p = document.createElement('p')
+              p.innerHTML = part.html
+              container.appendChild(p)
+            } else if (part.type === 'math') {
+              const div = document.createElement('div')
+              div.className = 'mathFormula'
+              div.textContent = part.text
+              container.appendChild(div)
+            } else if (part.type === 'code') {
+              const block = document.createElement('div')
+              block.className = 'codeBlock'
+              block.innerHTML =
+                '<div class="codeHeader"><span>python</span><button type="button" class="codeCopyBtn">❐ 复制</button></div><pre>' +
+                part.lines.join('\n') +
+                '</pre>'
+              block.querySelector('.codeCopyBtn').addEventListener('click', () => {
+                showToastMsg('已复制冒泡排序代码')
+              })
+              container.appendChild(block)
+            }
           })
+        }
+
+        const renderAllInstant = () => {
+          streamRunId += 1
+          chatThread.innerHTML = ''
+          SCRIPT.forEach((turn) => {
+            const u = document.createElement('div')
+            u.className = 'msgRowUser'
+            u.innerHTML = '<div class="userBubble"></div>'
+            u.querySelector('.userBubble').textContent = turn.user
+            chatThread.appendChild(u)
+
+            const body = createBotShell()
+            renderCompleteParts(body, turn.parts)
+            addBotTools(body.parentElement)
+          })
+          scrollBottom()
+        }
+
+        const streamChars = async (node, text, runId, speedMs) => {
+          for (let i = 1; i <= text.length; i += 1) {
+            if (streamRunId !== runId) {
+              return false
+            }
+            node.textContent = text.slice(0, i)
+            scrollBottom()
+            await sleep(speedMs)
+          }
+          return true
+        }
+
+        const startStreamingChat = async () => {
+          const runId = ++streamRunId
+          chatThread.innerHTML = ''
+
+          for (let tIdx = 0; tIdx < SCRIPT.length; tIdx += 1) {
+            if (streamRunId !== runId) {
+              return
+            }
+            const turn = SCRIPT[tIdx]
+            const u = document.createElement('div')
+            u.className = 'msgRowUser'
+            u.innerHTML = '<div class="userBubble"></div>'
+            u.querySelector('.userBubble').textContent = turn.user
+            chatThread.appendChild(u)
+            scrollBottom()
+            await sleep(220)
+            if (streamRunId !== runId) {
+              return
+            }
+
+            const body = createBotShell()
+            const cursor = document.createElement('span')
+            cursor.className = 'streamCursor'
+
+            for (const part of turn.parts) {
+              if (streamRunId !== runId) {
+                return
+              }
+              if (part.type === 'stage' || part.type === 'text') {
+                let p = body.lastElementChild
+                if (!p || p.tagName !== 'P') {
+                  p = document.createElement('p')
+                  body.appendChild(p)
+                }
+                const span = document.createElement('span')
+                if (part.type === 'stage') {
+                  span.className = 'stageNote'
+                }
+                p.appendChild(span)
+                p.appendChild(cursor)
+                const ok = await streamChars(span, part.text, runId, 20)
+                if (!ok) {
+                  return
+                }
+              } else if (part.type === 'p_stage' || part.type === 'p' || part.type === 'math') {
+                const el = document.createElement(part.type === 'math' ? 'div' : 'p')
+                if (part.type === 'p_stage') {
+                  el.className = 'stageNote'
+                } else if (part.type === 'math') {
+                  el.className = 'mathFormula'
+                }
+                const textNode = document.createTextNode('')
+                el.appendChild(textNode)
+                el.appendChild(cursor)
+                body.appendChild(el)
+                const ok = await streamChars(textNode, part.text, runId, 18)
+                if (!ok) {
+                  return
+                }
+              } else if (part.type === 'p_html') {
+                const p = document.createElement('p')
+                p.innerHTML = part.html
+                p.appendChild(cursor)
+                body.appendChild(p)
+                scrollBottom()
+                await sleep(260)
+              } else if (part.type === 'code') {
+                const block = document.createElement('div')
+                block.className = 'codeBlock'
+                block.innerHTML =
+                  '<div class="codeHeader"><span>python</span><button type="button" class="codeCopyBtn">❐ 复制</button></div><pre></pre>'
+                block.querySelector('.codeCopyBtn').addEventListener('click', () => {
+                  showToastMsg('已复制冒泡排序代码')
+                })
+                const pre = block.querySelector('pre')
+                body.appendChild(block)
+                let acc = ''
+                for (const line of part.lines) {
+                  if (streamRunId !== runId) {
+                    return
+                  }
+                  acc += (acc ? '\n' : '') + line
+                  pre.innerHTML = acc
+                  scrollBottom()
+                  await sleep(95)
+                }
+              }
+            }
+            cursor.remove()
+            addBotTools(body.parentElement)
+            scrollBottom()
+            await sleep(340)
+          }
+        }
+
+        const setStep = (step, opts = {}) => {
+          currentStep = Number(step) || 1
+          if (!opts.keepAuto) {
+            clearAutoTimers()
+          }
+
           stepBtns.forEach((btn) => {
             btn.classList.toggle('active', Number(btn.dataset.stepBtn) === currentStep)
           })
+
           const info = META[currentStep]
           titleEl.textContent = info.title
           guideEl.innerHTML = info.guide
           nextBtn.textContent = info.nextLabel
-          if (currentStep === 4 && chatScrollBox) {
-            chatScrollBox.scrollTop = 0
+          skipStreamBtn.style.display = currentStep === 4 ? 'inline-block' : 'none'
+
+          // Reset pulse highlights & coaches
+          openSettingsBtn.classList.toggle('pulseTarget', currentStep === 1)
+          coachStep1.style.display = currentStep === 1 ? 'block' : 'none'
+          tabPersona.classList.toggle('pulseTarget', currentStep === 2)
+          coachStep2.style.display = currentStep === 2 ? 'block' : 'none'
+          tryCeoBtn.classList.toggle('pulseTarget', currentStep === 3)
+          coachStep3.style.display = currentStep === 3 ? 'block' : 'none'
+
+          if (currentStep === 1) {
+            streamRunId += 1
+            welcomeView.style.display = 'flex'
+            sessionView.classList.remove('active')
+            settingsMask.style.display = 'none'
+          } else if (currentStep === 2) {
+            streamRunId += 1
+            welcomeView.style.display = 'flex'
+            sessionView.classList.remove('active')
+            settingsMask.style.display = 'flex'
+            tabGeneral.classList.add('active')
+            tabPersona.classList.remove('active')
+            paneGeneral.style.display = 'block'
+            panePersona.style.display = 'none'
+          } else if (currentStep === 3) {
+            streamRunId += 1
+            welcomeView.style.display = 'flex'
+            sessionView.classList.remove('active')
+            settingsMask.style.display = 'flex'
+            tabGeneral.classList.remove('active')
+            tabPersona.classList.add('active')
+            paneGeneral.style.display = 'none'
+            panePersona.style.display = 'block'
+          } else if (currentStep === 4) {
+            welcomeView.style.display = 'none'
+            settingsMask.style.display = 'none'
+            sessionView.classList.add('active')
+            void startStreamingChat()
           }
         }
 
-        document.querySelectorAll('[data-goto]').forEach((el) => {
-          el.addEventListener('click', () => setStep(el.dataset.goto))
+        openSettingsBtn.addEventListener('click', () => setStep(2))
+        tabGeneral.addEventListener('click', () => setStep(2))
+        tabPersona.addEventListener('click', () => setStep(3))
+        tryCeoBtn.addEventListener('click', () => setStep(4))
+        closeModalBtn.addEventListener('click', () => setStep(1))
+        document.getElementById('siderNewChatBtn').addEventListener('click', () => setStep(1))
+        document.getElementById('tabMemory').addEventListener('click', () => {
+          showToastMsg('在正式版中可管理「关于我」与全局自动记忆')
         })
+        document.getElementById('tabData').addEventListener('click', () => {
+          showToastMsg('在正式版中可导入/导出 ZIP v3 历史对话')
+        })
+
+        // Theme switch interactive inside Settings replica
+        const setDemoTheme = (mode) => {
+          document.getElementById('themeLightBtn').classList.toggle('selected', mode === 'light')
+          document.getElementById('themeDarkBtn').classList.toggle('selected', mode === 'dark')
+          document.getElementById('themeSystemBtn').classList.toggle('selected', mode === 'system')
+          const dark =
+            mode === 'dark' ||
+            (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          appCanvas.classList.toggle('appDark', dark)
+        }
+        document.getElementById('themeLightBtn').addEventListener('click', () => setDemoTheme('light'))
+        document.getElementById('themeDarkBtn').addEventListener('click', () => setDemoTheme('dark'))
+        document
+          .getElementById('themeSystemBtn')
+          .addEventListener('click', () => setDemoTheme('system'))
+
+        document.querySelectorAll('[data-toggle]').forEach((btn) => {
+          btn.addEventListener('click', () => btn.classList.toggle('on'))
+        })
+
+        saveSessionBtn.addEventListener('click', () => {
+          savedListLabel.style.display = 'block'
+          savedCeoSession.style.display = 'flex'
+          trialStatusTag.textContent = '已保存'
+          saveSessionBtn.textContent = '已保存到列表 ✓'
+          saveSessionBtn.classList.add('saved')
+          showToastMsg('已保存到左侧对话列表')
+        })
+
         stepBtns.forEach((btn) => {
           btn.addEventListener('click', () => setStep(btn.dataset.stepBtn))
         })
         nextBtn.addEventListener('click', () => setStep(META[currentStep].nextStep))
         resetBtn.addEventListener('click', () => setStep(1))
+        skipStreamBtn.addEventListener('click', renderAllInstant)
 
-        if (scrollChatBtn && chatScrollBox) {
-          scrollChatBtn.addEventListener('click', () => {
-            const atBottom =
-              chatScrollBox.scrollTop + chatScrollBox.clientHeight >=
-              chatScrollBox.scrollHeight - 40
-            if (atBottom) {
-              chatScrollBox.scrollTo({ top: 0, behavior: 'smooth' })
-              scrollChatBtn.textContent = '向下滚动看代码与公式 ↓'
-            } else {
-              chatScrollBox.scrollTo({
-                top: Math.min(chatScrollBox.scrollTop + 480, chatScrollBox.scrollHeight),
-                behavior: 'smooth',
-              })
-            }
-          })
-          chatScrollBox.addEventListener('scroll', () => {
-            const atBottom =
-              chatScrollBox.scrollTop + chatScrollBox.clientHeight >=
-              chatScrollBox.scrollHeight - 40
-            scrollChatBtn.textContent = atBottom
-              ? '回到对话顶部 ↑'
-              : '向下滚动看代码与公式 ↓'
-          })
-        }
+        autoPlayBtn.addEventListener('click', () => {
+          clearAutoTimers()
+          setStep(1, { keepAuto: true })
+          autoTimers.push(setTimeout(() => setStep(2, { keepAuto: true }), 1100))
+          autoTimers.push(setTimeout(() => setStep(3, { keepAuto: true }), 2400))
+          autoTimers.push(setTimeout(() => setStep(4, { keepAuto: true }), 3800))
+        })
       })()
     </script>
   </body>
