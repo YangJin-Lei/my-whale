@@ -1,0 +1,14 @@
+{
+  "name": "my-whale-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "icons": "tauri icon ../web/src/assets/logo.png"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.5.0"
+  }
+}

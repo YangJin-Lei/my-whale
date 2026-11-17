@@ -173,6 +173,8 @@ export const zh = {
   latestReminderLanguage: '中文',
   settingsLocaleZhCN: '简体中文',
   settingsLocaleEnUS: 'English',
+  settingsVoiceMode: '语音模式',
+  settingsVoiceModeDesc: '开启后显示语音输入（麦克风）与回复朗读按钮，默认关闭',
 
   // 引导与余额
   onboardingTitle: '欢迎使用 my-whale',

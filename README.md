@@ -24,7 +24,7 @@
 ### 3. 导入数据后的对话与人设入口
 支持自定义人设（含头像图片上传、人设提示词与默认开关）、无痕会话，以及单个对话内的「局部记忆 / 仅使用局部记忆」隔离控制。
 
-![对话与人设界面](./resources/png/3%E5%AE%9E%E9%99%85%E5%AF%BC%E5%85%A5%E5%90%8E%E8%AE%B0%E5%BF%86%E5%AD%98%E5%9C%A8.png)
+![对话与人设界面](./resources/png/3.png)
 
 ---
 
@@ -53,9 +53,11 @@
 - **ZIP v3 历史归档**：兼容 DeepSeek 官方网页版导出的历史对话 ZIP（v3 格式），完整保留分支树、图片附件、会话人设快照、局部记忆及隔离配置；Android 端支持通过系统文件选择器导入与系统分享/下载目录导出。
 - **人设与记忆备份（`my-whale-profile.json`）**：支持一键导出/导入个人人设、全局记忆与「关于我」，支持合并或替换两种模式。
 
-### 5. Web + Android 双端同构
-- **Web 端**：React 18 + TypeScript + Zustand + IndexedDB（`idb`）+ Rspack，支持流式 SSE、深度思考、智能搜索、链接阅读、GFM Markdown、KaTeX 公式、Prism 代码高亮与 Mermaid 图表。
-- **Android 端**：基于 Capacitor 8 打包为原生 APK，共享 100% Web 业务与渲染能力，通过 `@capacitor/browser`（调用系统默认浏览器）、`@capacitor/clipboard`、`@capacitor/filesystem` 与 `@capacitor/share` 对接原生系统能力。
+### 5. 全端覆盖（Web / iOS PWA / Android / Tauri 桌面端）
+- **Web 端 & iOS PWA**：React 18 + TypeScript + Zustand + IndexedDB（`idb`）+ Rspack，支持流式 SSE、深度思考、智能搜索、链接阅读、GFM Markdown、KaTeX 公式、Prism 代码高亮与 Mermaid 图表；内置 `manifest.webmanifest` 与离线 Service Worker，支持通过 GitHub Pages 纯静态部署并由 iPhone Safari「添加到主屏幕」作为全屏 PWA 使用。
+- **Android 端**：基于 Capacitor 8 打包为原生 APK，适配 Android 15/16 Edge-to-Edge 状态栏安全区，通过 `@capacitor/browser`（调用系统默认浏览器）、`@capacitor/clipboard`、`@capacitor/filesystem` 与 `@capacitor/share` 对接原生系统能力。
+- **桌面端（Tauri v2）**：轻量级原生桌面壳，直接复用 `web/dist` 构建 Windows（`.exe` / `.msi`）与 macOS（`.dmg`）安装包，支持调用系统默认浏览器打开官网控制台与本地文件导入导出。
+- **语音模式开关**：语音输入（麦克风）与回复朗读默认关闭，可在 `设置 → 通用设置 → 语音模式` 中按需开启。
 
 ---
 
@@ -63,17 +65,21 @@
 
 ```text
 my-whale/
-├── web/                              # Web 前端与 Capacitor 公共资源源码
+├── web/                              # Web 前端与 iOS PWA 源码
+│   ├── public/                       # PWA 清单、Apple 桌面图标与 Service Worker
 │   ├── src/
 │   │   ├── components/               # UI 组件（对话、引导、人设、记忆、设置等）
 │   │   ├── services/                 # API、余额、对话状态、历史 ZIP、人设、记忆逻辑
-│   │   ├── styles/                   # 全局样式与主题变量
+│   │   ├── platform/                 # Capacitor / Tauri 原生桥接
 │   │   └── i18n/                     # 中英文国际化文案
 │   ├── capacitor.config.ts           # Capacitor Android 工程配置
 │   └── package.json
+├── desktop/                          # Tauri v2 轻量桌面端工程
 ├── android/                          # Android 原生工程（Gradle + Capacitor）
+├── site/                             # GitHub Pages 官网引导页（首页 + /app/）
+├── .github/workflows/                # GitHub Pages 部署与 v* Tag 多端发版工作流
 ├── docs/                             # 架构与迁移设计文档
-├── resources/png/                    # README 演示截图
+├── resources/png/                    # README 与官网演示截图
 ├── 二次开发文档-引导与余额.md         # 引导与余额模块设计规范
 └── 二次开发文档-人设与记忆.md         # 人设与记忆模块设计规范
 ```
@@ -85,6 +91,7 @@ my-whale/
 ### 环境要求
 - Node.js >= 20 & pnpm
 - Android 构建（可选）：JDK 21 + Android SDK（Android Studio）
+- 桌面端构建（可选）：Rust 工具链（`rustc` / `cargo`）与对应平台构建工具（Windows WebView2）
 
 ### 1. 运行 Web 端
 
@@ -125,6 +132,20 @@ $env:JAVA_HOME = "C:\Users\App\Google_IDE\Android_Studio\jbr"   # 按本机 JDK 
 ```text
 android/app/build/outputs/apk/debug/app-debug.apk
 ```
+
+### 3. 构建 Tauri v2 桌面端
+
+```bash
+cd desktop
+pnpm install
+pnpm build
+```
+
+Windows 安装包输出在 `desktop/src-tauri/target/release/bundle/`（包含 `.exe` 与 `.msi`）。
+
+### 4. GitHub Pages 与多端自动发版
+- **GitHub Pages（Web / iOS PWA）**：在仓库 **Settings → Pages → Build and deployment → Source** 选择 **GitHub Actions**，推送 `main` 后会自动部署官网引导页（`/`）与 PWA 应用（`/app/`）。
+- **GitHub Releases 自动打包**：推送 `v*` 标签（如 `git tag v0.1.0 && git push origin v0.1.0`）即可自动构建 Android APK 与 Windows / macOS 桌面端安装包并发布到 Releases。
 
 ---
 

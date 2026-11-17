@@ -182,6 +182,8 @@ export const en = {
   latestReminderLanguage: 'English',
   settingsLocaleZhCN: 'Simplified Chinese',
   settingsLocaleEnUS: 'English',
+  settingsVoiceMode: 'Voice mode',
+  settingsVoiceModeDesc: 'Show microphone input and read-aloud controls (off by default)',
 
   // Onboarding & Balance
   onboardingTitle: 'Welcome to my-whale',

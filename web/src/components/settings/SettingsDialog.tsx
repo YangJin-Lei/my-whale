@@ -28,9 +28,11 @@ import {
   setLocation,
   setThemePreference,
   setTtsVoice,
+  setVoiceEnabled,
   useSettings,
   type ThemePreference,
 } from '../../services/settings.js'
+import { stopReadAloud } from '../../services/speech/readAloud.js'
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
 import { Button } from '../base/Button.js'
 import { Modal } from '../base/Modal.js'
@@ -114,7 +116,7 @@ const SettingsContent = () => {
             <>
               <ThemeSetting />
               <LocaleSetting />
-              <TtsVoiceSetting />
+              <VoiceModeSetting />
               <LocationSetting />
               <AppNotice />
             </>
@@ -323,6 +325,35 @@ const AppNotice = () => {
         <li>{t('settingsNoticeItem3')}</li>
       </ul>
     </div>
+  )
+}
+
+const VoiceModeSetting = () => {
+  const t = useTranslate()
+  const voiceEnabled = useSettings((state) => state.voiceEnabled)
+  return (
+    <>
+      <SettingCell
+        label={t('settingsVoiceMode')}
+        description={t('settingsVoiceModeDesc')}
+        status={null}
+        action={
+          <input
+            type="checkbox"
+            aria-label={t('settingsVoiceMode')}
+            checked={voiceEnabled}
+            onChange={(event) => {
+              const next = event.target.checked
+              if (!next) {
+                stopReadAloud()
+              }
+              setVoiceEnabled(next)
+            }}
+          />
+        }
+      />
+      {voiceEnabled ? <TtsVoiceSetting /> : null}
+    </>
   )
 }
 

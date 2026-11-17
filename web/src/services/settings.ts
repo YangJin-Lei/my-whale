@@ -13,6 +13,7 @@ type Settings = {
   locale: Locale
   themePreference: ThemePreference
   location: UserLocation | null
+  voiceEnabled: boolean
   ttsVoice: TtsVoice
   thinking: boolean
   search: boolean
@@ -29,6 +30,7 @@ const KEYS = {
   locale: 'chat-demo:locale',
   location: 'chat-demo:location',
   themePreference: 'chat-demo:theme-preference',
+  voiceEnabled: 'chat-demo:voice-enabled',
   ttsVoice: 'chat-demo:tts-voice',
   thinking: 'chat-demo:thinking',
   search: 'chat-demo:search',
@@ -102,6 +104,7 @@ export const useSettings = create<Settings>(() => ({
   locale: initialLocale(),
   location: initialLocation(),
   themePreference: initialThemePreference(),
+  voiceEnabled: read(KEYS.voiceEnabled) === 'true',
   ttsVoice: initialTtsVoice(),
   thinking: read(KEYS.thinking) === 'true',
   search: read(KEYS.search) === 'true',
@@ -127,6 +130,11 @@ export const setLocation = (value: UserLocation | null) => {
 export const setThemePreference = (themePreference: ThemePreference) => {
   write(KEYS.themePreference, themePreference)
   useSettings.setState({ themePreference })
+}
+
+export const setVoiceEnabled = (voiceEnabled: boolean) => {
+  write(KEYS.voiceEnabled, String(voiceEnabled))
+  useSettings.setState({ voiceEnabled })
 }
 
 export const setTtsVoice = (ttsVoice: TtsVoice) => {

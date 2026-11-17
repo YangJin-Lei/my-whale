@@ -24,7 +24,21 @@ const onReturnFromExternal = async () => {
   }
 }
 
+type TauriInternals = {
+  invoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>
+}
+
 export const setupNative = () => {
+  const tauri = (window as Window & { __TAURI_INTERNALS__?: TauriInternals }).__TAURI_INTERNALS__
+  if (tauri?.invoke) {
+    setOpenExternal((url) => {
+      void tauri.invoke?.('open_external_url', { url }).catch(() => {
+        window.open(url, '_blank', 'noopener,noreferrer')
+      })
+    })
+    return
+  }
+
   if (!Capacitor.isNativePlatform()) {
     return
   }

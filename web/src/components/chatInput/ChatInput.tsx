@@ -116,6 +116,12 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
 
   // 欢迎页导入后会话 ID 不变，不能依赖卸载取消语音；订阅开始事件也覆盖快速完成的导入。
   const cancelVoice = voice.cancel
+  const voiceEnabled = useSettings((state) => state.voiceEnabled)
+  useEffect(() => {
+    if (!voiceEnabled) {
+      cancelVoice()
+    }
+  }, [voiceEnabled, cancelVoice])
   useEffect(
     () =>
       useChatStore.subscribe((state, previous) => {
@@ -228,19 +234,21 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
           </Tooltip>
         </div>
         <div className={styles.right}>
-          <VoiceButton
-            status={voice.status}
-            disabled={!voice.available}
-            seconds={voice.seconds}
-            onClick={() => {
-              if (
-                voice.status !== 'idle' ||
-                (!useChatStore.getState().importingHistory && ensureApiKey())
-              ) {
-                void voice.toggle()
-              }
-            }}
-          />
+          {voiceEnabled ? (
+            <VoiceButton
+              status={voice.status}
+              disabled={!voice.available}
+              seconds={voice.seconds}
+              onClick={() => {
+                if (
+                  voice.status !== 'idle' ||
+                  (!useChatStore.getState().importingHistory && ensureApiKey())
+                ) {
+                  void voice.toggle()
+                }
+              }}
+            />
+          ) : null}
           <IconButton
             size="m"
             tone="primary"

@@ -1,10 +1,13 @@
 # Upstream reference repository (not committed)
 vender/
 
-# Web build & dependencies
+# Web & Desktop build / dependencies
 web/node_modules/
 web/dist/
 web/.rspack-cache/
+desktop/node_modules/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
 
 # Android Gradle & secrets
 android/.gradle/
