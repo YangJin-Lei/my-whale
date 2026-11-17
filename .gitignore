@@ -1,0 +1,22 @@
+# Upstream reference repository (not committed)
+vender/
+
+# Web build & dependencies
+web/node_modules/
+web/dist/
+web/.rspack-cache/
+
+# Android Gradle & secrets
+android/.gradle/
+android/build/
+android/*/build/
+android/.idea/
+android/local.properties
+android/keystore.properties
+*.jks
+*.keystore
+
+# OS / Editor / Logs
+.DS_Store
+Thumbs.db
+*.log
