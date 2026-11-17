@@ -234,6 +234,14 @@
   border: 1px solid var(--dsw-alias-border-l2);
 }
 
+.personaCardTop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
 .personaInfo {
   display: flex;
   flex: 1;
@@ -544,4 +552,33 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+@media not all and (min-width: 768px) {
+  .settingsHeader {
+    flex-wrap: wrap;
+  }
+
+  .personaRow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .personaCardTop {
+    width: 100%;
+  }
+
+  .personaDesc {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .personaActions {
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    padding-left: 42px;
+  }
 }

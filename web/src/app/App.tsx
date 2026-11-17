@@ -19,6 +19,7 @@ import { Onboarding } from '../components/onboarding/Onboarding.js'
 import { MemoryToast } from '../components/memory/MemoryToast.js'
 import { SettingsDialog } from '../components/settings/SettingsDialog.js'
 import { bindBalanceAutoRefresh } from '../services/balance.js'
+import { checkForUpdates } from '../services/update.js'
 import { Toast } from '../components/base/Toast.js'
 import { showToast } from '../components/base/toastState.js'
 import { onUploadNotice } from '../services/attachments.js'
@@ -75,6 +76,7 @@ export const App = () => {
     void initChat()
     // 首次打开先在设置里输入 API Key
     ensureApiKey()
+    void checkForUpdates(false)
   }, [])
 
   return (

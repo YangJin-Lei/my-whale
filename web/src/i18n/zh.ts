@@ -175,6 +175,17 @@ export const zh = {
   settingsLocaleEnUS: 'English',
   settingsVoiceMode: '语音模式',
   settingsVoiceModeDesc: '开启后显示语音输入（麦克风）与回复朗读按钮，默认关闭',
+  settingsVersionLabel: '应用版本',
+  settingsVersionDesc: '当前 v{version}（同签名覆盖安装保留本地数据，卸载会清除）',
+  settingsUpdateAvailableDesc: '发现新版本 {version}，覆盖安装会保留本地聊天记录与设置',
+  settingsUpdateLatestDesc: '当前 v{version} 已是最新版本',
+  settingsUpdateFailedDesc: '检查更新失败，可前往 Releases 页面查看',
+  settingsCheckUpdate: '检查更新',
+  settingsCheckingUpdate: '检查中...',
+  settingsGoUpdate: '前往更新 ↗',
+  siderUpdateAvailable: '新版本 {version} 可更新 ↗',
+  settingsNoticeItem4:
+    '覆盖安装更新不会清除对话与记忆（请保持同签名包覆盖，切勿直接卸载）；建议在「数据管理」和「记忆」中定期导出备份。',
 
   // 引导与余额
   onboardingTitle: '欢迎使用 my-whale',

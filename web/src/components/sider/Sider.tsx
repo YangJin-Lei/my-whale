@@ -4,6 +4,8 @@ import { useTranslate } from '../../i18n/index.js'
 import logoUrl from '../../assets/logo.png'
 import { IconPanelLeftOutline16, IconSettingsOutline16, NewChatIcon } from '../base/icons.js'
 import { setSiderCollapsed } from '../../services/settings.js'
+import { openExternal } from '../../services/links.js'
+import { dismissUpdateBanner, useUpdateStore } from '../../services/update.js'
 import { groupSessions } from '../../services/chat/sessionGroups.js'
 import { newChat, removeSession, useChatStore } from '../../services/chat/store.js'
 import type { SessionSummary } from '../../services/chat/types.js'
@@ -22,6 +24,12 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
   const t = useTranslate()
   const sessions = useChatStore((state) => state.sessions)
   const activeId = useChatStore((state) => state.activeId)
+  const updateStatus = useUpdateStore((state) => state.status)
+  const latestVersion = useUpdateStore((state) => state.latestVersion)
+  const releaseUrl = useUpdateStore((state) => state.releaseUrl)
+  const dismissedVersion = useUpdateStore((state) => state.dismissedVersion)
+  const showUpdatePill =
+    updateStatus === 'available' && Boolean(latestVersion) && dismissedVersion !== latestVersion
   const [now, setNow] = useState(Date.now)
   const groups = useMemo(() => groupSessions(sessions, now, t), [sessions, now, t])
   const [deleting, setDeleting] = useState<SessionSummary | null>(null)
@@ -97,6 +105,25 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
         </div>
       </div>
       <div className={styles.bottom}>
+        {showUpdatePill && latestVersion ? (
+          <div className={styles.updateBanner}>
+            <button
+              type="button"
+              className={styles.updateLink}
+              onClick={() => openExternal(releaseUrl)}
+            >
+              {t('siderUpdateAvailable', { version: latestVersion })}
+            </button>
+            <button
+              type="button"
+              className={styles.updateDismiss}
+              aria-label={t('close')}
+              onClick={dismissUpdateBanner}
+            >
+              ×
+            </button>
+          </div>
+        ) : null}
         <BalanceBadge variant="sider" />
         <button type="button" className={styles.settings} onClick={() => openSettings('general')}>
           <span className={styles.settingsIcon}>

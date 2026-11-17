@@ -42,25 +42,27 @@ export const PersonaSettings = () => {
           const isDefault = persona.id === defaultPersonaId
           return (
             <div key={persona.id} className={styles.personaRow}>
-              <PersonaAvatar
-                avatar={persona.avatar}
-                name={persona.name}
-                isDefault={persona.id === DEFAULT_PERSONA_ID}
-                size="m"
-              />
-              <div className={styles.personaInfo}>
-                <div className={styles.personaNameLine}>
-                  <span className={styles.personaNameText}>{persona.name}</span>
-                  {persona.builtin ? (
-                    <span className={styles.tag}>{t('personaBuiltin')}</span>
-                  ) : null}
-                  {isDefault ? (
-                    <span className={clsx(styles.tag, styles.tagActive)}>
-                      {t('personaDefault')}
-                    </span>
-                  ) : null}
+              <div className={styles.personaCardTop}>
+                <PersonaAvatar
+                  avatar={persona.avatar}
+                  name={persona.name}
+                  isDefault={persona.id === DEFAULT_PERSONA_ID}
+                  size="m"
+                />
+                <div className={styles.personaInfo}>
+                  <div className={styles.personaNameLine}>
+                    <span className={styles.personaNameText}>{persona.name}</span>
+                    {persona.builtin ? (
+                      <span className={styles.tag}>{t('personaBuiltin')}</span>
+                    ) : null}
+                    {isDefault ? (
+                      <span className={clsx(styles.tag, styles.tagActive)}>
+                        {t('personaDefault')}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className={styles.personaDesc}>{persona.description}</div>
                 </div>
-                <div className={styles.personaDesc}>{persona.description}</div>
               </div>
               <div className={styles.personaActions}>
                 <button

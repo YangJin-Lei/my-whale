@@ -22,6 +22,8 @@ import { exportBlobFile } from '../../services/fileExport.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { useChatStore } from '../../services/chat/store.js'
 import { regionCodes, getRegionName, provinces } from '../../services/location.js'
+import { openExternal } from '../../services/links.js'
+import { checkForUpdates, CURRENT_VERSION, useUpdateStore } from '../../services/update.js'
 import {
   isChineseBrowser,
   setLocale,
@@ -118,6 +120,7 @@ const SettingsContent = () => {
               <LocaleSetting />
               <VoiceModeSetting />
               <LocationSetting />
+              <UpdateSetting />
               <AppNotice />
             </>
           ) : section === 'persona' ? (
@@ -314,6 +317,52 @@ const LocaleSetting = () => {
   )
 }
 
+const UpdateSetting = () => {
+  const t = useTranslate()
+  const status = useUpdateStore((state) => state.status)
+  const latestVersion = useUpdateStore((state) => state.latestVersion)
+  const releaseUrl = useUpdateStore((state) => state.releaseUrl)
+
+  const description =
+    status === 'available' && latestVersion
+      ? t('settingsUpdateAvailableDesc', { version: latestVersion })
+      : status === 'latest'
+        ? t('settingsUpdateLatestDesc', { version: CURRENT_VERSION })
+        : status === 'error'
+          ? t('settingsUpdateFailedDesc')
+          : t('settingsVersionDesc', { version: CURRENT_VERSION })
+
+  return (
+    <SettingCell
+      label={`${t('settingsVersionLabel')} v${CURRENT_VERSION}`}
+      description={description}
+      status={null}
+      action={
+        status === 'available' ? (
+          <Button
+            variant="primary"
+            size="m"
+            className={styles.cellButton}
+            onClick={() => openExternal(releaseUrl)}
+          >
+            {t('settingsGoUpdate')}
+          </Button>
+        ) : (
+          <Button
+            variant="outlined"
+            size="m"
+            className={styles.cellButton}
+            disabled={status === 'checking'}
+            onClick={() => void checkForUpdates(true)}
+          >
+            {status === 'checking' ? t('settingsCheckingUpdate') : t('settingsCheckUpdate')}
+          </Button>
+        )
+      }
+    />
+  )
+}
+
 const AppNotice = () => {
   const t = useTranslate()
   return (
@@ -323,6 +372,7 @@ const AppNotice = () => {
         <li>{t('settingsNoticeItem1')}</li>
         <li>{t('settingsNoticeItem2')}</li>
         <li>{t('settingsNoticeItem3')}</li>
+        <li>{t('settingsNoticeItem4')}</li>
       </ul>
     </div>
   )

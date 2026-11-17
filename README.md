@@ -149,6 +149,18 @@ Windows 安装包输出在 `desktop/src-tauri/target/release/bundle/`（包含 `
 ### 4. GitHub Pages 与多端自动发版
 - **GitHub Pages（Web / iOS PWA）**：在仓库 **Settings → Pages → Build and deployment → Source** 选择 **GitHub Actions**，推送 `main` 后会自动部署官网引导页（`/`）与 PWA 应用（`/app/`）。
 - **GitHub Releases 自动打包**：推送 `v*` 标签（如 `git tag v0.1.0 && git push origin v0.1.0`）即可自动构建 Android APK 与 Windows / macOS 桌面端安装包并发布到 Releases。
+- **应用内更新推送**：客户端启动及 `设置 → 通用设置 → 应用版本` 会检测 GitHub Releases 最新版本，发现新版时在侧边栏与设置页提示前往更新。
+
+### 5. 更新与数据保留（防止覆盖/重装丢数据）
+- **保留原数据规则**：Web / iOS PWA、Tauri 桌面端及 Android 同签名 APK 在**直接覆盖安装更新**时，本地 IndexedDB（对话、人设、记忆）与 `localStorage`（API Key、设置）会完整保留；**切勿先卸载再重装**，卸载会清空系统沙盒内的全部本地数据。
+- **定期备份建议**：每次换设备或重装前，务必先通过 `设置 → 数据管理 → 导出所有历史对话`（ZIP）和 `设置 → 记忆 → 导出人设与记忆`（JSON）备份数据。
+- **Android 固定签名（重要）**：若希望用户后续从 GitHub Releases 下载新版 APK 时直接覆盖安装而不触发签名冲突，请在仓库 **Settings → Secrets and variables → Actions** 配置一次固定签名证书：
+  1. 本地生成签名证书：`keytool -genkey -v -keystore my-whale-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias my-whale`
+  2. 将证书转 Base64（例如 Linux/macOS `base64 -w 0 my-whale-release.jks`，Windows PowerShell `[Convert]::ToBase64String([IO.File]::ReadAllBytes("my-whale-release.jks"))`）并写入 Secrets：
+     - `ANDROID_KEYSTORE_BASE64`
+     - `ANDROID_KEYSTORE_PASSWORD`
+     - `ANDROID_KEY_ALIAS`
+     - `ANDROID_KEY_PASSWORD`
 
 ---
 

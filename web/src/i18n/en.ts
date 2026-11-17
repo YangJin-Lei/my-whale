@@ -184,6 +184,19 @@ export const en = {
   settingsLocaleEnUS: 'English',
   settingsVoiceMode: 'Voice mode',
   settingsVoiceModeDesc: 'Show microphone input and read-aloud controls (off by default)',
+  settingsVersionLabel: 'App version',
+  settingsVersionDesc:
+    'Current v{version} (in-place updates keep local data; uninstalling clears it)',
+  settingsUpdateAvailableDesc:
+    'New release {version} is available. In-place update keeps chats and settings.',
+  settingsUpdateLatestDesc: 'Current v{version} is up to date',
+  settingsUpdateFailedDesc: 'Update check failed. You can open GitHub Releases manually.',
+  settingsCheckUpdate: 'Check updates',
+  settingsCheckingUpdate: 'Checking...',
+  settingsGoUpdate: 'Update ↗',
+  siderUpdateAvailable: 'Update {version} available ↗',
+  settingsNoticeItem4:
+    'Updating in place keeps local chats, personas, and memories (never uninstall first); export ZIP/JSON backups regularly.',
 
   // Onboarding & Balance
   onboardingTitle: 'Welcome to my-whale',

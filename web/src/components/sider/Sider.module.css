@@ -139,6 +139,46 @@
   padding-bottom: 8px;
 }
 
+.updateBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 4px;
+  padding: 5px 8px 5px 10px;
+  border-radius: 10px;
+  background-color: var(--dsw-specific-bubble);
+  border: 1px solid var(--dsw-alias-button-ghost-active-border);
+}
+
+.updateLink {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dsw-alias-brand-text);
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.updateDismiss {
+  flex-shrink: 0;
+  padding: 0 3px;
+  border: none;
+  background: none;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
 .settings {
   display: flex;
   align-items: center;
