@@ -1,7 +1,7 @@
 <div align="center">
   <img src="./web/src/assets/logo.png" width="120" alt="my-whale logo" />
   <h1>my-whale</h1>
-  <p>基于 <code>deepseek-ai/chat-demo</code> 二次开发的本地优先 DeepSeek 第三方客户端（Web + Android）</p>
+  <p>基于 <code>deepseek-ai/chat-demo</code> 二次开发的本地优先 DeepSeek 第三方全端客户端（Web / iOS PWA + Android + Tauri 桌面端）</p>
   <p>支持零后端本地直连 DeepSeek API、引导配 Key 与余额监控、自定义人设、全局与单对话局部记忆、历史对话 ZIP v3 无损迁移。</p>
 </div>
 
@@ -21,10 +21,10 @@
 
 ![记忆设置界面](./resources/png/2.png)
 
-### 3. 导入数据后的对话与人设入口
-支持自定义人设（含头像图片上传、人设提示词与默认开关）、无痕会话，以及单个对话内的「局部记忆 / 仅使用局部记忆」隔离控制。
+### 3. 导入历史后的对话上下文与「记住这条」
+导入 DeepSeek 网页版历史对话压缩包后即可无缝延续原有上下文；每条消息下方均提供「记住这条」，支持一键存入全局记忆或当前对话的局部记忆。
 
-![对话与人设界面](./resources/png/3.png)
+![导入历史后的对话界面](./resources/png/3.png)
 
 ---
 
@@ -79,9 +79,7 @@ my-whale/
 ├── site/                             # GitHub Pages 官网引导页（首页 + /app/）
 ├── .github/workflows/                # GitHub Pages 部署与 v* Tag 多端发版工作流
 ├── docs/                             # 架构与迁移设计文档
-├── resources/png/                    # README 与官网演示截图
-├── 二次开发文档-引导与余额.md         # 引导与余额模块设计规范
-└── 二次开发文档-人设与记忆.md         # 人设与记忆模块设计规范
+└── resources/png/                    # README 与官网演示截图
 ```
 
 ---
@@ -115,15 +113,18 @@ pnpm build     # 生产构建（输出到 web/dist）
 
 ```bash
 cd web
-pnpm build
-npx cap sync android
+pnpm android:sync
 ```
 
-然后使用 Gradle 构建 Debug APK（Windows PowerShell 示例，建议使用 Android Studio 自带 JBR）：
+然后使用 Gradle 构建 Debug APK（需确保环境变量 `JAVA_HOME` 指向本机 JDK 21，且 `ANDROID_HOME` 指向 Android SDK）：
 
-```powershell
+```bash
+# macOS / Linux
+cd ../android
+./gradlew assembleDebug --no-daemon
+
+# Windows (PowerShell)
 cd ..\android
-$env:JAVA_HOME = "C:\Users\App\Google_IDE\Android_Studio\jbr"   # 按本机 JDK 21 / JBR 路径调整
 .\gradlew.bat assembleDebug --no-daemon
 ```
 
