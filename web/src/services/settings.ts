@@ -23,6 +23,8 @@ type Settings = {
   memoryAuto: boolean
   memoryNoticeShown: boolean
   defaultPersonaId: string
+  petEnabled: boolean
+  activePetId: string
 }
 
 const KEYS = {
@@ -40,6 +42,8 @@ const KEYS = {
   memoryAuto: 'chat-demo:memory-auto',
   memoryNoticeShown: 'chat-demo:memory-notice-shown',
   defaultPersonaId: 'chat-demo:default-persona-id',
+  petEnabled: 'chat-demo:pet-enabled',
+  activePetId: 'chat-demo:active-pet-id',
 } as const
 
 const read = (key: string) => {
@@ -114,6 +118,8 @@ export const useSettings = create<Settings>(() => ({
   memoryAuto: read(KEYS.memoryAuto) !== 'false',
   memoryNoticeShown: read(KEYS.memoryNoticeShown) === 'true',
   defaultPersonaId: read(KEYS.defaultPersonaId) || 'builtin-default',
+  petEnabled: read(KEYS.petEnabled) !== 'false',
+  activePetId: read(KEYS.activePetId) || 'nailong',
 }))
 
 export const setLocale = (locale: Locale) => {
@@ -185,4 +191,14 @@ export const setMemoryNoticeShown = (memoryNoticeShown: boolean) => {
 export const setDefaultPersonaId = (defaultPersonaId: string) => {
   write(KEYS.defaultPersonaId, defaultPersonaId || 'builtin-default')
   useSettings.setState({ defaultPersonaId: defaultPersonaId || 'builtin-default' })
+}
+
+export const setPetEnabled = (petEnabled: boolean) => {
+  write(KEYS.petEnabled, String(petEnabled))
+  useSettings.setState({ petEnabled })
+}
+
+export const setActivePetId = (activePetId: string) => {
+  write(KEYS.activePetId, activePetId || 'nailong')
+  useSettings.setState({ activePetId: activePetId || 'nailong' })
 }

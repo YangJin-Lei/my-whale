@@ -3,6 +3,7 @@ import { useIsMobile } from '../../app/viewport.js'
 import { useTranslate } from '../../i18n/index.js'
 import { useChatStore } from '../../services/chat/store.js'
 import { findPersona, usePersonaStore } from '../../services/persona/store.js'
+import { MY_WHALE_ASSISTANT_ID } from '../../services/persona/builtin.js'
 import { useSettings } from '../../services/settings.js'
 import { ChatInput } from '../chatInput/ChatInput.js'
 import { PersonaAvatar } from '../persona/PersonaAvatar.js'
@@ -17,7 +18,16 @@ export const Welcome = () => {
   const locale = useSettings((state) => state.locale)
   const customPersonas = usePersonaStore((state) => state.personas)
   const draftPersonaId = useChatStore((state) => state.draftPersonaId)
-  const persona = findPersona(draftPersonaId, customPersonas, locale)
+  const draftAssistantOverride = useChatStore((state) => state.draftAssistantOverride)
+  const basePersona = findPersona(draftPersonaId, customPersonas, locale)
+  const persona =
+    draftPersonaId === MY_WHALE_ASSISTANT_ID && draftAssistantOverride
+      ? {
+          ...basePersona,
+          name: draftAssistantOverride.name.trim() || basePersona.name,
+          avatar: draftAssistantOverride.avatar.trim(),
+        }
+      : basePersona
 
   return (
     <div className={styles.container}>
@@ -26,7 +36,12 @@ export const Welcome = () => {
         {persona.greeting ? (
           <div className={styles.personaGreeting}>
             <div className={styles.personaGreetingHeader}>
-              <PersonaAvatar avatar={persona.avatar} name={persona.name} size="m" />
+              <PersonaAvatar
+                avatar={persona.avatar}
+                name={persona.name}
+                isDefault={persona.id === MY_WHALE_ASSISTANT_ID && !persona.avatar}
+                size="m"
+              />
               <span className={styles.personaGreetingName}>{persona.name}</span>
             </div>
             <div className={styles.personaGreetingBubble}>{persona.greeting}</div>

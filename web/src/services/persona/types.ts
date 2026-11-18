@@ -37,6 +37,8 @@ export type SessionPersona = {
   memoryScope?: MemoryScope
   /** 仅属于当前会话的局部记忆 */
   localMemories?: LocalMemory[]
+  /** 是否在当前会话中就地微调过助手人设 */
+  tunedMidSession?: boolean
 }
 
 export const PERSONA_NAME_MAX = 20

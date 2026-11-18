@@ -9,6 +9,7 @@ import {
   IconLightOutline16,
   IconMemoryOutline16,
   IconPersonaOutline16,
+  IconPetOutline16,
   IconSettingsOutline16,
   IconUploadOutline14,
 } from '../base/icons.js'
@@ -47,6 +48,7 @@ import { Select } from '../base/Select.js'
 import { showToast } from '../base/toastState.js'
 import { MemorySettings } from '../memory/MemorySettings.js'
 import { PersonaSettings } from '../persona/PersonaSettings.js'
+import { PetSettings } from './PetSettings.js'
 import { ApiKeyConfirm, ApiKeyField, useApiKeyEditor } from './ApiKeyField.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
 import styles from './Settings.module.css'
@@ -65,6 +67,11 @@ const sections: { value: SettingsSection; label: TranslationKey; icon: ReactNode
     value: 'general',
     label: 'settingDialogAsideGeneralOptionLabel',
     icon: <IconSettingsOutline16 />,
+  },
+  {
+    value: 'pet',
+    label: 'settingDialogAsidePetOptionLabel',
+    icon: <IconPetOutline16 />,
   },
   {
     value: 'persona',
@@ -128,6 +135,8 @@ const SettingsContent = () => {
               <UpdateSetting />
               <AppNotice />
             </>
+          ) : section === 'pet' ? (
+            <PetSettings />
           ) : section === 'persona' ? (
             <PersonaSettings />
           ) : section === 'memory' ? (

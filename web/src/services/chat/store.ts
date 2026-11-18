@@ -20,7 +20,7 @@ import {
 import { selectMemories } from '../memory/select.js'
 import { initMemories, markMemoriesUsed, useMemoryStore } from '../memory/store.js'
 import type { Memory } from '../memory/types.js'
-import { DEFAULT_PERSONA_ID } from '../persona/builtin.js'
+import { DEFAULT_PERSONA_ID, MY_WHALE_ASSISTANT_ID } from '../persona/builtin.js'
 import { buildSystemPrompt } from '../persona/prompt.js'
 import { findPersona, initPersonas, toPersonaSnapshot, usePersonaStore } from '../persona/store.js'
 import {
@@ -96,8 +96,9 @@ type ChatState = {
   activeId: string | null
   /** 正在生成回复的会话 */
   streaming: Record<string, AbortController>
-  /** 新建会话待用的人设 ID 与无痕开关 */
+  /** 新建会话待用的人设 ID、局部微调与无痕开关 */
   draftPersonaId: string
+  draftAssistantOverride: { name: string; avatar: string; instructions: string } | null
   draftIncognito: boolean
 }
 
@@ -112,6 +113,7 @@ export const useChatStore = create<ChatState>(() => ({
   activeId: null,
   streaming: {},
   draftPersonaId: useSettings.getState().defaultPersonaId || DEFAULT_PERSONA_ID,
+  draftAssistantOverride: null,
   draftIncognito: false,
 }))
 
@@ -514,8 +516,20 @@ const applyPersonaDefaults = (persona: Persona) => {
 }
 
 export const setDraftPersona = (persona: Persona) => {
-  set({ draftPersonaId: persona.id })
+  set({
+    draftPersonaId: persona.id,
+    ...(persona.id !== MY_WHALE_ASSISTANT_ID ? { draftAssistantOverride: null } : {}),
+  })
   applyPersonaDefaults(persona)
+}
+
+export const setDraftAssistantOverride = (
+  override: { name: string; avatar: string; instructions: string } | null
+) => {
+  set({
+    draftPersonaId: MY_WHALE_ASSISTANT_ID,
+    draftAssistantOverride: override,
+  })
 }
 
 export const setDraftIncognito = (draftIncognito: boolean) => {
@@ -709,12 +723,20 @@ export const sendMessage = (targetSessionId: string | null) => {
     return false
   }
   if (sessionId === null) {
-    const { draftPersonaId, draftIncognito } = get()
+    const { draftPersonaId, draftIncognito, draftAssistantOverride } = get()
     const { locale } = useSettings.getState()
     const persona = findPersona(draftPersonaId, usePersonaStore.getState().personas, locale)
+    const snapshot =
+      draftPersonaId === MY_WHALE_ASSISTANT_ID && draftAssistantOverride
+        ? {
+            name: draftAssistantOverride.name.trim() || persona.name,
+            avatar: draftAssistantOverride.avatar.trim(),
+            instructions: draftAssistantOverride.instructions.trim() || persona.instructions,
+          }
+        : toPersonaSnapshot(persona)
     const sessionPersona: SessionPersona = {
       personaId: persona.id,
-      snapshot: toPersonaSnapshot(persona),
+      snapshot,
       ...(draftIncognito ? { incognito: true } : {}),
     }
     const session: Session = {
@@ -1158,6 +1180,9 @@ const resolveSessionSystemPrompt = (sessionId: string, query: string): string =>
     profile,
     memories: chosenMemories,
     localMemories: session?.persona?.localMemories,
+    tunedMidSession: Boolean(
+      session?.persona?.tunedMidSession || (session?.personaNotices?.length ?? 0) > 0
+    ),
   })
 }
 
@@ -1222,6 +1247,46 @@ export const syncSessionPersonaSnapshot = (sessionId: string, persona: Persona) 
       personaId: persona.id,
       snapshot: toPersonaSnapshot(persona),
     },
+    updatedAt: Date.now(),
+  }))
+  persist(sessionId)
+}
+
+/**
+ * 会话内就地微调当前助手（修改头像、名称、人设/回复语义），在同一对话继续无缝交流。
+ */
+export const tuneSessionAssistant = (
+  sessionId: string,
+  patch: { name: string; avatar: string; instructions: string }
+) => {
+  const session = getSession(sessionId)
+  if (!session || getStreamController(sessionId)) {
+    return
+  }
+  const cleanName = patch.name.trim() || session.persona?.snapshot?.name || 'my-whale助手'
+  const cleanAvatar = patch.avatar.trim()
+  const cleanInstructions = patch.instructions.trim()
+  const visible = getVisibleMessages(session)
+  const afterMessageId = visible.at(-1)?.id ?? null
+
+  updateSession(sessionId, (current) => ({
+    ...current,
+    persona: {
+      personaId: current.persona?.personaId ?? 'builtin-mywhale-assistant',
+      ...current.persona,
+      snapshot: {
+        name: cleanName,
+        avatar: cleanAvatar,
+        instructions: cleanInstructions,
+      },
+      tunedMidSession: true,
+    },
+    messages: current.messages.map((msg) =>
+      msg.role === 'assistant'
+        ? { ...msg, personaName: cleanName, personaAvatar: cleanAvatar }
+        : msg
+    ),
+    personaNotices: [...(current.personaNotices ?? []), { afterMessageId, personaName: cleanName }],
     updatedAt: Date.now(),
   }))
   persist(sessionId)

@@ -18,6 +18,8 @@ export type GameOpponent = {
   name: string
   /** 空或未设置时回退到应用 Logo */
   avatar?: string
+  /** 若关联了内置桌宠，直接渲染动态精灵图 */
+  petSpriteUrl?: string
   /** true 时强制使用应用 Logo 作为头像 */
   useAppLogo?: boolean
   /** 简短人设标签 */

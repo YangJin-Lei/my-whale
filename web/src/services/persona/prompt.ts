@@ -25,6 +25,7 @@ export type PromptContext = {
   profile?: string
   memories: Pick<Memory, 'content'>[]
   localMemories?: Pick<LocalMemory, 'content'>[]
+  tunedMidSession?: boolean
 }
 
 const sanitizeMemoryLine = (content: string): string =>
@@ -58,6 +59,12 @@ export const buildSystemPrompt = (ctx: PromptContext): string => {
   }
 
   const parts: string[] = [BASE_RULES, instructions || DEFAULT_IDENTITY]
+
+  if (ctx.tunedMidSession) {
+    parts.push(
+      '注意：用户在本会话中途微调了你的角色设定或说话风格，请从本轮起严格按当前最新人设与回复语义回答，不要延续前文旧人设的口吻惯性。'
+    )
+  }
 
   if (sessionNote) {
     parts.push(`## 本次会话的额外要求\n${sessionNote}`)

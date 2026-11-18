@@ -652,3 +652,17 @@ export const IconGamepadOutline16 = () => (
     <circle cx="11.9" cy="8.4" r="0.8" fill="currentColor" />
   </svg>
 )
+
+export const IconPetOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="4.3" cy="5.5" r="1.3" stroke="currentColor" strokeWidth="1.3" />
+    <circle cx="8" cy="4.1" r="1.3" stroke="currentColor" strokeWidth="1.3" />
+    <circle cx="11.7" cy="5.5" r="1.3" stroke="currentColor" strokeWidth="1.3" />
+    <path
+      d="M4.2 10.6C4.2 8.7 5.9 7.3 8 7.3C10.1 7.3 11.8 8.7 11.8 10.6C11.8 12.1 10.6 13.1 9.2 13.1C8.6 13.1 8.4 12.9 8 12.9C7.6 12.9 7.4 13.1 6.8 13.1C5.4 13.1 4.2 12.1 4.2 10.6Z"
+      stroke="currentColor"
+      strokeWidth="1.35"
+      strokeLinejoin="round"
+    />
+  </svg>
+)

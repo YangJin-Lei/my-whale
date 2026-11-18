@@ -10,12 +10,14 @@ import {
   IconThinkOutline14,
 } from '../components/base/icons.js'
 import { useTranslate } from '../i18n/index.js'
+import { PetSprite, type PetMood } from '../pet/PetSprite.js'
 import { useSettings } from '../services/settings.js'
 import styles from './GameDrawer.module.css'
 import {
   ACTIVE_PERSONA_OPPONENT_ID,
   CUSTOM_OPPONENT_ID,
   DEFAULT_OPPONENT_ID,
+  PET_OPPONENT_ID,
   resolveCurrentOpponent,
   saveCustomGameOpponent,
   setGameOpponentChoice,
@@ -39,12 +41,13 @@ import { useGameVoice } from './voiceCue.js'
 
 /**
  * 右侧可收合 AI 对弈抽屉：
- * 1) 未选择具体游戏时展示对手角色配置（默认应用 Logo，可切换当前人设或自定义）与小游戏列表；
- * 2) 进入棋局后展示 2.5D 棋盘、对坐 AI 头像气泡与可选 TTS 语音点评。
+ * 1) 未选择具体游戏时展示对手（默认使用当前桌宠，可切换 Logo / 人设 / 自定义）与游戏列表；
+ * 2) 进入棋局后展示 2.5D 棋盘、对坐动态桌宠/头像气泡与折叠思考/语音播报。
  */
 export const GameDrawer = () => {
   const t = useTranslate()
   const locale = useSettings((state) => state.locale)
+  useSettings((state) => state.activePetId)
   const drawerOpen = useGameStore((state) => state.drawerOpen)
   const activeGameId = useGameStore((state) => state.activeGameId)
   const gameState = useGameStore((state) => state.gameState)
@@ -95,7 +98,29 @@ export const GameDrawer = () => {
             ? t('gameStatusYourTurn')
             : t('gameStatusAiTurn')
 
+  const resolvePetMood = (): PetMood => {
+    if (!plugin) {
+      return 'wave'
+    }
+    if (aiThinking) {
+      return 'think'
+    }
+    if (voiceStatus === 'playing') {
+      return 'speak'
+    }
+    if (status === 'ai_win') {
+      return 'laugh'
+    }
+    if (status === 'player_win') {
+      return 'sad'
+    }
+    return 'wait'
+  }
+
   const renderOpponentAvatar = () => {
+    if (opponent.petSpriteUrl) {
+      return <PetSprite spriteUrl={opponent.petSpriteUrl} mood={resolvePetMood()} width={38} />
+    }
     const isDataImage = Boolean(opponent.avatar && opponent.avatar.startsWith('data:image/'))
     if (isDataImage) {
       return <img src={opponent.avatar} alt={opponent.name} className={styles.avatarCustomImg} />
@@ -234,9 +259,7 @@ export const GameDrawer = () => {
                 <Button variant="primary" size="s" onClick={restartCurrentGame}>
                   {t('gamePlayAgain')}
                 </Button>
-              ) : (
-                <span>{t('gameLlmRefereeHint')}</span>
-              )}
+              ) : null}
             </div>
           </div>
         </>
@@ -255,6 +278,19 @@ export const GameDrawer = () => {
 
           <div className={styles.pickerSectionTitle}>{t('gameOpponentSection')}</div>
           <div className={styles.opponentChoices}>
+            <button
+              type="button"
+              className={clsx(
+                styles.pillBtn,
+                selectedChoice === PET_OPPONENT_ID && styles.pillBtnActive
+              )}
+              onClick={() => {
+                setGameOpponentChoice(PET_OPPONENT_ID)
+                setEditingCustom(false)
+              }}
+            >
+              {t('gameOpponentPet')}
+            </button>
             <button
               type="button"
               className={clsx(
@@ -364,8 +400,6 @@ export const GameDrawer = () => {
               </button>
             ))}
           </div>
-
-          <div className={styles.futureTip}>{t('gameFutureExtensibleHint')}</div>
         </div>
       )}
     </aside>

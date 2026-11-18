@@ -13,6 +13,7 @@ import { SearchPanel } from '../components/search/SearchPanel.js'
 import { closeSearchPanel } from '../components/search/searchPanelState.js'
 import { GameDrawer } from '../game/GameDrawer.js'
 import { useGameStore } from '../game/store.js'
+import { PetOverlay } from '../pet/PetOverlay.js'
 import { SessionView } from '../components/session/SessionView.js'
 import { MobileHeader } from '../components/session/MobileHeader.js'
 import { Welcome } from '../components/session/Welcome.js'
@@ -149,6 +150,7 @@ export const App = () => {
       </div>
       <Onboarding />
       <SettingsDialog />
+      <PetOverlay />
       <MemoryToast />
       <Toast />
     </>

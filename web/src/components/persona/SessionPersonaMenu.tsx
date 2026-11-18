@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import {
   addSessionLocalMemory,
@@ -11,19 +11,25 @@ import {
   switchSessionPersona,
   syncSessionPersonaSnapshot,
   toggleSessionIncognito,
+  tuneSessionAssistant,
   updateSessionNote,
 } from '../../services/chat/store.js'
 import type { Session } from '../../services/chat/types.js'
 import { MEMORY_CONTENT_MAX } from '../../services/memory/types.js'
-import { DEFAULT_PERSONA_ID } from '../../services/persona/builtin.js'
+import { DEFAULT_PERSONA_ID, MY_WHALE_ASSISTANT_ID } from '../../services/persona/builtin.js'
 import { findPersona, getAllPersonas, usePersonaStore } from '../../services/persona/store.js'
-import { SESSION_NOTE_MAX } from '../../services/persona/types.js'
+import {
+  PERSONA_INSTRUCTIONS_MAX,
+  PERSONA_NAME_MAX,
+  SESSION_NOTE_MAX,
+} from '../../services/persona/types.js'
 import { useSettings } from '../../services/settings.js'
 import { Button } from '../base/Button.js'
 import { IconChevronDownOutline14, IconIncognitoOutline16 } from '../base/icons.js'
 import { Modal } from '../base/Modal.js'
 import { showToast } from '../base/toastState.js'
 import { PersonaAvatar } from './PersonaAvatar.js'
+import { compressAvatarFile } from './PersonaEditor.js'
 import styles from './Persona.module.css'
 
 export const SessionPersonaMenu = ({
@@ -37,6 +43,11 @@ export const SessionPersonaMenu = ({
   const locale = useSettings((state) => state.locale)
   const customPersonas = usePersonaStore((state) => state.personas)
   const [open, setOpen] = useState(false)
+  const [tuning, setTuning] = useState(false)
+  const [tuneName, setTuneName] = useState('')
+  const [tuneAvatar, setTuneAvatar] = useState('')
+  const [tuneInstructions, setTuneInstructions] = useState('')
+  const tuneAvatarInputRef = useRef<HTMLInputElement>(null)
   const [noteDraft, setNoteDraft] = useState('')
   const [localDraft, setLocalDraft] = useState('')
   const [showMemories, setShowMemories] = useState(false)
@@ -47,16 +58,19 @@ export const SessionPersonaMenu = ({
   const resolved = findPersona(currentId, customPersonas, locale)
   const displayName = session.persona?.snapshot?.name ?? resolved.name
   const displayAvatar = session.persona?.snapshot?.avatar ?? resolved.avatar
+  const resolvedId = currentId ?? DEFAULT_PERSONA_ID
   const isDefaultPersona =
-    (currentId ?? DEFAULT_PERSONA_ID) === DEFAULT_PERSONA_ID && !session.persona?.snapshot
+    (resolvedId === DEFAULT_PERSONA_ID || resolvedId === MY_WHALE_ASSISTANT_ID) &&
+    (!session.persona?.snapshot?.avatar ||
+      !session.persona.snapshot.avatar.startsWith('data:image/'))
   const incognito = Boolean(session.persona?.incognito)
   const localOnly = session.persona?.memoryScope === 'local_only'
   const localMemories = session.persona?.localMemories ?? []
   const ephemeral = isEphemeralSession(session.id)
 
-  // 会话内切换仅展示默认助手 + 用户自定义人设（及当前会话自身引用的内置人设）
+  // 会话内切换展示：my-whale助手 + 用户自定义人设（仅当当前会话原为默认助手或内置人设时保留自身选项）
   const switchOptions = allPersonas.filter(
-    (p) => p.id === DEFAULT_PERSONA_ID || !p.builtin || p.id === currentId
+    (p) => p.id === MY_WHALE_ASSISTANT_ID || !p.builtin || p.id === currentId
   )
 
   const hasUpdate =
@@ -69,10 +83,36 @@ export const SessionPersonaMenu = ({
   const usedMemories = open || showMemories ? getSessionUsedMemories(session.id) : []
 
   const openMenu = () => {
+    setTuning(false)
+    setTuneName(displayName)
+    setTuneAvatar(displayAvatar && displayAvatar.startsWith('data:image/') ? displayAvatar : '')
+    setTuneInstructions(session.persona?.snapshot?.instructions ?? resolved.instructions ?? '')
     setNoteDraft(session.persona?.note ?? '')
     setLocalDraft('')
     setShowMemories(false)
     setOpen(true)
+  }
+
+  const handleTuneAvatarChange = async (file: File | undefined) => {
+    if (!file) {
+      return
+    }
+    const compressed = await compressAvatarFile(file)
+    if (!compressed) {
+      showToast({ key: 'personaAvatarTooLarge', type: 'error' })
+      return
+    }
+    setTuneAvatar(compressed)
+  }
+
+  const saveTunedAssistant = () => {
+    tuneSessionAssistant(session.id, {
+      name: tuneName,
+      avatar: tuneAvatar,
+      instructions: tuneInstructions,
+    })
+    setTuning(false)
+    setOpen(false)
   }
 
   const submitLocalMemory = () => {
@@ -141,6 +181,82 @@ export const SessionPersonaMenu = ({
           onClose={() => setOpen(false)}
         >
           <div className={styles.modalSection}>
+            <div className={styles.tuneCurrentRow}>
+              <div className={styles.tuneIdentity}>
+                <PersonaAvatar
+                  avatar={displayAvatar}
+                  name={displayName}
+                  isDefault={isDefaultPersona}
+                  size="m"
+                />
+                <span className={styles.switchName}>{displayName}</span>
+              </div>
+              <Button
+                variant={tuning ? 'primary' : 'outlined'}
+                size="s"
+                disabled={streaming}
+                onClick={() => setTuning((v) => !v)}
+              >
+                {t('personaTune')}
+              </Button>
+            </div>
+            {tuning ? (
+              <div className={styles.tuneBox}>
+                <div className={styles.avatarRow}>
+                  <PersonaAvatar
+                    avatar={tuneAvatar}
+                    name={tuneName || displayName}
+                    isDefault={!tuneAvatar}
+                    size="l"
+                  />
+                  <input
+                    ref={tuneAvatarInputRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(event) => {
+                      void handleTuneAvatarChange(event.target.files?.[0])
+                      event.target.value = ''
+                    }}
+                  />
+                  <Button
+                    variant="outlined"
+                    size="s"
+                    onClick={() => tuneAvatarInputRef.current?.click()}
+                  >
+                    {t('personaUploadAvatar')}
+                  </Button>
+                  {tuneAvatar ? (
+                    <Button variant="outlined" size="s" onClick={() => setTuneAvatar('')}>
+                      {t('personaClearAvatar')}
+                    </Button>
+                  ) : null}
+                </div>
+                <label className={styles.fieldLabel}>{t('personaName')}</label>
+                <input
+                  className={styles.input}
+                  maxLength={PERSONA_NAME_MAX}
+                  value={tuneName}
+                  onChange={(event) => setTuneName(event.target.value)}
+                />
+                <label className={styles.fieldLabel}>{t('personaInstructions')}</label>
+                <textarea
+                  className={styles.textarea}
+                  rows={4}
+                  maxLength={PERSONA_INSTRUCTIONS_MAX}
+                  value={tuneInstructions}
+                  onChange={(event) => setTuneInstructions(event.target.value)}
+                />
+                <div className={styles.noteSaveRow}>
+                  <Button variant="primary" size="s" onClick={saveTunedAssistant}>
+                    {t('personaSave')}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className={styles.modalSection}>
             <div className={styles.fieldLabel}>{t('personaSwitchAction')}</div>
             <div className={styles.switchGrid}>
               {switchOptions.map((persona) => {
@@ -161,7 +277,9 @@ export const SessionPersonaMenu = ({
                     <PersonaAvatar
                       avatar={persona.avatar}
                       name={persona.name}
-                      isDefault={persona.id === DEFAULT_PERSONA_ID}
+                      isDefault={
+                        persona.id === DEFAULT_PERSONA_ID || persona.id === MY_WHALE_ASSISTANT_ID
+                      }
                       size="s"
                     />
                     <span className={styles.switchName}>{persona.name}</span>

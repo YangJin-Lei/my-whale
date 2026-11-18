@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { findPetById } from '../pet/catalog.js'
 import { useChatStore } from '../services/chat/store.js'
 import { findPersona, usePersonaStore } from '../services/persona/store.js'
 import { type Locale, useSettings } from '../services/settings.js'
@@ -6,11 +7,13 @@ import type { GameOpponent } from './types.js'
 
 const CUSTOM_OPPONENT_STORAGE_KEY = 'mywhale_game_custom_opponent_v1'
 
+export const PET_OPPONENT_ID = 'active-pet-opponent'
 export const DEFAULT_OPPONENT_ID = 'whale-logo-default'
 export const ACTIVE_PERSONA_OPPONENT_ID = 'active-chat-persona'
 export const CUSTOM_OPPONENT_ID = 'user-custom-opponent'
 
 export type OpponentPresetChoice =
+  | typeof PET_OPPONENT_ID
   | typeof DEFAULT_OPPONENT_ID
   | typeof ACTIVE_PERSONA_OPPONENT_ID
   | typeof CUSTOM_OPPONENT_ID
@@ -47,16 +50,17 @@ const loadStoredConfig = (): StoredOpponentConfig => {
     const raw = window.localStorage.getItem(CUSTOM_OPPONENT_STORAGE_KEY)
     if (!raw) {
       return {
-        selectedChoice: DEFAULT_OPPONENT_ID,
+        selectedChoice: PET_OPPONENT_ID,
         custom: DEFAULT_CUSTOM_ZH,
       }
     }
     const parsed = JSON.parse(raw) as Partial<StoredOpponentConfig>
     const choice: OpponentPresetChoice =
+      parsed.selectedChoice === DEFAULT_OPPONENT_ID ||
       parsed.selectedChoice === ACTIVE_PERSONA_OPPONENT_ID ||
       parsed.selectedChoice === CUSTOM_OPPONENT_ID
         ? parsed.selectedChoice
-        : DEFAULT_OPPONENT_ID
+        : PET_OPPONENT_ID
     const custom: CustomOpponentDraft = {
       name: typeof parsed.custom?.name === 'string' ? parsed.custom.name : DEFAULT_CUSTOM_ZH.name,
       tagline:
@@ -75,7 +79,7 @@ const loadStoredConfig = (): StoredOpponentConfig => {
     return { selectedChoice: choice, custom }
   } catch {
     return {
-      selectedChoice: DEFAULT_OPPONENT_ID,
+      selectedChoice: PET_OPPONENT_ID,
       custom: DEFAULT_CUSTOM_ZH,
     }
   }
@@ -127,6 +131,23 @@ export const saveCustomGameOpponent = (draft: CustomOpponentDraft, locale: Local
  */
 export const resolveCurrentOpponent = (locale: Locale): GameOpponent => {
   const { selectedChoice, custom } = useGameOpponentStore.getState()
+  const activePet = findPetById(useSettings.getState().activePetId)
+
+  if (selectedChoice === PET_OPPONENT_ID) {
+    const petName = activePet.name[locale]
+    return {
+      id: `pet:${activePet.id}`,
+      name: petName,
+      petSpriteUrl: activePet.spriteUrl,
+      tagline: locale === 'zh-CN' ? '桌宠' : 'Pet',
+      systemPrompt: activePet.promptHint[locale],
+      greeting:
+        locale === 'zh-CN'
+          ? `我是${petName}，来跟我下一局吧！`
+          : `I'm ${petName}. Let's play a round!`,
+      customizable: true,
+    }
+  }
 
   if (selectedChoice === ACTIVE_PERSONA_OPPONENT_ID) {
     const chatState = useChatStore.getState()

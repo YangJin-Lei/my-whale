@@ -198,6 +198,36 @@
   cursor: pointer;
 }
 
+.tuneCurrentRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tuneIdentity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.tuneBox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer1, rgba(128, 134, 146, 0.05));
+  border: 1px solid var(--dsw-alias-border-l1);
+}
+
+.avatarRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 /* Settings & Modals */
 .settingsWrap {
   display: flex;

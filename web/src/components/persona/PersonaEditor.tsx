@@ -17,7 +17,7 @@ import { closeSettings } from '../settings/settingsDialogState.js'
 import { PersonaAvatar } from './PersonaAvatar.js'
 import styles from './Persona.module.css'
 
-const compressAvatarFile = (file: File): Promise<string | null> =>
+export const compressAvatarFile = (file: File): Promise<string | null> =>
   new Promise((resolve) => {
     const img = new Image()
     const objectUrl = URL.createObjectURL(file)
