@@ -176,16 +176,157 @@ const parseRawCoord = (raw: unknown): GomokuCoord | null => {
   return null
 }
 
+const collectStones = (board: GomokuCell[][], stone: 1 | 2): string[] => {
+  const list: string[] = []
+  for (let r = 0; r < GOMOKU_SIZE; r++) {
+    for (let c = 0; c < GOMOKU_SIZE; c++) {
+      if (board[r][c] === stone) {
+        list.push(coordToLabel({ row: r, col: c }))
+      }
+    }
+  }
+  return list
+}
+
+const describeContiguousRuns = (board: GomokuCell[][], stone: 1 | 2, locale: Locale): string[] => {
+  const runs: string[] = []
+  const seen = new Set<string>()
+  const inGrid = (r: number, c: number) => r >= 0 && r < GOMOKU_SIZE && c >= 0 && c < GOMOKU_SIZE
+
+  for (let r = 0; r < GOMOKU_SIZE; r++) {
+    for (let c = 0; c < GOMOKU_SIZE; c++) {
+      if (board[r][c] !== stone) {
+        continue
+      }
+      for (let axisIdx = 0; axisIdx < AXES.length; axisIdx++) {
+        const [dr, dc] = AXES[axisIdx]
+        const pr = r - dr
+        const pc = c - dc
+        if (inGrid(pr, pc) && board[pr][pc] === stone) {
+          continue
+        }
+        const cells: GomokuCoord[] = [{ row: r, col: c }]
+        let nr = r + dr
+        let nc = c + dc
+        while (inGrid(nr, nc) && board[nr][nc] === stone) {
+          cells.push({ row: nr, col: nc })
+          nr += dr
+          nc += dc
+        }
+        if (cells.length >= 2) {
+          const sig = `${axisIdx}:${cells.map(coordToLabel).join('-')}`
+          if (!seen.has(sig)) {
+            seen.add(sig)
+            const openEnds: string[] = []
+            if (inGrid(pr, pc) && board[pr][pc] === 0) {
+              openEnds.push(coordToLabel({ row: pr, col: pc }))
+            }
+            if (inGrid(nr, nc) && board[nr][nc] === 0) {
+              openEnds.push(coordToLabel({ row: nr, col: nc }))
+            }
+            if (openEnds.length > 0 || cells.length >= 4) {
+              const chain = cells.map(coordToLabel).join('-')
+              runs.push(
+                locale === 'zh-CN'
+                  ? `${cells.length}连 ${chain}（两端空位: ${openEnds.length ? openEnds.join(', ') : '均被堵'}）`
+                  : `${cells.length}-in-row ${chain} (open ends: ${openEnds.length ? openEnds.join(', ') : 'blocked'})`
+              )
+            }
+          }
+        }
+      }
+    }
+  }
+  return runs
+}
+
+const describeJumpPatterns = (board: GomokuCell[][], stone: 1 | 2, locale: Locale): string[] => {
+  const gaps: string[] = []
+  const seen = new Set<string>()
+  const inGrid = (r: number, c: number) => r >= 0 && r < GOMOKU_SIZE && c >= 0 && c < GOMOKU_SIZE
+
+  for (let r = 0; r < GOMOKU_SIZE; r++) {
+    for (let c = 0; c < GOMOKU_SIZE; c++) {
+      if (board[r][c] !== 0) {
+        continue
+      }
+      for (let axisIdx = 0; axisIdx < AXES.length; axisIdx++) {
+        const [dr, dc] = AXES[axisIdx]
+        let leftCount = 0
+        let lr = r - dr
+        let lc = c - dc
+        while (inGrid(lr, lc) && board[lr][lc] === stone) {
+          leftCount += 1
+          lr -= dr
+          lc -= dc
+        }
+        let rightCount = 0
+        let rr = r + dr
+        let rc = c + dc
+        while (inGrid(rr, rc) && board[rr][rc] === stone) {
+          rightCount += 1
+          rr += dr
+          rc += dc
+        }
+        if (leftCount >= 1 && rightCount >= 1 && leftCount + rightCount >= 3) {
+          const gapLabel = coordToLabel({ row: r, col: c })
+          const sig = `${axisIdx}:${gapLabel}`
+          if (!seen.has(sig)) {
+            seen.add(sig)
+            const total = leftCount + rightCount
+            gaps.push(
+              locale === 'zh-CN'
+                ? `中间断点 ${gapLabel} 可直接连通左右共 ${total} 子`
+                : `gap ${gapLabel} connects ${total} collinear stones`
+            )
+          }
+        }
+      }
+    }
+  }
+  return gaps
+}
+
 const buildPrompt = (
   state: GomokuState,
   opponent: GameOpponent,
   locale: Locale
 ): AiMovePromptPayload => {
   const nearby = getNearbyEmptyCoords(state.board)
+  const blackStones = collectStones(state.board, 1)
+  const whiteStones = collectStones(state.board, 2)
+  const blackRuns = describeContiguousRuns(state.board, 1, locale)
+  const whiteRuns = describeContiguousRuns(state.board, 2, locale)
+  const blackGaps = describeJumpPatterns(state.board, 1, locale)
+  const whiteGaps = describeJumpPatterns(state.board, 2, locale)
+
   const recentMoves = state.history
     .slice(-10)
     .map((m) => `${m.side === 'player' ? 'B' : 'W'}:${coordToLabel(m)}`)
     .join(' -> ')
+
+  const factBlocks =
+    locale === 'zh-CN'
+      ? [
+          `黑棋(玩家 B)全部已落子(${blackStones.length})：${blackStones.join(', ') || '无'}`,
+          `白棋(你 W)全部已落子(${whiteStones.length})：${whiteStones.join(', ') || '无'}`,
+          blackRuns.length ? `黑方当前连线几何事实：${blackRuns.join('；')}` : '',
+          blackGaps.length ? `黑方跳连断点几何事实：${blackGaps.join('；')}` : '',
+          whiteRuns.length ? `白方当前连线几何事实：${whiteRuns.join('；')}` : '',
+          whiteGaps.length ? `白方跳连断点几何事实：${whiteGaps.join('；')}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n')
+      : [
+          `Black (player B) stones (${blackStones.length}): ${blackStones.join(', ') || 'none'}`,
+          `White (AI W) stones (${whiteStones.length}): ${whiteStones.join(', ') || 'none'}`,
+          blackRuns.length ? `Black contiguous lines: ${blackRuns.join('; ')}` : '',
+          blackGaps.length ? `Black collinear gaps: ${blackGaps.join('; ')}` : '',
+          whiteRuns.length ? `White contiguous lines: ${whiteRuns.join('; ')}` : '',
+          whiteGaps.length ? `White collinear gaps: ${whiteGaps.join('; ')}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n')
 
   const systemPrompt =
     locale === 'zh-CN'
@@ -193,7 +334,7 @@ const buildPrompt = (
           opponent.systemPrompt,
           '你正在和用户下标准 15×15 五子棋（无禁手规则）。用户执黑先手 (B)，你执白后手 (W)。',
           '列坐标为 A-O（从左到右对应 0-14），行坐标为 1-15（从上到下对应 0-14），天元是 H8。',
-          '认真分析连二、活三、冲四、跳三与必须防守的威胁点，选出最强的一手。',
+          '下棋优先级：先看自己能否一步成5胜；再看对方是否有4连或跳4必须立刻封堵（尤其注意两端空位是否活四）；再看对方活三/跳三与己方攻守兼备的选点。请结合精确坐标与几何事实仔细推演，不要臆测坐标位置。',
           '必须只输出一个 JSON 对象，不要附加 markdown 代码块之外的任何解释：',
           '{"move":"坐标如I8","thoughtSummary":"15-35字当前局面想法总结","speech":"一句贴合你人设的简短对弈台词(最多30字)"}',
         ].join('\n')
@@ -201,7 +342,7 @@ const buildPrompt = (
           opponent.systemPrompt,
           'You are playing standard 15x15 Gomoku against the user. User plays Black (B), you play White (W).',
           'Columns are A-O (left to right), rows are 1-15 (top to bottom), center is H8.',
-          'Read threats carefully (open-three, four, double threats) and pick the strongest empty coordinate.',
+          'Priority: (1) win in 1 move if 4-in-row exists, (2) block opponent 4-in-row / jump-4 immediately, (3) handle open-threes and double threats. Verify every coordinate against the stone list and line facts.',
           'Reply ONLY with a JSON object:',
           '{"move":"coord like I8","thoughtSummary":"concise 1-sentence tactical summary","speech":"short in-character line under 20 words"}',
         ].join('\n')
@@ -211,7 +352,9 @@ const buildPrompt = (
       ? [
           `第 ${state.history.length + 1} 手，轮到你（白方 W）落子。`,
           recentMoves ? `最近落子：${recentMoves}` : '棋盘尚空。',
-          '当前棋盘：',
+          '客观棋盘坐标与连线事实：',
+          factBlocks,
+          '当前棋盘矩阵：',
           formatBoardAscii(state.board),
           `战区附近空位参考：${nearby.slice(0, 28).join(', ')}`,
           '请选择一个尚未落子(.)的合法坐标，并以 JSON 输出。',
@@ -219,6 +362,8 @@ const buildPrompt = (
       : [
           `Move #${state.history.length + 1}. Your turn as White (W).`,
           recentMoves ? `Recent moves: ${recentMoves}` : 'Board is empty.',
+          'Exact board coordinates & line facts:',
+          factBlocks,
           'Current board:',
           formatBoardAscii(state.board),
           `Nearby empty intersections: ${nearby.slice(0, 28).join(', ')}`,

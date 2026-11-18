@@ -43,7 +43,7 @@ export const useGameStore = create<GameStoreState>(() => ({
   activeGameId: null,
   gameState: null,
   aiThinking: false,
-  thinkingMode: false,
+  thinkingMode: true,
   gameVoiceOn: getInitialVoicePref(),
   bubbleText: '',
   lastSpeechText: '',

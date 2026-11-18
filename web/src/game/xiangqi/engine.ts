@@ -438,12 +438,27 @@ const formatXiangqiBoardAscii = (board: XiangqiCell[][]): string => {
   return [...rows, '   a b c d e f g h i'].join('\n')
 }
 
+const listSidePieces = (board: XiangqiCell[][], side: GameSide): string[] => {
+  const list: string[] = []
+  for (let r = 0; r < XIANGQI_ROWS; r++) {
+    for (let c = 0; c < XIANGQI_COLS; c++) {
+      const piece = board[r][c]
+      if (piece && piece.side === side) {
+        list.push(`${PIECE_LABELS[side][piece.type]}@${posToUcci({ row: r, col: c })}`)
+      }
+    }
+  }
+  return list
+}
+
 const describeMovePiece = (board: XiangqiCell[][], move: XiangqiMove): string => {
   const piece = board[move.from.row][move.from.col]
   const label = piece ? PIECE_LABELS[piece.side][piece.type] : ''
   const target = board[move.to.row][move.to.col]
   const captureHint = target ? `吃${PIECE_LABELS[target.side][target.type]}` : ''
-  return `${moveToUcci(move)}(${label}${captureHint})`
+  const nextBoard = applyMoveOnBoard(board, move)
+  const checkHint = isSideInCheck(nextBoard, 'player') ? '+将军' : ''
+  return `${moveToUcci(move)}(${label}${captureHint}${checkHint})`
 }
 
 const buildPrompt = (
@@ -454,6 +469,8 @@ const buildPrompt = (
   const legalMoves = getAllLegalMoves(state.board, 'ai')
   const legalUcci = legalMoves.map(moveToUcci)
   const annotatedLegal = legalMoves.map((m) => describeMovePiece(state.board, m))
+  const redRoster = listSidePieces(state.board, 'player').join(', ')
+  const blackRoster = listSidePieces(state.board, 'ai').join(', ')
   const recent = state.history
     .slice(-10)
     .map(
@@ -467,7 +484,7 @@ const buildPrompt = (
           opponent.systemPrompt,
           '你正在和用户下标准中国象棋。用户执红先手（小写之外的大写字母 K/A/B/N/R/C/P：帥仕相傌俥炮兵，位于 0-4 行下方），你执黑后手（小写字母 k/a/b/n/r/c/p：將士象馬車砲卒，位于 5-9 行上方）。',
           '坐标采用标准 UCCI 四字符格式（如 h7e7、b9c7、g6g5），列为 a-i（左到右），行为 0-9（下到上）。',
-          '请从真实棋理（开局出子、马炮配合、抢占要道、解将、捉子与防杀）思考并独立选择一步最优合法着法。',
+          '请仔细核对双方子力坐标与红方威胁（是否抽子、捉车、将军或埋伏杀棋），从真实棋理（开局出子、马炮配合、抢占要道、解将、捉子与防杀）思考并独立选择一步最优合法着法。',
           '必须只输出一个 JSON 对象：',
           '{"move":"四字符UCCI着法如h7e7","thoughtSummary":"15-35字当前局面思考总结","speech":"一句贴合人设的短台词(最多30字)"}',
         ].join('\n')
@@ -493,6 +510,7 @@ const buildPrompt = (
           `第 ${state.history.length + 1} 回合，轮到你（黑方小写）走棋。`,
           checkNotice,
           recent ? `近期着法：${recent}` : '',
+          `黑方现有子力坐标：${blackRoster}\n红方现有子力坐标：${redRoster}`,
           '当前棋盘（大写红方，小写黑方）：',
           formatXiangqiBoardAscii(state.board),
           `全部合法着法参考（共 ${annotatedLegal.length} 个）：${annotatedLegal.join(', ')}`,
@@ -504,6 +522,7 @@ const buildPrompt = (
           `Ply #${state.history.length + 1}. Your turn as Black (lowercase).`,
           checkNotice,
           recent ? `Recent moves: ${recent}` : '',
+          `Black pieces: ${blackRoster}\nRed pieces: ${redRoster}`,
           'Board (Red uppercase bottom, Black lowercase top):',
           formatXiangqiBoardAscii(state.board),
           `All legal moves (${annotatedLegal.length}): ${annotatedLegal.join(', ')}`,

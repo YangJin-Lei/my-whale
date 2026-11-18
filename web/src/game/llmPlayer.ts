@@ -4,7 +4,7 @@ import type { MessageParam } from '../services/api/types.js'
 import type { AiTurnDecision, GameOpponent, GamePlugin } from './types.js'
 
 const MAX_ATTEMPTS = 3
-const REQUEST_TIMEOUT_MS = 45_000
+const REQUEST_TIMEOUT_MS = 65_000
 
 type RawDecisionJson = {
   move?: unknown
