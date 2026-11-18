@@ -538,8 +538,21 @@ export const IconPersonaOutline16 = () => (
 
 export const IconMemoryOutline16 = () => (
   <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <rect x="2.2" y="2.4" width="11.6" height="11.2" rx="2.4" stroke="currentColor" strokeWidth="1.4" />
-    <path d="M5 6H11M5 8.8H11M5 11.4H8.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    <rect
+      x="2.2"
+      y="2.4"
+      width="11.6"
+      height="11.2"
+      rx="2.4"
+      stroke="currentColor"
+      strokeWidth="1.4"
+    />
+    <path
+      d="M5 6H11M5 8.8H11M5 11.4H8.6"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+    />
   </svg>
 )
 
@@ -573,5 +586,50 @@ export const IconIncognitoOutline16 = () => (
     <circle cx="5.4" cy="11.1" r="1.8" stroke="currentColor" strokeWidth="1.3" />
     <circle cx="10.6" cy="11.1" r="1.8" stroke="currentColor" strokeWidth="1.3" />
     <path d="M7.2 11.1H8.8" stroke="currentColor" strokeWidth="1.3" />
+  </svg>
+)
+
+export const IconPlusOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M8 2.6V13.4M2.6 8H13.4"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    />
+  </svg>
+)
+
+export const IconCameraOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M2.2 5.4C2.2 4.6 2.8 4 3.6 4H5.1L5.9 2.7C6.1 2.4 6.4 2.2 6.8 2.2H9.2C9.6 2.2 9.9 2.4 10.1 2.7L10.9 4H12.4C13.2 4 13.8 4.6 13.8 5.4V12.2C13.8 13 13.2 13.6 12.4 13.6H3.6C2.8 13.6 2.2 13 2.2 12.2V5.4Z"
+      stroke="currentColor"
+      strokeWidth="1.35"
+      strokeLinejoin="round"
+    />
+    <circle cx="8" cy="8.7" r="2.3" stroke="currentColor" strokeWidth="1.35" />
+  </svg>
+)
+
+export const IconImageOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect
+      x="2.2"
+      y="2.6"
+      width="11.6"
+      height="10.8"
+      rx="2.2"
+      stroke="currentColor"
+      strokeWidth="1.35"
+    />
+    <circle cx="5.7" cy="6.1" r="1.1" fill="currentColor" />
+    <path
+      d="M3 11.4L6.1 8.5C6.5 8.1 7.1 8.1 7.5 8.5L9.4 10.3L10.9 8.9C11.3 8.5 11.9 8.5 12.3 8.9L13.6 10.2"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </svg>
 )
