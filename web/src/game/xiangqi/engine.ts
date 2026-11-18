@@ -7,7 +7,6 @@ import type {
   GameSide,
   GameStatus,
 } from '../types.js'
-import { XiangqiBoard } from './XiangqiBoard.js'
 
 export const XIANGQI_ROWS = 10
 export const XIANGQI_COLS = 9
@@ -520,7 +519,7 @@ const buildPrompt = (
   }
 }
 
-export const xiangqiGame: GamePlugin<XiangqiState, XiangqiMove> = {
+export const xiangqiRules: Omit<GamePlugin<XiangqiState, XiangqiMove>, 'BoardComponent'> = {
   id: 'xiangqi',
   name: { 'zh-CN': '中国象棋', 'en-US': 'Chinese Chess' },
   subtitle: {
@@ -624,5 +623,4 @@ export const xiangqiGame: GamePlugin<XiangqiState, XiangqiMove> = {
     }
     return all[Math.floor(Math.random() * all.length)]
   },
-  BoardComponent: XiangqiBoard,
 }

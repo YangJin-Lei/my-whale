@@ -7,7 +7,6 @@ import type {
   GameSide,
   GameStatus,
 } from '../types.js'
-import { GomokuBoard } from './GomokuBoard.js'
 
 export const GOMOKU_SIZE = 15
 const COLS = 'ABCDEFGHIJKLMNO'
@@ -233,7 +232,7 @@ const buildPrompt = (
   }
 }
 
-export const gomokuGame: GamePlugin<GomokuState, GomokuCoord> = {
+export const gomokuRules: Omit<GamePlugin<GomokuState, GomokuCoord>, 'BoardComponent'> = {
   id: 'gomoku',
   name: { 'zh-CN': '五子棋', 'en-US': 'Gomoku' },
   subtitle: {
@@ -345,5 +344,4 @@ export const gomokuGame: GamePlugin<GomokuState, GomokuCoord> = {
     }
     return null
   },
-  BoardComponent: GomokuBoard,
 }

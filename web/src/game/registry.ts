@@ -1,6 +1,6 @@
-import { gomokuGame } from './gomoku/engine.js'
+import { gomokuGame } from './gomoku/index.js'
 import type { GameId, GamePlugin } from './types.js'
-import { xiangqiGame } from './xiangqi/engine.js'
+import { xiangqiGame } from './xiangqi/index.js'
 
 export type RegisteredGame = GamePlugin<unknown, unknown>
 

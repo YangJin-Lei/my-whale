@@ -3,6 +3,9 @@ import { create } from 'zustand'
 const DISMISSED_KEY = 'chat-demo:dismissed-update-version'
 export const RELEASES_PAGE_URL = 'https://github.com/YangJin-Lei/my-whale/releases'
 const RELEASES_API_URL = 'https://api.github.com/repos/YangJin-Lei/my-whale/releases/latest'
+const PAGES_VERSION_URL = 'https://yangjin-lei.github.io/my-whale/version.json'
+const RAW_PACKAGE_URL =
+  'https://raw.githubusercontent.com/YangJin-Lei/my-whale/main/web/package.json'
 
 const readCurrentVersion = (): string => {
   if (typeof document === 'undefined') {
@@ -71,6 +74,60 @@ export const useUpdateStore = create<UpdateState>(() => ({
 
 let inflight: Promise<void> | null = null
 
+type LatestReleaseMeta = {
+  tag: string
+  url: string
+}
+
+const fetchJsonWithTimeout = async (url: string, headers?: Record<string, string>) => {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 5000)
+  try {
+    const response = await fetch(url, { headers, signal: controller.signal })
+    if (!response.ok) {
+      return null
+    }
+    return (await response.json()) as Record<string, unknown>
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+const fetchLatestReleaseMeta = async (): Promise<LatestReleaseMeta | null> => {
+  const apiData = await fetchJsonWithTimeout(RELEASES_API_URL, {
+    Accept: 'application/vnd.github+json',
+  })
+  if (apiData && typeof apiData.tag_name === 'string' && apiData.tag_name.trim()) {
+    const url =
+      typeof apiData.html_url === 'string' && apiData.html_url.startsWith('https://')
+        ? apiData.html_url
+        : RELEASES_PAGE_URL
+    return { tag: apiData.tag_name.trim(), url }
+  }
+
+  // GitHub REST API 未鉴权每小时限流 60 次或被网络拦截时，回退到 GitHub Pages 静态版本清单
+  const pagesData = await fetchJsonWithTimeout(`${PAGES_VERSION_URL}?t=${Date.now()}`)
+  if (pagesData && typeof pagesData.tag_name === 'string' && pagesData.tag_name.trim()) {
+    const url =
+      typeof pagesData.url === 'string' && pagesData.url.startsWith('https://')
+        ? pagesData.url
+        : `${RELEASES_PAGE_URL}/latest`
+    return { tag: pagesData.tag_name.trim(), url }
+  }
+
+  const rawPkg = await fetchJsonWithTimeout(`${RAW_PACKAGE_URL}?t=${Date.now()}`)
+  if (rawPkg && typeof rawPkg.version === 'string' && rawPkg.version.trim()) {
+    return {
+      tag: `v${rawPkg.version.trim().replace(/^v/i, '')}`,
+      url: `${RELEASES_PAGE_URL}/latest`,
+    }
+  }
+
+  return null
+}
+
 export const checkForUpdates = async (manual = false): Promise<void> => {
   if (inflight) {
     return inflight
@@ -80,36 +137,25 @@ export const checkForUpdates = async (manual = false): Promise<void> => {
   }
 
   inflight = (async () => {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 8000)
     try {
-      const response = await fetch(RELEASES_API_URL, {
-        headers: { Accept: 'application/vnd.github+json' },
-        signal: controller.signal,
-      })
-      if (!response.ok) {
+      const meta = await fetchLatestReleaseMeta()
+      if (!meta) {
         if (manual) {
           useUpdateStore.setState({ status: 'error' })
         }
         return
       }
-      const data = (await response.json()) as { tag_name?: unknown; html_url?: unknown }
-      const tag = typeof data.tag_name === 'string' ? data.tag_name.trim() : ''
-      const url =
-        typeof data.html_url === 'string' && data.html_url.startsWith('https://')
-          ? data.html_url
-          : RELEASES_PAGE_URL
-      if (tag && isNewerVersion(tag, CURRENT_VERSION)) {
+      if (isNewerVersion(meta.tag, CURRENT_VERSION)) {
         useUpdateStore.setState({
           status: 'available',
-          latestVersion: tag,
-          releaseUrl: url,
+          latestVersion: meta.tag,
+          releaseUrl: meta.url,
         })
       } else {
         useUpdateStore.setState({
           status: 'latest',
-          latestVersion: tag || null,
-          releaseUrl: url,
+          latestVersion: meta.tag,
+          releaseUrl: meta.url,
         })
       }
     } catch {
@@ -117,7 +163,6 @@ export const checkForUpdates = async (manual = false): Promise<void> => {
         useUpdateStore.setState({ status: 'error' })
       }
     } finally {
-      clearTimeout(timer)
       inflight = null
     }
   })()
