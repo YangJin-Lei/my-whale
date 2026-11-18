@@ -198,6 +198,18 @@ export const en = {
   settingsCheckUpdate: 'Check updates',
   settingsCheckingUpdate: 'Checking...',
   settingsGoUpdate: 'Update ↗',
+  settingsUpdateNow: 'Update Now',
+  settingsDownloading: 'Downloading...',
+  settingsDownloadingProgress: 'Downloading {percent}%',
+  settingsDownloadingPercent: '{percent}%',
+  settingsInstalling: 'Installing...',
+  settingsContinueInstall: 'Continue Install',
+  settingsRetryDownload: 'Retry Download',
+  settingsUpdatingProgressDesc:
+    'Downloading {version} ({progress}) in-app while keeping local data intact',
+  settingsUpdateNeedsPermDesc:
+    'Allow installing unknown apps in system settings, then tap Continue Install',
+  settingsUpdateDownloadErrorDesc: 'Download failed. Check your network and retry.',
   siderUpdateAvailable: 'Update {version} available ↗',
   settingsNoticeItem4:
     'Updating in place keeps local chats, personas, and memories (never uninstall first); export ZIP/JSON backups regularly.',

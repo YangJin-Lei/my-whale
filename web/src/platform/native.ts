@@ -1,7 +1,7 @@
 import { App } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
 import { Clipboard } from '@capacitor/clipboard'
-import { Capacitor } from '@capacitor/core'
+import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core'
 import { closeSearchPanel, useSearchPanel } from '../components/search/searchPanelState.js'
 import { closeSettings, useSettingsDialog } from '../components/settings/settingsDialogState.js'
 import { closeMobileSider, useMobileSider } from '../components/sider/mobileSiderState.js'
@@ -11,8 +11,17 @@ import { extractApiKey, setClipboardReader } from '../services/clipboard.js'
 import { setOpenExternal } from '../services/links.js'
 import { flushPendingExtracts } from '../services/memory/extract.js'
 import { useSettings } from '../services/settings.js'
+import {
+  registerInAppUpdater,
+  retryPendingInstall,
+  useUpdateStore,
+  type InAppUpdateOutcome,
+} from '../services/update.js'
 
 const onReturnFromExternal = async () => {
+  if (useUpdateStore.getState().downloadStatus === 'needs_permission') {
+    void retryPendingInstall()
+  }
   void refreshBalance()
   if (useSettings.getState().apiKey) {
     return
@@ -25,8 +34,19 @@ const onReturnFromExternal = async () => {
 }
 
 type TauriInternals = {
-  invoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>
+  invoke?: <T = unknown>(cmd: string, args?: Record<string, unknown>) => Promise<T>
 }
+
+type AppUpdaterNativePlugin = {
+  downloadAndInstall: (options: { urls: string[] }) => Promise<{ status: InAppUpdateOutcome }>
+  installPending: () => Promise<{ status: InAppUpdateOutcome }>
+  addListener: (
+    eventName: 'downloadProgress',
+    listener: (payload: { progress: number; received: number; total: number }) => void
+  ) => Promise<PluginListenerHandle>
+}
+
+const AppUpdater = registerPlugin<AppUpdaterNativePlugin>('AppUpdater')
 
 export const setupNative = () => {
   const tauri = (window as Window & { __TAURI_INTERNALS__?: TauriInternals }).__TAURI_INTERNALS__
@@ -36,11 +56,60 @@ export const setupNative = () => {
         window.open(url, '_blank', 'noopener,noreferrer')
       })
     })
+    registerInAppUpdater({
+      downloadAndInstall: async ({ tag, assets }, onProgress) => {
+        const invoke = tauri.invoke
+        if (!invoke) {
+          throw new Error('Tauri bridge unavailable')
+        }
+        const target = await invoke<string>('get_desktop_target').catch(() => 'windows')
+        const urls = target === 'macos' ? assets.macosUrls : assets.windowsUrls
+        const ver = tag.replace(/^v/i, '')
+        const fileName =
+          target === 'macos' ? `my-whale_${ver}_aarch64.dmg` : `my-whale_${ver}_x64-setup.exe`
+        const pollTimer = window.setInterval(() => {
+          void invoke<{ active: boolean; progress: number }>('get_update_progress')
+            .then((info) => {
+              if (info.active) {
+                onProgress(info.progress >= 0 ? info.progress : null)
+              }
+            })
+            .catch(() => {})
+        }, 250)
+        try {
+          await invoke('download_and_install_update', { urls, fileName })
+          onProgress(100)
+          return 'installer_opened'
+        } finally {
+          window.clearInterval(pollTimer)
+        }
+      },
+    })
     return
   }
 
   if (!Capacitor.isNativePlatform()) {
     return
+  }
+
+  if (Capacitor.getPlatform() === 'android') {
+    registerInAppUpdater({
+      downloadAndInstall: async ({ assets }, onProgress) => {
+        const handle = await AppUpdater.addListener('downloadProgress', (payload) => {
+          onProgress(payload.progress >= 0 ? payload.progress : null)
+        })
+        try {
+          const res = await AppUpdater.downloadAndInstall({ urls: assets.androidUrls })
+          return res.status
+        } finally {
+          await handle.remove()
+        }
+      },
+      installPending: async () => {
+        const res = await AppUpdater.installPending()
+        return res.status
+      },
+    })
   }
 
   setOpenExternal((url) => {

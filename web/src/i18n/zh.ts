@@ -187,6 +187,17 @@ export const zh = {
   settingsCheckUpdate: '检查更新',
   settingsCheckingUpdate: '检查中...',
   settingsGoUpdate: '前往更新 ↗',
+  settingsUpdateNow: '立即更新',
+  settingsDownloading: '下载中...',
+  settingsDownloadingProgress: '下载中 {percent}%',
+  settingsDownloadingPercent: '下载 {percent}%',
+  settingsInstalling: '启动安装...',
+  settingsContinueInstall: '继续安装',
+  settingsRetryDownload: '重试下载',
+  settingsUpdatingProgressDesc:
+    '正在应用内下载 {version}（{progress}），完成后将直接安装并保留本地数据',
+  settingsUpdateNeedsPermDesc: '请在系统设置中允许安装未知应用后返回，点击「继续安装」完成覆盖更新',
+  settingsUpdateDownloadErrorDesc: '下载安装包失败，请检查网络或切换节点后重试',
   siderUpdateAvailable: '新版本 {version} 可更新 ↗',
   settingsNoticeItem4:
     '覆盖安装更新不会清除对话与记忆（请保持同签名包覆盖，切勿直接卸载）；建议在「数据管理」和「记忆」中定期导出备份。',

@@ -10,8 +10,7 @@ import {
 } from '../base/icons.js'
 import { openGameDrawer } from '../../game/store.js'
 import { setSiderCollapsed } from '../../services/settings.js'
-import { openExternal } from '../../services/links.js'
-import { dismissUpdateBanner, useUpdateStore } from '../../services/update.js'
+import { dismissUpdateBanner, startInAppUpdate, useUpdateStore } from '../../services/update.js'
 import { groupSessions } from '../../services/chat/sessionGroups.js'
 import { newChat, removeSession, useChatStore } from '../../services/chat/store.js'
 import type { SessionSummary } from '../../services/chat/types.js'
@@ -32,8 +31,9 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
   const activeId = useChatStore((state) => state.activeId)
   const updateStatus = useUpdateStore((state) => state.status)
   const latestVersion = useUpdateStore((state) => state.latestVersion)
-  const releaseUrl = useUpdateStore((state) => state.releaseUrl)
   const dismissedVersion = useUpdateStore((state) => state.dismissedVersion)
+  const downloadStatus = useUpdateStore((state) => state.downloadStatus)
+  const downloadProgress = useUpdateStore((state) => state.downloadProgress)
   const showUpdatePill =
     updateStatus === 'available' && Boolean(latestVersion) && dismissedVersion !== latestVersion
   const [now, setNow] = useState(Date.now)
@@ -116,9 +116,16 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
             <button
               type="button"
               className={styles.updateLink}
-              onClick={() => openExternal(releaseUrl)}
+              disabled={downloadStatus === 'downloading' || downloadStatus === 'installing'}
+              onClick={() => void startInAppUpdate()}
             >
-              {t('siderUpdateAvailable', { version: latestVersion })}
+              {downloadStatus === 'downloading'
+                ? downloadProgress !== null
+                  ? t('settingsDownloadingPercent', { percent: downloadProgress })
+                  : t('settingsDownloading')
+                : downloadStatus === 'installing'
+                  ? t('settingsInstalling')
+                  : t('siderUpdateAvailable', { version: latestVersion })}
             </button>
             <button
               type="button"

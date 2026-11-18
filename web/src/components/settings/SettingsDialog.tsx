@@ -23,7 +23,12 @@ import { useIsMobile } from '../../app/viewport.js'
 import { useChatStore } from '../../services/chat/store.js'
 import { regionCodes, getRegionName, provinces } from '../../services/location.js'
 import { openExternal } from '../../services/links.js'
-import { checkForUpdates, CURRENT_VERSION, useUpdateStore } from '../../services/update.js'
+import {
+  checkForUpdates,
+  CURRENT_VERSION,
+  startInAppUpdate,
+  useUpdateStore,
+} from '../../services/update.js'
 import {
   isChineseBrowser,
   setLocale,
@@ -322,15 +327,42 @@ const UpdateSetting = () => {
   const status = useUpdateStore((state) => state.status)
   const latestVersion = useUpdateStore((state) => state.latestVersion)
   const releaseUrl = useUpdateStore((state) => state.releaseUrl)
+  const hasInAppUpdater = useUpdateStore((state) => state.hasInAppUpdater)
+  const downloadStatus = useUpdateStore((state) => state.downloadStatus)
+  const downloadProgress = useUpdateStore((state) => state.downloadProgress)
 
   const description =
     status === 'available' && latestVersion
-      ? t('settingsUpdateAvailableDesc', { version: latestVersion })
+      ? downloadStatus === 'downloading'
+        ? t('settingsUpdatingProgressDesc', {
+            version: latestVersion,
+            progress: downloadProgress !== null ? `${downloadProgress}%` : '...',
+          })
+        : downloadStatus === 'needs_permission'
+          ? t('settingsUpdateNeedsPermDesc')
+          : downloadStatus === 'error'
+            ? t('settingsUpdateDownloadErrorDesc')
+            : t('settingsUpdateAvailableDesc', { version: latestVersion })
       : status === 'latest'
         ? t('settingsUpdateLatestDesc', { version: CURRENT_VERSION })
         : status === 'error'
           ? t('settingsUpdateFailedDesc')
           : t('settingsVersionDesc', { version: CURRENT_VERSION })
+
+  const actionLabel =
+    downloadStatus === 'downloading'
+      ? downloadProgress !== null
+        ? t('settingsDownloadingPercent', { percent: downloadProgress })
+        : t('settingsDownloading')
+      : downloadStatus === 'installing'
+        ? t('settingsInstalling')
+        : downloadStatus === 'needs_permission'
+          ? t('settingsContinueInstall')
+          : downloadStatus === 'error'
+            ? t('settingsRetryDownload')
+            : hasInAppUpdater
+              ? t('settingsUpdateNow')
+              : t('settingsGoUpdate')
 
   return (
     <SettingCell
@@ -339,14 +371,26 @@ const UpdateSetting = () => {
       status={null}
       action={
         status === 'available' ? (
-          <Button
-            variant="primary"
-            size="m"
-            className={styles.cellButton}
-            onClick={() => openExternal(releaseUrl)}
-          >
-            {t('settingsGoUpdate')}
-          </Button>
+          hasInAppUpdater ? (
+            <Button
+              variant="primary"
+              size="m"
+              className={styles.cellButton}
+              disabled={downloadStatus === 'downloading' || downloadStatus === 'installing'}
+              onClick={() => void startInAppUpdate()}
+            >
+              {actionLabel}
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="m"
+              className={styles.cellButton}
+              onClick={() => openExternal(releaseUrl)}
+            >
+              {t('settingsGoUpdate')}
+            </Button>
+          )
         ) : (
           <Button
             variant="outlined"
