@@ -486,7 +486,7 @@ const buildPrompt = (
           '坐标采用标准 UCCI 四字符格式（如 h7e7、b9c7、g6g5），列为 a-i（左到右），行为 0-9（下到上）。',
           '请仔细核对双方子力坐标与红方威胁（是否抽子、捉车、将军或埋伏杀棋），从真实棋理（开局出子、马炮配合、抢占要道、解将、捉子与防杀）思考并独立选择一步最优合法着法。',
           '必须只输出一个 JSON 对象：',
-          '{"move":"四字符UCCI着法如h7e7","thoughtSummary":"15-35字当前局面思考总结","speech":"一句贴合人设的短台词(最多30字)"}',
+          '{"move":"四字符UCCI着法如h7e7","thoughtSummary":"15-35字当前局面战术分析","speech":"一句真人对坐聊天的短台词(最多25字，别念英文UCCI坐标)"}',
         ].join('\n')
       : [
           opponent.systemPrompt,
@@ -494,7 +494,7 @@ const buildPrompt = (
           'Use 4-char UCCI coordinates (columns a-i left-to-right, ranks 0-9 bottom-to-top), e.g., h7e7 or b9c7.',
           'Think tactically (checks, forks, pins, piece safety, tempo) and pick the strongest legal move.',
           'Reply ONLY with JSON:',
-          '{"move":"4-char UCCI move like h7e7","thoughtSummary":"concise 1-sentence chess thought","speech":"short in-character remark"}',
+          '{"move":"4-char UCCI move like h7e7","thoughtSummary":"concise 1-sentence chess thought","speech":"natural spoken table remark without UCCI codes"}',
         ].join('\n')
 
   const checkNotice =

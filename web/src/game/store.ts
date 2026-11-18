@@ -16,6 +16,7 @@ type GameStoreState = {
   thinkingMode: boolean
   gameVoiceOn: boolean
   bubbleText: string
+  thoughtText: string
   lastSpeechText: string
   errorText: string | null
   moveEpoch: number
@@ -46,6 +47,7 @@ export const useGameStore = create<GameStoreState>(() => ({
   thinkingMode: true,
   gameVoiceOn: getInitialVoicePref(),
   bubbleText: '',
+  thoughtText: '',
   lastSpeechText: '',
   errorText: null,
   moveEpoch: 0,
@@ -108,7 +110,8 @@ const triggerAiTurn = async (plugin: RegisteredGame, expectedEpoch: number) => {
   useGameStore.setState({
     aiThinking: true,
     errorText: null,
-    bubbleText: locale === 'zh-CN' ? '正在观察棋局并思考…' : 'Reading the board…',
+    bubbleText: locale === 'zh-CN' ? '正在思考这一步…' : 'Thinking through my move…',
+    thoughtText: '',
   })
 
   try {
@@ -123,7 +126,7 @@ const triggerAiTurn = async (plugin: RegisteredGame, expectedEpoch: number) => {
       onThinkingUpdate: (snippet) => {
         const current = useGameStore.getState()
         if (current.moveEpoch === expectedEpoch && current.aiThinking) {
-          useGameStore.setState({ bubbleText: snippet })
+          useGameStore.setState({ thoughtText: snippet })
         }
       },
     })
@@ -135,20 +138,22 @@ const triggerAiTurn = async (plugin: RegisteredGame, expectedEpoch: number) => {
     const latest = useGameStore.getState()
     const applied = plugin.applyAiMove(latest.gameState, decision.move)
     const resultBubble = getResultBubble(plugin, applied.nextState, locale)
-    const displayBubble = resultBubble
-      ? `${decision.thoughtSummary} ${resultBubble}`
+    const spokenLine = resultBubble || decision.speech
+    const combinedThought = decision.thinkingTrace
+      ? `${decision.thoughtSummary}\n\n${decision.thinkingTrace}`
       : decision.thoughtSummary
 
     useGameStore.setState({
       gameState: applied.nextState,
       aiThinking: false,
-      bubbleText: displayBubble,
-      lastSpeechText: decision.speech || displayBubble,
+      bubbleText: spokenLine,
+      thoughtText: combinedThought,
+      lastSpeechText: spokenLine,
       errorText: null,
     })
 
     if (useGameStore.getState().gameVoiceOn) {
-      speakGameLine(decision.speech || displayBubble)
+      speakGameLine(spokenLine)
     }
   } catch (error) {
     if (controller.signal.aborted || useGameStore.getState().moveEpoch !== expectedEpoch) {
@@ -190,6 +195,7 @@ export const backToGamePicker = () => {
     aiThinking: false,
     errorText: null,
     bubbleText: '',
+    thoughtText: '',
     lastSpeechText: '',
     moveEpoch: prev.moveEpoch + 1,
   }))
@@ -213,6 +219,7 @@ export const startGame = (gameId: GameId) => {
     aiThinking: false,
     errorText: null,
     bubbleText: opponent.greeting,
+    thoughtText: '',
     lastSpeechText: opponent.greeting,
     moveEpoch: prev.moveEpoch + 1,
   }))
@@ -240,6 +247,7 @@ export const undoGameRound = () => {
     aiThinking: false,
     errorText: null,
     bubbleText: locale === 'zh-CN' ? '好，让你悔这一步，重新走吧。' : 'Alright, undo accepted.',
+    thoughtText: '',
     moveEpoch: prev.moveEpoch + 1,
   }))
 }

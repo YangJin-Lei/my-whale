@@ -41,9 +41,11 @@ export type AiMovePromptPayload = {
 
 export type AiTurnDecision<TMove> = {
   move: TMove
-  /** 大模型对当前局势的简短思考总结（气泡内展示） */
+  /** 大模型对当前局势的简短思考总结（折叠面板内展示） */
   thoughtSummary: string
-  /** 拟真对战短台词（开启语音时会朗读） */
+  /** 原始思考过程（启用深度思考时的推理文本，折叠查看） */
+  thinkingTrace?: string
+  /** 拟真对战短台词（气泡主显 & 开启语音时朗读） */
   speech: string
   /** 是否触发了兜底着法 */
   usedFallback?: boolean

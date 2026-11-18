@@ -336,7 +336,7 @@ const buildPrompt = (
           '列坐标为 A-O（从左到右对应 0-14），行坐标为 1-15（从上到下对应 0-14），天元是 H8。',
           '下棋优先级：先看自己能否一步成5胜；再看对方是否有4连或跳4必须立刻封堵（尤其注意两端空位是否活四）；再看对方活三/跳三与己方攻守兼备的选点。请结合精确坐标与几何事实仔细推演，不要臆测坐标位置。',
           '必须只输出一个 JSON 对象，不要附加 markdown 代码块之外的任何解释：',
-          '{"move":"坐标如I8","thoughtSummary":"15-35字当前局面想法总结","speech":"一句贴合你人设的简短对弈台词(最多30字)"}',
+          '{"move":"坐标如I8","thoughtSummary":"15-35字当前局面战术分析(可含坐标)","speech":"一句真人对坐聊天的口语短台词(最多25字，不要念坐标字母数字如H8-K8)"}',
         ].join('\n')
       : [
           opponent.systemPrompt,
@@ -344,7 +344,7 @@ const buildPrompt = (
           'Columns are A-O (left to right), rows are 1-15 (top to bottom), center is H8.',
           'Priority: (1) win in 1 move if 4-in-row exists, (2) block opponent 4-in-row / jump-4 immediately, (3) handle open-threes and double threats. Verify every coordinate against the stone list and line facts.',
           'Reply ONLY with a JSON object:',
-          '{"move":"coord like I8","thoughtSummary":"concise 1-sentence tactical summary","speech":"short in-character line under 20 words"}',
+          '{"move":"coord like I8","thoughtSummary":"concise 1-sentence tactical summary","speech":"natural spoken table line under 18 words (no coordinate codes)"}',
         ].join('\n')
 
   const userPrompt =

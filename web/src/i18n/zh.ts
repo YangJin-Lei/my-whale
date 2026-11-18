@@ -355,6 +355,8 @@ export const zh = {
   gameUndo: '悔棋',
   gameRestart: '重开',
   gameReplayVoice: '重播角色语音',
+  gameViewThought: '查看思考',
+  gameHideThought: '收起思考',
   gamePlayAgain: '再来一局',
   gameLlmRefereeHint: '代码仅作规则裁判，每一步由 DeepSeek 亲自思考落子',
   gameOpponentSection: '棋盘对面 AI 角色（可扩展）',

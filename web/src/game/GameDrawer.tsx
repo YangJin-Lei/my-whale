@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import logoUrl from '../assets/logo.png'
 import { Button } from '../components/base/Button.js'
 import { IconButton } from '../components/base/IconButton.js'
@@ -52,8 +52,17 @@ export const GameDrawer = () => {
   const thinkingMode = useGameStore((state) => state.thinkingMode)
   const gameVoiceOn = useGameStore((state) => state.gameVoiceOn)
   const bubbleText = useGameStore((state) => state.bubbleText)
+  const thoughtText = useGameStore((state) => state.thoughtText)
   const errorText = useGameStore((state) => state.errorText)
   const voiceStatus = useGameVoice((state) => state.status)
+
+  const [thoughtExpanded, setThoughtExpanded] = useState(false)
+
+  useEffect(() => {
+    if (!thoughtText) {
+      setThoughtExpanded(false)
+    }
+  }, [thoughtText])
 
   const selectedChoice = useGameOpponentStore((state) => state.selectedChoice)
   const customDraft = useGameOpponentStore((state) => state.custom)
@@ -175,6 +184,24 @@ export const GameDrawer = () => {
                     <IconPlayMediaOutline16 />
                   </button>
                 </div>
+                {thoughtText ? (
+                  <div className={styles.thoughtWrap}>
+                    <button
+                      type="button"
+                      className={styles.thoughtToggle}
+                      onClick={() => setThoughtExpanded((prev) => !prev)}
+                    >
+                      <span>
+                        {thoughtExpanded
+                          ? `▾ ${t('gameHideThought')}`
+                          : `▸ ${t('gameViewThought')}`}
+                      </span>
+                    </button>
+                    {thoughtExpanded ? (
+                      <div className={styles.thoughtPanel}>{thoughtText}</div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </div>
 

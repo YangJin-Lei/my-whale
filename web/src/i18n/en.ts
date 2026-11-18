@@ -375,6 +375,8 @@ export const en = {
   gameUndo: 'Undo',
   gameRestart: 'Restart',
   gameReplayVoice: 'Replay voice line',
+  gameViewThought: 'View thinking',
+  gameHideThought: 'Hide thinking',
   gamePlayAgain: 'Play again',
   gameLlmRefereeHint: 'Code enforces rules only; every AI move comes from DeepSeek',
   gameOpponentSection: 'Opponent Persona (Extensible)',

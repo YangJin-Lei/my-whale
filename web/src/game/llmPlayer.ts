@@ -49,10 +49,9 @@ const cleanBubbleText = (value: unknown, fallback: string): string => {
 const summarizeThinkingSnippet = (thinkingRaw: string, locale: Locale): string => {
   const normalized = thinkingRaw.replace(/\s+/g, ' ').trim()
   if (!normalized) {
-    return locale === 'zh-CN' ? '正在思考这一步…' : 'Thinking through the position…'
+    return locale === 'zh-CN' ? '正在推演这一步…' : 'Thinking through the position…'
   }
-  const tail = normalized.length > 64 ? `…${normalized.slice(-64)}` : normalized
-  return tail
+  return normalized
 }
 
 const callDeepSeekTurn = async ({
@@ -145,12 +144,14 @@ export const requestAiMoveFromLlm = async <TState, TMove>({
   const promptPayload = plugin.buildAiPrompt(state, opponent, locale)
   const history: MessageParam[] = [{ role: 'user', content: promptPayload.userPrompt }]
 
+  let latestThinkingTrace = ''
+
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     if (signal.aborted) {
       throw new DOMException('Aborted', 'AbortError')
     }
 
-    const { rawText } = await callDeepSeekTurn({
+    const { rawText, rawThinking } = await callDeepSeekTurn({
       apiKey,
       systemPrompt: promptPayload.systemPrompt,
       messages: history,
@@ -159,6 +160,9 @@ export const requestAiMoveFromLlm = async <TState, TMove>({
       locale,
       onThinkingUpdate,
     })
+    if (rawThinking.trim()) {
+      latestThinkingTrace = rawThinking.trim()
+    }
 
     const parsed = extractJsonObject(rawText)
     if (!parsed) {
@@ -174,12 +178,16 @@ export const requestAiMoveFromLlm = async <TState, TMove>({
     const validation = plugin.parseAndValidateAiMove(state, parsed.move, locale)
     if (validation.valid) {
       const defaultThought =
-        locale === 'zh-CN' ? '落子已定，看你这一手如何应对。' : 'Move made. Your turn.'
+        locale === 'zh-CN'
+          ? '综合攻防后选择这一手。'
+          : 'Selected after weighing attack and defense.'
+      const defaultSpeech = locale === 'zh-CN' ? '轮到你了，请。' : 'Your move.'
       const thoughtSummary = cleanBubbleText(parsed.thoughtSummary, defaultThought)
-      const speech = cleanBubbleText(parsed.speech, thoughtSummary)
+      const speech = cleanBubbleText(parsed.speech, defaultSpeech)
       return {
         move: validation.move,
         thoughtSummary,
+        thinkingTrace: latestThinkingTrace || undefined,
         speech,
       }
     }
