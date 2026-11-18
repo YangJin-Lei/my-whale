@@ -1,12 +1,18 @@
 import { create } from 'zustand'
 import { openExternal } from './links.js'
+import { useSettings } from './settings.js'
 
 const DISMISSED_KEY = 'chat-demo:dismissed-update-version'
 export const RELEASES_PAGE_URL = 'https://github.com/YangJin-Lei/my-whale/releases'
 const RELEASES_API_URL = 'https://api.github.com/repos/YangJin-Lei/my-whale/releases/latest'
 const PAGES_VERSION_URL = 'https://yangjin-lei.github.io/my-whale/version.json'
+const FASTLY_JSDELIVR_PKG_URL =
+  'https://fastly.jsdelivr.net/gh/YangJin-Lei/my-whale@main/web/package.json'
+const GCORE_JSDELIVR_PKG_URL =
+  'https://gcore.jsdelivr.net/gh/YangJin-Lei/my-whale@main/web/package.json'
 const RAW_PACKAGE_URL =
   'https://raw.githubusercontent.com/YangJin-Lei/my-whale/main/web/package.json'
+const DEFAULT_MIRROR_FALLBACKS = ['https://ghfast.top/', 'https://gh-proxy.com/']
 
 const readCurrentVersion = (): string => {
   if (typeof document === 'undefined') {
@@ -171,28 +177,91 @@ const fetchJsonWithTimeout = async (url: string, headers?: Record<string, string
   }
 }
 
-const fetchLatestReleaseMeta = async (): Promise<LatestReleaseMeta | null> => {
-  const apiData = await fetchJsonWithTimeout(RELEASES_API_URL, {
-    Accept: 'application/vnd.github+json',
-  })
-  if (apiData && typeof apiData.tag_name === 'string' && apiData.tag_name.trim()) {
-    const tag = apiData.tag_name.trim()
-    const url =
-      typeof apiData.html_url === 'string' && apiData.html_url.startsWith('https://')
-        ? apiData.html_url
-        : RELEASES_PAGE_URL
-    return { tag, url, assets: extractReleaseAssets(tag, apiData.assets) }
+const normalizeMirrorPrefix = (raw: string): string | null => {
+  const trimmed = raw.trim()
+  if (!trimmed.startsWith('https://')) {
+    return null
   }
+  return trimmed.endsWith('/') ? trimmed : `${trimmed}/`
+}
 
-  // GitHub REST API 未鉴权每小时限流 60 次或被网络拦截时，回退到 GitHub Pages 静态版本清单
-  const pagesData = await fetchJsonWithTimeout(`${PAGES_VERSION_URL}?t=${Date.now()}`)
-  if (pagesData && typeof pagesData.tag_name === 'string' && pagesData.tag_name.trim()) {
-    const tag = pagesData.tag_name.trim()
-    const url =
-      typeof pagesData.url === 'string' && pagesData.url.startsWith('https://')
-        ? pagesData.url
-        : `${RELEASES_PAGE_URL}/latest`
-    return { tag, url, assets: buildDefaultAssets(tag) }
+const applyMirrorCandidates = (rawUrls: string[]): string[] => {
+  const { updateAccelerate, updateMirror } = useSettings.getState()
+  if (!updateAccelerate) {
+    return rawUrls
+  }
+  const mirrors = [
+    normalizeMirrorPrefix(updateMirror),
+    ...DEFAULT_MIRROR_FALLBACKS.map(normalizeMirrorPrefix),
+  ].filter((m, idx, arr): m is string => Boolean(m) && arr.indexOf(m) === idx)
+
+  const expanded: string[] = []
+  for (const raw of rawUrls) {
+    for (const mirror of mirrors) {
+      expanded.push(`${mirror}${raw}`)
+    }
+  }
+  for (const raw of rawUrls) {
+    expanded.push(raw)
+  }
+  return expanded
+}
+
+const fetchLatestReleaseMeta = async (): Promise<LatestReleaseMeta | null> => {
+  const results = await Promise.all([
+    fetchJsonWithTimeout(RELEASES_API_URL, { Accept: 'application/vnd.github+json' }).then(
+      (apiData): LatestReleaseMeta | null => {
+        if (apiData && typeof apiData.tag_name === 'string' && apiData.tag_name.trim()) {
+          const tag = apiData.tag_name.trim()
+          const url =
+            typeof apiData.html_url === 'string' && apiData.html_url.startsWith('https://')
+              ? apiData.html_url
+              : RELEASES_PAGE_URL
+          return { tag, url, assets: extractReleaseAssets(tag, apiData.assets) }
+        }
+        return null
+      }
+    ),
+    fetchJsonWithTimeout(`${PAGES_VERSION_URL}?t=${Date.now()}`).then(
+      (pagesData): LatestReleaseMeta | null => {
+        if (pagesData && typeof pagesData.tag_name === 'string' && pagesData.tag_name.trim()) {
+          const tag = pagesData.tag_name.trim()
+          const url =
+            typeof pagesData.url === 'string' && pagesData.url.startsWith('https://')
+              ? pagesData.url
+              : `${RELEASES_PAGE_URL}/latest`
+          return { tag, url, assets: buildDefaultAssets(tag) }
+        }
+        return null
+      }
+    ),
+    fetchJsonWithTimeout(FASTLY_JSDELIVR_PKG_URL).then((pkg): LatestReleaseMeta | null => {
+      if (pkg && typeof pkg.version === 'string' && pkg.version.trim()) {
+        const tag = `v${pkg.version.trim().replace(/^v/i, '')}`
+        return { tag, url: `${RELEASES_PAGE_URL}/latest`, assets: buildDefaultAssets(tag) }
+      }
+      return null
+    }),
+    fetchJsonWithTimeout(GCORE_JSDELIVR_PKG_URL).then((pkg): LatestReleaseMeta | null => {
+      if (pkg && typeof pkg.version === 'string' && pkg.version.trim()) {
+        const tag = `v${pkg.version.trim().replace(/^v/i, '')}`
+        return { tag, url: `${RELEASES_PAGE_URL}/latest`, assets: buildDefaultAssets(tag) }
+      }
+      return null
+    }),
+  ])
+
+  let best: LatestReleaseMeta | null = null
+  for (const item of results) {
+    if (!item) {
+      continue
+    }
+    if (!best || isNewerVersion(item.tag, best.tag)) {
+      best = item
+    }
+  }
+  if (best) {
+    return best
   }
 
   const rawPkg = await fetchJsonWithTimeout(`${RAW_PACKAGE_URL}?t=${Date.now()}`)
@@ -279,7 +348,12 @@ export const startInAppUpdate = async (): Promise<void> => {
   })
 
   try {
-    const assets = state.releaseAssets ?? buildDefaultAssets(tag)
+    const baseAssets = state.releaseAssets ?? buildDefaultAssets(tag)
+    const assets: ReleaseAssets = {
+      androidUrls: applyMirrorCandidates(baseAssets.androidUrls),
+      windowsUrls: applyMirrorCandidates(baseAssets.windowsUrls),
+      macosUrls: applyMirrorCandidates(baseAssets.macosUrls),
+    }
     const outcome = await registeredUpdater.downloadAndInstall({ tag, assets }, (progress) => {
       if (useUpdateStore.getState().downloadStatus === 'downloading') {
         useUpdateStore.setState({ downloadProgress: progress })

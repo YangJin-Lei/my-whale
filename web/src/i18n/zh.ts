@@ -196,6 +196,8 @@ export const zh = {
   settingsCheckingUpdate: '检查中...',
   settingsGoUpdate: '前往更新 ↗',
   settingsUpdateNow: '立即更新',
+  settingsUpdateAccelerate: '更新加速',
+  settingsUpdateMirror: '加速镜像',
   settingsDownloading: '下载中...',
   settingsDownloadingProgress: '下载中 {percent}%',
   settingsDownloadingPercent: '下载 {percent}%',

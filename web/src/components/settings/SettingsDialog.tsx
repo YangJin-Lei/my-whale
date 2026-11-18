@@ -36,6 +36,8 @@ import {
   setLocation,
   setThemePreference,
   setTtsVoice,
+  setUpdateAccelerate,
+  setUpdateMirror,
   setVoiceEnabled,
   useSettings,
   type ThemePreference,
@@ -133,6 +135,7 @@ const SettingsContent = () => {
               <VoiceModeSetting />
               <LocationSetting />
               <UpdateSetting />
+              <UpdateAccelerateSetting />
               <AppNotice />
             </>
           ) : section === 'pet' ? (
@@ -413,6 +416,45 @@ const UpdateSetting = () => {
         )
       }
     />
+  )
+}
+
+const UpdateAccelerateSetting = () => {
+  const t = useTranslate()
+  const updateAccelerate = useSettings((state) => state.updateAccelerate)
+  const updateMirror = useSettings((state) => state.updateMirror)
+
+  return (
+    <>
+      <SettingCell
+        label={t('settingsUpdateAccelerate')}
+        status={null}
+        action={
+          <input
+            type="checkbox"
+            aria-label={t('settingsUpdateAccelerate')}
+            checked={updateAccelerate}
+            onChange={(event) => setUpdateAccelerate(event.target.checked)}
+          />
+        }
+      />
+      {updateAccelerate ? (
+        <SettingCell
+          label={t('settingsUpdateMirror')}
+          status={null}
+          action={
+            <input
+              type="url"
+              aria-label={t('settingsUpdateMirror')}
+              className={styles.mirrorInput}
+              value={updateMirror}
+              placeholder="https://ghfast.top/"
+              onChange={(event) => setUpdateMirror(event.target.value)}
+            />
+          }
+        />
+      ) : null}
+    </>
   )
 }
 

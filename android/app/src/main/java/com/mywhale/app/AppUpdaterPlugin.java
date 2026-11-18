@@ -27,6 +27,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @CapacitorPlugin(name = "AppUpdater")
 public class AppUpdaterPlugin extends Plugin {
     private static final String ALLOWED_PREFIX = "https://github.com/YangJin-Lei/my-whale/";
+    private static final String ALLOWED_RELEASE_PATH =
+        "https://github.com/YangJin-Lei/my-whale/releases/download/";
     private static final String APK_MIME = "application/vnd.android.package-archive";
     private static final int MAX_REDIRECTS = 6;
     private static final long MIN_VALID_APK_BYTES = 500_000L;
@@ -34,6 +36,23 @@ public class AppUpdaterPlugin extends Plugin {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final AtomicBoolean downloading = new AtomicBoolean(false);
     private volatile File pendingApkFile;
+
+    private boolean isAllowedReleaseUrl(String raw) {
+        if (raw == null || raw.isEmpty()) {
+            return false;
+        }
+        String url = raw.trim();
+        if (!url.startsWith("https://") || url.contains("?") || url.contains(" ")) {
+            return false;
+        }
+        if (url.startsWith(ALLOWED_PREFIX)) {
+            return url.endsWith(".apk");
+        }
+        int idx = url.indexOf(ALLOWED_RELEASE_PATH);
+        return idx > "https://".length()
+            && url.charAt(idx - 1) == '/'
+            && url.endsWith(".apk");
+    }
 
     @PluginMethod
     public void downloadAndInstall(PluginCall call) {
@@ -47,13 +66,13 @@ public class AppUpdaterPlugin extends Plugin {
         if (urlArray != null) {
             for (int i = 0; i < urlArray.length(); i++) {
                 String item = urlArray.optString(i, "").trim();
-                if (item.startsWith(ALLOWED_PREFIX)) {
+                if (isAllowedReleaseUrl(item)) {
                     candidates.add(item);
                 }
             }
         }
         String singleUrl = call.getString("url");
-        if (candidates.isEmpty() && singleUrl != null && singleUrl.trim().startsWith(ALLOWED_PREFIX)) {
+        if (candidates.isEmpty() && isAllowedReleaseUrl(singleUrl)) {
             candidates.add(singleUrl.trim());
         }
 
@@ -132,8 +151,8 @@ public class AppUpdaterPlugin extends Plugin {
                 URL parsed = new URL(currentUrl);
                 conn = (HttpURLConnection) parsed.openConnection();
                 conn.setInstanceFollowRedirects(false);
-                conn.setConnectTimeout(12_000);
-                conn.setReadTimeout(30_000);
+                conn.setConnectTimeout(8_000);
+                conn.setReadTimeout(25_000);
                 conn.setRequestProperty("User-Agent", "my-whale-android-updater");
 
                 int code = conn.getResponseCode();

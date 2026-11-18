@@ -25,6 +25,8 @@ type Settings = {
   defaultPersonaId: string
   petEnabled: boolean
   activePetId: string
+  updateAccelerate: boolean
+  updateMirror: string
 }
 
 const KEYS = {
@@ -44,6 +46,8 @@ const KEYS = {
   defaultPersonaId: 'chat-demo:default-persona-id',
   petEnabled: 'chat-demo:pet-enabled',
   activePetId: 'chat-demo:active-pet-id',
+  updateAccelerate: 'chat-demo:update-accelerate',
+  updateMirror: 'chat-demo:update-mirror',
 } as const
 
 const read = (key: string) => {
@@ -120,6 +124,11 @@ export const useSettings = create<Settings>(() => ({
   defaultPersonaId: read(KEYS.defaultPersonaId) || 'builtin-default',
   petEnabled: read(KEYS.petEnabled) !== 'false',
   activePetId: read(KEYS.activePetId) || 'nailong',
+  updateAccelerate:
+    read(KEYS.updateAccelerate) !== null
+      ? read(KEYS.updateAccelerate) === 'true'
+      : isChineseBrowser(),
+  updateMirror: read(KEYS.updateMirror) || 'https://ghfast.top/',
 }))
 
 export const setLocale = (locale: Locale) => {
@@ -201,4 +210,15 @@ export const setPetEnabled = (petEnabled: boolean) => {
 export const setActivePetId = (activePetId: string) => {
   write(KEYS.activePetId, activePetId || 'nailong')
   useSettings.setState({ activePetId: activePetId || 'nailong' })
+}
+
+export const setUpdateAccelerate = (updateAccelerate: boolean) => {
+  write(KEYS.updateAccelerate, String(updateAccelerate))
+  useSettings.setState({ updateAccelerate })
+}
+
+export const setUpdateMirror = (updateMirror: string) => {
+  const cleaned = updateMirror.trim()
+  write(KEYS.updateMirror, cleaned || null)
+  useSettings.setState({ updateMirror: cleaned || 'https://ghfast.top/' })
 }

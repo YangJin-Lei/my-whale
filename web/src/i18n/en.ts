@@ -207,6 +207,8 @@ export const en = {
   settingsCheckingUpdate: 'Checking...',
   settingsGoUpdate: 'Update ↗',
   settingsUpdateNow: 'Update Now',
+  settingsUpdateAccelerate: 'Update Mirror',
+  settingsUpdateMirror: 'Mirror URL',
   settingsDownloading: 'Downloading...',
   settingsDownloadingProgress: 'Downloading {percent}%',
   settingsDownloadingPercent: '{percent}%',

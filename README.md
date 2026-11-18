@@ -160,7 +160,7 @@ Windows 安装包输出在 `desktop/src-tauri/target/release/bundle/`（包含 `
 ### 4. GitHub Pages 与多端自动发版
 - **GitHub Pages（Web / iOS PWA）**：在仓库 **Settings → Pages → Build and deployment → Source** 选择 **GitHub Actions**，推送 `main` 后会自动部署官网引导页（`/`）与 PWA 应用（`/app/`）。
 - **GitHub Releases 自动打包**：推送 `v*` 标签（如 `git tag v0.1.0 && git push origin v0.1.0`）即可自动构建 Android APK 与 Windows / macOS 桌面端安装包并发布到 Releases。
-- **应用内自更新与多端更新检测**：客户端启动及 `设置 → 通用设置 → 应用版本` 会结合 GitHub Releases API 与 GitHub Pages 静态版本清单检测新版；桌面端（Tauri）与 Android 端（Capacitor）支持应用内直接下载新版安装包并拉起系统覆盖安装，Web 端跳转 Releases。
+- **应用内自更新与国内多源加速**：客户端启动及 `设置 → 通用设置 → 应用版本` 会并行检测 GitHub Releases API、GitHub Pages 版本清单与 jsDelivr CDN（`fastly`/`gcore`），并在开启「更新加速」时优先通过可配置的「加速镜像」（默认 `https://ghfast.top/`，失败自动回退直连 GitHub）在应用内下载安装包并覆盖更新。
 
 ### 5. 更新与数据保留（防止覆盖/重装丢数据）
 - **保留原数据规则**：Web / iOS PWA、Tauri 桌面端及 Android 同签名 APK 在**直接覆盖安装更新**时，本地 IndexedDB（对话、人设、记忆）与 `localStorage`（API Key、设置）会完整保留；**切勿先卸载再重装**，卸载会清空系统沙盒内的全部本地数据。

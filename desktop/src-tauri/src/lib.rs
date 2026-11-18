@@ -8,7 +8,26 @@ use serde::Serialize;
 use tauri_plugin_opener::OpenerExt;
 
 const ALLOWED_URL_PREFIX: &str = "https://github.com/YangJin-Lei/my-whale/";
+const ALLOWED_RELEASE_PATH: &str = "https://github.com/YangJin-Lei/my-whale/releases/download/";
 const MIN_VALID_INSTALLER_BYTES: u64 = 500_000;
+
+fn is_allowed_release_url(raw: &str) -> bool {
+    let url = raw.trim();
+    if !url.starts_with("https://") || url.contains('?') || url.contains(' ') {
+        return false;
+    }
+    let valid_ext = url.ends_with(".exe") || url.ends_with(".msi") || url.ends_with(".dmg");
+    if !valid_ext {
+        return false;
+    }
+    if url.starts_with(ALLOWED_URL_PREFIX) {
+        return true;
+    }
+    if let Some(idx) = url.find(ALLOWED_RELEASE_PATH) {
+        return idx > "https://".len() && url.as_bytes().get(idx - 1) == Some(&b'/');
+    }
+    false
+}
 
 #[derive(Clone, Serialize, Default)]
 struct UpdateProgressState {
@@ -133,7 +152,7 @@ async fn download_and_install_update(
     let candidates: Vec<String> = urls
         .into_iter()
         .map(|u| u.trim().to_string())
-        .filter(|u| u.starts_with(ALLOWED_URL_PREFIX))
+        .filter(|u| is_allowed_release_url(u))
         .collect();
     if candidates.is_empty() {
         return Err("No valid release URL provided".to_string());
