@@ -79,12 +79,6 @@
   }
 }
 
-.headerBtnActive {
-  border-color: var(--dsw-alias-brand-primary);
-  color: var(--dsw-alias-brand-primary);
-  background: rgba(77, 107, 254, 0.08);
-}
-
 .replyBox {
   display: flex;
   align-items: flex-start;
@@ -104,24 +98,6 @@
 .replyContent {
   flex: 1;
   min-width: 0;
-}
-
-.replayBtn {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
-
-  &:hover {
-    color: var(--dsw-alias-brand-primary);
-  }
 }
 
 .inputRow {

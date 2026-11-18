@@ -183,7 +183,6 @@ export const zh = {
   settingsPet: '桌宠',
   petName: '奶蛙',
   petInputPlaceholder: '说点什么',
-  petVoice: '语音',
   petThinking: '思考中',
   petListening: '聆听中',
   petError: '请稍后重试',

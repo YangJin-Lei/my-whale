@@ -7,7 +7,6 @@ import { findPersona, usePersonaStore } from '../services/persona/store.js'
 import { useSettings } from '../services/settings.js'
 import { findPetById } from './catalog.js'
 import type { NaiwaMood } from './NaiwaSprite.js'
-import { speakPetLine, stopPetVoice, unlockPetAudio } from './petVoice.js'
 
 type PetTurn = {
   role: 'user' | 'assistant'
@@ -19,7 +18,6 @@ type PetStoreState = {
   mood: NaiwaMood
   replyText: string
   streaming: boolean
-  voiceReplyOn: boolean
   errorText: string | null
   turns: PetTurn[]
 }
@@ -39,7 +37,6 @@ export const usePetStore = create<PetStoreState>(() => ({
   mood: 'wave',
   replyText: '',
   streaming: false,
-  voiceReplyOn: true,
   errorText: null,
   turns: [],
 }))
@@ -66,30 +63,12 @@ export const closePetPanel = () => {
   }))
 }
 
-export const togglePetVoice = () => {
-  unlockPetAudio()
-  const next = !usePetStore.getState().voiceReplyOn
-  if (!next) {
-    stopPetVoice()
-  }
-  usePetStore.setState({ voiceReplyOn: next })
-}
-
-export const replayPetReply = () => {
-  unlockPetAudio()
-  const text = usePetStore.getState().replyText
-  if (text) {
-    speakPetLine(text)
-  }
-}
-
 export const stopPetSession = () => {
   clearMoodReset()
   if (activeController) {
     activeController.abort()
     activeController = null
   }
-  stopPetVoice()
   usePetStore.setState({ streaming: false, mood: 'idle' })
 }
 
@@ -123,7 +102,7 @@ const resolvePetSystemPrompt = (): string => {
   return parts.filter(Boolean).join('\n\n')
 }
 
-export const sendPetQuery = async (rawText: string, forceSpeak = false): Promise<void> => {
+export const sendPetQuery = async (rawText: string): Promise<void> => {
   const query = rawText.trim()
   if (!query) {
     return
@@ -132,7 +111,6 @@ export const sendPetQuery = async (rawText: string, forceSpeak = false): Promise
     return
   }
 
-  unlockPetAudio()
   clearMoodReset()
   if (activeController) {
     activeController.abort()
@@ -199,10 +177,6 @@ export const sendPetQuery = async (rawText: string, forceSpeak = false): Promise
         ? [...prev.turns, { role: 'assistant' as const, text: finalText }].slice(-8)
         : prev.turns,
     }))
-
-    if (finalText && (usePetStore.getState().voiceReplyOn || forceSpeak)) {
-      speakPetLine(finalText)
-    }
 
     moodResetTimer = window.setTimeout(() => {
       usePetStore.setState((prev) =>

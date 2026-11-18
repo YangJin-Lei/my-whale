@@ -5,7 +5,6 @@ import {
   IconCloseOutline16,
   IconMicFill16,
   IconMicOutline16,
-  IconPlayMediaOutline16,
   IconSendOutline16,
 } from '../components/base/icons.js'
 import { useVoiceInput } from '../components/chatInput/useVoiceInput.js'
@@ -16,12 +15,10 @@ import { PetSprite } from './PetSprite.js'
 import styles from './PetOverlay.module.css'
 import {
   closePetPanel,
-  replayPetReply,
   sendPetQuery,
   setPetMood,
   stopPetSession,
   togglePetPanel,
-  togglePetVoice,
   usePetStore,
 } from './store.js'
 
@@ -76,7 +73,6 @@ export const PetOverlay = () => {
   const mood = usePetStore((state) => state.mood)
   const replyText = usePetStore((state) => state.replyText)
   const streaming = usePetStore((state) => state.streaming)
-  const voiceReplyOn = usePetStore((state) => state.voiceReplyOn)
   const errorText = usePetStore((state) => state.errorText)
 
   const petWidth = isMobile ? 68 : 76
@@ -95,7 +91,7 @@ export const PetOverlay = () => {
   } | null>(null)
 
   const voice = useVoiceInput((text) => {
-    void sendPetQuery(text, true)
+    void sendPetQuery(text)
   })
 
   // 打开应用或切换桌宠角色时招手打招呼后进入待机
@@ -142,7 +138,7 @@ export const PetOverlay = () => {
       return
     }
     setInputText('')
-    void sendPetQuery(value, false)
+    void sendPetQuery(value)
   }
 
   const bubbleContent = errorText
@@ -177,14 +173,6 @@ export const PetOverlay = () => {
             <span className={styles.panelTitle}>{petTitle}</span>
             <button
               type="button"
-              className={clsx(styles.headerBtn, voiceReplyOn && styles.headerBtnActive)}
-              onClick={togglePetVoice}
-            >
-              <IconPlayMediaOutline16 />
-              <span>{t('petVoice')}</span>
-            </button>
-            <button
-              type="button"
               className={styles.headerBtn}
               aria-label={t('close')}
               onClick={closePetPanel}
@@ -196,16 +184,6 @@ export const PetOverlay = () => {
           {bubbleContent ? (
             <div className={styles.replyBox}>
               <div className={styles.replyContent}>{bubbleContent}</div>
-              {replyText && !streaming ? (
-                <button
-                  type="button"
-                  className={styles.replayBtn}
-                  aria-label={t('petVoice')}
-                  onClick={replayPetReply}
-                >
-                  <IconPlayMediaOutline16 />
-                </button>
-              ) : null}
             </div>
           ) : null}
 

@@ -192,7 +192,6 @@ export const en = {
   settingsPet: 'Desktop Pet',
   petName: 'Naiwa',
   petInputPlaceholder: 'Say something',
-  petVoice: 'Voice',
   petThinking: 'Thinking',
   petListening: 'Listening',
   petError: 'Retry later',
