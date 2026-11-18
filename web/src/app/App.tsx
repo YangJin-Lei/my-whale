@@ -11,6 +11,8 @@ import {
 } from '../services/chat/store.js'
 import { SearchPanel } from '../components/search/SearchPanel.js'
 import { closeSearchPanel } from '../components/search/searchPanelState.js'
+import { GameDrawer } from '../game/GameDrawer.js'
+import { useGameStore } from '../game/store.js'
 import { SessionView } from '../components/session/SessionView.js'
 import { MobileHeader } from '../components/session/MobileHeader.js'
 import { Welcome } from '../components/session/Welcome.js'
@@ -53,6 +55,7 @@ export const App = () => {
     state.activeId === null ? false : Object.hasOwn(state.streaming, state.activeId)
   )
   const activeId = useChatStore((state) => state.activeId)
+  const gameDrawerOpen = useGameStore((state) => state.drawerOpen)
 
   usePreventPageScroll(isMobile)
 
@@ -67,6 +70,11 @@ export const App = () => {
 
   // 搜索结果面板只属于当前会话
   useEffect(closeSearchPanel, [activeId])
+  useEffect(() => {
+    if (gameDrawerOpen) {
+      closeSearchPanel()
+    }
+  }, [gameDrawerOpen])
   // 切换会话时停止朗读
   useEffect(stopReadAloud, [activeId])
   // 移动端选中会话、切换布局后收起抽屉
@@ -137,6 +145,7 @@ export const App = () => {
           </div>
         </main>
         <SearchPanel />
+        <GameDrawer />
       </div>
       <Onboarding />
       <SettingsDialog />

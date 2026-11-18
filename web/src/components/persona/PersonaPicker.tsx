@@ -6,7 +6,8 @@ import { DEFAULT_PERSONA_ID } from '../../services/persona/builtin.js'
 import { findPersona, getAllPersonas, usePersonaStore } from '../../services/persona/store.js'
 import type { Persona } from '../../services/persona/types.js'
 import { useSettings } from '../../services/settings.js'
-import { IconIncognitoOutline16 } from '../base/icons.js'
+import { openGameDrawer } from '../../game/store.js'
+import { IconGamepadOutline16, IconIncognitoOutline16 } from '../base/icons.js'
 import { PersonaAvatar } from './PersonaAvatar.js'
 import { PersonaEditor } from './PersonaEditor.js'
 import styles from './Persona.module.css'
@@ -69,6 +70,15 @@ export const PersonaPicker = () => {
         >
           <IconIncognitoOutline16 />
           <span>{t('personaIncognito')}</span>
+        </button>
+        <button
+          type="button"
+          className={styles.pickerCard}
+          title={t('gameDrawerTitle')}
+          onClick={openGameDrawer}
+        >
+          <IconGamepadOutline16 />
+          <span>{t('miniGames')}</span>
         </button>
       </div>
 

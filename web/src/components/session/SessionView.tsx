@@ -3,6 +3,8 @@ import { useIsMobile } from '../../app/viewport.js'
 import { useTranslate } from '../../i18n/index.js'
 import type { Session } from '../../services/chat/types.js'
 import { ChatInput } from '../chatInput/ChatInput.js'
+import { IconGamepadOutline16 } from '../base/icons.js'
+import { openGameDrawer } from '../../game/store.js'
 import { MessageList } from '../messages/MessageList.js'
 import { SessionPersonaMenu } from '../persona/SessionPersonaMenu.js'
 import { MobileHeader } from './MobileHeader.js'
@@ -36,6 +38,10 @@ export const SessionView = ({
             {title}
           </div>
           <SessionPersonaMenu session={session} streaming={streaming} />
+          <button type="button" className={styles.gameBtn} onClick={openGameDrawer}>
+            <IconGamepadOutline16 />
+            <span>{t('miniGames')}</span>
+          </button>
         </div>
       )}
       <MessageList

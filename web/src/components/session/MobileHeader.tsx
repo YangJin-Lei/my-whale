@@ -1,5 +1,6 @@
-import { IconMenuOutline20, IconNewChatOutline20 } from '../base/icons.js'
+import { IconGamepadOutline16, IconMenuOutline20, IconNewChatOutline20 } from '../base/icons.js'
 import { useTranslate } from '../../i18n/index.js'
+import { openGameDrawer } from '../../game/store.js'
 import { newChat } from '../../services/chat/store.js'
 import { BalanceBadge } from '../balance/BalanceBadge.js'
 import { IconButton } from '../base/IconButton.js'
@@ -24,6 +25,13 @@ export const MobileHeader = ({ title }: { title?: string }) => {
         <div className={styles.title}>{title}</div>
       )}
       <BalanceBadge variant="header" />
+      <IconButton
+        size="xl"
+        tone="primary"
+        icon={<IconGamepadOutline16 />}
+        aria-label={t('miniGames')}
+        onClick={openGameDrawer}
+      />
       {title === undefined ? null : (
         <IconButton
           size="xl"

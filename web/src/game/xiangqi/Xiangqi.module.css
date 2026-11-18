@@ -1,0 +1,170 @@
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  perspective: 960px;
+  padding: 2px 0 8px;
+}
+
+.boardSlab {
+  position: relative;
+  width: min(100%, 384px);
+  aspect-ratio: 9 / 10;
+  padding: 12px 10px;
+  box-sizing: border-box;
+  border-radius: 14px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(128, 78, 30, 0.045) 0px,
+      rgba(128, 78, 30, 0.045) 2px,
+      transparent 2px,
+      transparent 11px
+    ),
+    linear-gradient(155deg, #f3d5a5 0%, #e0b372 52%, #cc9753 100%);
+  border: 1px solid rgba(124, 78, 28, 0.52);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 248, 232, 0.7),
+    0 9px 0 #a26e37,
+    0 18px 28px rgba(32, 20, 6, 0.25);
+  transform: rotateX(14deg);
+  transform-style: preserve-3d;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.svgLines {
+  position: absolute;
+  inset: 12px 10px;
+  width: calc(100% - 20px);
+  height: calc(100% - 24px);
+  pointer-events: none;
+}
+
+.riverText {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  justify-content: space-around;
+  padding: 0 10%;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  color: rgba(88, 52, 20, 0.65);
+  pointer-events: none;
+}
+
+.grid {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  grid-template-rows: repeat(10, 1fr);
+}
+
+.cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+
+  &:disabled {
+    cursor: default;
+  }
+}
+
+.piece {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 84%;
+  height: 84%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 28%, #fff8eb 0%, #f1dec0 65%, #d6b687 100%);
+  border: 1.5px solid #9b6b38;
+  box-shadow:
+    0 3px 0 #8f6030,
+    0 4px 6px rgba(24, 14, 4, 0.34),
+    inset 0 0 0 2px rgba(255, 250, 240, 0.72);
+  font-size: clamp(14px, 3.8vw, 19px);
+  font-weight: 800;
+  line-height: 1;
+  transition:
+    transform 0.14s ease,
+    box-shadow 0.14s ease;
+  pointer-events: none;
+}
+
+.pieceRed {
+  color: #b71f1f;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.pieceBlack {
+  color: #1f242c;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.pieceSelected {
+  transform: translateY(-4px) scale(1.06);
+  box-shadow:
+    0 0 0 2px #4c86ff,
+    0 6px 0 #8f6030,
+    0 10px 14px rgba(24, 14, 4, 0.36);
+}
+
+.pieceLast {
+  box-shadow:
+    0 0 0 2px #f2a93b,
+    0 3px 0 #8f6030,
+    0 4px 6px rgba(24, 14, 4, 0.34);
+}
+
+.originRing {
+  position: absolute;
+  width: 44%;
+  height: 44%;
+  border-radius: 50%;
+  border: 2px dashed rgba(242, 169, 59, 0.85);
+  pointer-events: none;
+}
+
+.legalDot {
+  position: relative;
+  z-index: 4;
+  width: 32%;
+  height: 32%;
+  border-radius: 50%;
+  background: rgba(65, 132, 255, 0.72);
+  box-shadow: 0 0 0 3px rgba(65, 132, 255, 0.18);
+  pointer-events: none;
+}
+
+.captureRing {
+  position: absolute;
+  inset: 4%;
+  border-radius: 50%;
+  border: 2.5px solid rgba(226, 61, 51, 0.85);
+  box-shadow: 0 0 8px rgba(226, 61, 51, 0.35);
+  pointer-events: none;
+  z-index: 4;
+}
+
+@media not all and (min-width: 768px) {
+  .boardSlab {
+    transform: rotateX(9deg);
+  }
+}

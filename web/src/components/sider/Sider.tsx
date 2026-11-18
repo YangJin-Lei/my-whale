@@ -2,7 +2,13 @@ import clsx from 'clsx'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import logoUrl from '../../assets/logo.png'
-import { IconPanelLeftOutline16, IconSettingsOutline16, NewChatIcon } from '../base/icons.js'
+import {
+  IconGamepadOutline16,
+  IconPanelLeftOutline16,
+  IconSettingsOutline16,
+  NewChatIcon,
+} from '../base/icons.js'
+import { openGameDrawer } from '../../game/store.js'
 import { setSiderCollapsed } from '../../services/settings.js'
 import { openExternal } from '../../services/links.js'
 import { dismissUpdateBanner, useUpdateStore } from '../../services/update.js'
@@ -125,6 +131,19 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
           </div>
         ) : null}
         <BalanceBadge variant="sider" />
+        <button
+          type="button"
+          className={styles.settings}
+          onClick={() => {
+            closeMobileSider()
+            openGameDrawer()
+          }}
+        >
+          <span className={styles.settingsIcon}>
+            <IconGamepadOutline16 />
+          </span>
+          <span className={styles.settingsLabel}>{t('miniGames')}</span>
+        </button>
         <button type="button" className={styles.settings} onClick={() => openSettings('general')}>
           <span className={styles.settingsIcon}>
             <IconSettingsOutline16 />

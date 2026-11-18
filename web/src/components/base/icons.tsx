@@ -633,3 +633,22 @@ export const IconImageOutline16 = () => (
     />
   </svg>
 )
+
+export const IconGamepadOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M4.3 4.5H11.7C13.2 4.5 14.3 5.7 14.4 7.2L14.7 10.6C14.8 11.9 13.7 12.9 12.5 12.7C11.7 12.5 11.1 12 10.6 11.3L10.1 10.6H5.9L5.4 11.3C4.9 12 4.3 12.5 3.5 12.7C2.3 12.9 1.2 11.9 1.3 10.6L1.6 7.2C1.7 5.7 2.8 4.5 4.3 4.5Z"
+      stroke="currentColor"
+      strokeWidth="1.35"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M5.2 6.5V8.9M4 7.7H6.4"
+      stroke="currentColor"
+      strokeWidth="1.35"
+      strokeLinecap="round"
+    />
+    <circle cx="10.4" cy="7.2" r="0.8" fill="currentColor" />
+    <circle cx="11.9" cy="8.4" r="0.8" fill="currentColor" />
+  </svg>
+)
