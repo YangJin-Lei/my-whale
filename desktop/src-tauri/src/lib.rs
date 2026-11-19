@@ -7,6 +7,8 @@ use std::time::Duration;
 use serde::Serialize;
 use tauri_plugin_opener::OpenerExt;
 
+mod local_cache;
+
 const ALLOWED_URL_PREFIX: &str = "https://github.com/YangJin-Lei/my-whale/";
 const ALLOWED_RELEASE_PATH: &str = "https://github.com/YangJin-Lei/my-whale/releases/download/";
 const MIN_VALID_INSTALLER_BYTES: u64 = 500_000;
@@ -242,12 +244,16 @@ async fn download_and_install_update(
 pub fn run() {
     tauri::Builder::default()
         .manage(UpdateProgressHolder(Mutex::new(UpdateProgressState::default())))
+        .manage(local_cache::CacheServerHolder::default())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             open_external_url,
             get_desktop_target,
             get_update_progress,
-            download_and_install_update
+            download_and_install_update,
+            local_cache::start_cache_server,
+            local_cache::stop_cache_server,
+            local_cache::get_cache_server_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running my-whale desktop application");

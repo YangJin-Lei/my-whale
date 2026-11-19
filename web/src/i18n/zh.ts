@@ -422,9 +422,24 @@ export const zh = {
   settingsChatBgClear: '清除',
   settingsChatBgInvalid: '图片加载失败，请更换其他图片',
   settingsDeepSeekExport: 'DeepSeek 数据导出',
+  settingsDeepSeekExportGuide:
+    '打开->头像->数据管理->导出历史对话->重新导出->复制下载链接->打开浏览器粘贴回车',
   settingsOpenDeepSeek: '打开 DeepSeek',
+  settingsCacheMode: '缓存模式',
+  settingsCacheStart: '启动后端',
+  settingsCacheStop: '停止后端',
+  settingsCacheStarting: '启动中...',
+  settingsCacheRunning: '已运行',
+  settingsCacheStopped: '未运行',
+  settingsCacheUrl: '后端地址',
+  settingsCacheClear: '清空缓存',
+  settingsCacheCleared: '缓存已清空',
+  settingsCacheStats: '搜索 {search} · 抓取 {fetch} · 命中 {hits}',
+  settingsCacheConnectFailed: '未检测到缓存后端，请先启动后端',
   settingsNoticeItem5:
     '注意事项：玩小游戏会高频调用 API（尤其在斗地主、狼人杀或开启深度思考时），消耗的 API 费用比普通对话更多，请留意账户余额。',
+  settingsNoticeItem6:
+    '注意事项：开启「缓存模式」后，搜索与抓取优先使用内置缓存后端，同时固定历史前缀以提高 API 前缀缓存命中率；关闭即恢复默认直连官方 API。',
   gameCostNotice:
     '注意事项：玩小游戏会高频调用 API（尤其是斗地主、狼人杀或开启深度思考时），消耗的 API 费用比普通对话更多，请留意余额。',
   drawGuessCopyPrompt: '复制提示词',

@@ -6,6 +6,10 @@ import { closeSearchPanel, useSearchPanel } from '../components/search/searchPan
 import { closeSettings, useSettingsDialog } from '../components/settings/settingsDialogState.js'
 import { closeMobileSider, useMobileSider } from '../components/sider/mobileSiderState.js'
 import { refreshBalance } from '../services/balance.js'
+import {
+  setNativeCacheController,
+  startNativeOrProbeCacheBackend,
+} from '../services/cacheBackend.js'
 import { newChat, useChatStore } from '../services/chat/store.js'
 import { extractApiKey, setClipboardReader, setClipboardWriter } from '../services/clipboard.js'
 import {
@@ -54,9 +58,31 @@ type AppUpdaterNativePlugin = {
 
 const AppUpdater = registerPlugin<AppUpdaterNativePlugin>('AppUpdater')
 
+type CacheBackendNativePlugin = {
+  start: (options?: { port?: number }) => Promise<{ running: boolean; url?: string }>
+  stop: () => Promise<{ running: boolean }>
+  status: () => Promise<{ running: boolean }>
+}
+
+const CacheBackend = registerPlugin<CacheBackendNativePlugin>('CacheBackend')
+
 export const setupNative = () => {
   const tauri = (window as Window & { __TAURI_INTERNALS__?: TauriInternals }).__TAURI_INTERNALS__
   if (tauri?.invoke) {
+    const invoke = tauri.invoke
+    setNativeCacheController({
+      start: async (port) => {
+        const res = await invoke<{ running: boolean; url?: string }>('start_cache_server', { port })
+        return res
+      },
+      stop: async () => {
+        await invoke('stop_cache_server')
+      },
+      status: async () => invoke<{ running: boolean }>('get_cache_server_status'),
+    })
+    if (useSettings.getState().cacheModeEnabled) {
+      void startNativeOrProbeCacheBackend()
+    }
     setOpenExternal((url) => {
       void tauri.invoke?.('open_external_url', { url }).catch(() => {
         window.open(url, '_blank', 'noopener,noreferrer')
@@ -64,7 +90,6 @@ export const setupNative = () => {
     })
     registerInAppUpdater({
       downloadAndInstall: async ({ tag, assets }, onProgress) => {
-        const invoke = tauri.invoke
         if (!invoke) {
           throw new Error('Tauri bridge unavailable')
         }
@@ -99,6 +124,16 @@ export const setupNative = () => {
   }
 
   if (Capacitor.getPlatform() === 'android') {
+    setNativeCacheController({
+      start: (port) => CacheBackend.start({ port }),
+      stop: async () => {
+        await CacheBackend.stop()
+      },
+      status: () => CacheBackend.status(),
+    })
+    if (useSettings.getState().cacheModeEnabled) {
+      void startNativeOrProbeCacheBackend()
+    }
     registerInAppUpdater({
       downloadAndInstall: async ({ assets }, onProgress) => {
         const handle = await AppUpdater.addListener('downloadProgress', (payload) => {

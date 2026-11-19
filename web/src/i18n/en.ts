@@ -443,9 +443,24 @@ export const en = {
   settingsChatBgClear: 'Clear',
   settingsChatBgInvalid: 'Failed to load image, try another picture',
   settingsDeepSeekExport: 'DeepSeek Data Export',
+  settingsDeepSeekExportGuide:
+    'Open -> Avatar -> Data Management -> Export History -> Re-export -> Copy link -> Paste in browser',
   settingsOpenDeepSeek: 'Open DeepSeek',
+  settingsCacheMode: 'Cache mode',
+  settingsCacheStart: 'Start backend',
+  settingsCacheStop: 'Stop backend',
+  settingsCacheStarting: 'Starting...',
+  settingsCacheRunning: 'Running',
+  settingsCacheStopped: 'Stopped',
+  settingsCacheUrl: 'Backend URL',
+  settingsCacheClear: 'Clear cache',
+  settingsCacheCleared: 'Cache cleared',
+  settingsCacheStats: 'Search {search} · Fetch {fetch} · Hits {hits}',
+  settingsCacheConnectFailed: 'Cache backend unreachable. Start the backend first.',
   settingsNoticeItem5:
     'Notice: Playing mini-games invokes the API frequently (especially in Dou Dizhu, Werewolf, or DeepThink mode) and consumes more API credits than regular chat.',
+  settingsNoticeItem6:
+    'Notice: When Cache Mode is on, search & fetch run via the built-in cached backend and preserve prompt prefixes to lower API costs; off uses default direct DeepSeek API.',
   gameCostNotice:
     'Notice: Mini-games invoke DeepSeek API frequently and consume more API credits than normal chat.',
   drawGuessCopyPrompt: 'Copy prompt',

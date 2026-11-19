@@ -1496,7 +1496,8 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           prepared.question,
           prepared.prefix,
           initial.thinking ?? false,
-          latestReminder
+          latestReminder,
+          useSettings.getState().cacheModeEnabled
         )
         const systemPrompt = resolveSessionSystemPrompt(sessionId, prepared.question.content)
         const events = streamMessage(

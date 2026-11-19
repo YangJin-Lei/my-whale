@@ -2316,7 +2316,7 @@ dependencies = [
 
 [[package]]
 name = "my-whale"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "reqwest",
  "serde",

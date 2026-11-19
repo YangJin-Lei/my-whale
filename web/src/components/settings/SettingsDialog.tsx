@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { Capacitor } from '@capacitor/core'
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   IconDarkOutline16,
   IconDataOutline16,
@@ -25,6 +25,14 @@ import { useChatStore } from '../../services/chat/store.js'
 import { regionCodes, getRegionName, provinces } from '../../services/location.js'
 import { openDeepSeekDataExport, openExternal } from '../../services/links.js'
 import {
+  clearRemoteCacheBackend,
+  hasNativeCacheController,
+  pingCacheBackend,
+  startNativeOrProbeCacheBackend,
+  stopNativeCacheBackend,
+  type CacheBackendStats,
+} from '../../services/cacheBackend.js'
+import {
   checkForUpdates,
   CURRENT_VERSION,
   startInAppUpdate,
@@ -33,6 +41,8 @@ import {
 import {
   FONT_SCALE_STEPS,
   isChineseBrowser,
+  setCacheBackendUrl,
+  setCacheModeEnabled,
   setChatBgImage,
   setChatBgPreset,
   setFontFollowSystem,
@@ -188,6 +198,7 @@ const SettingsContent = () => {
                 <LocaleSetting />
                 <VoiceModeSetting />
                 <LocationSetting />
+                <CacheModeSetting />
                 <UpdateSetting />
                 <UpdateAccelerateSetting />
                 <AppNotice />
@@ -497,6 +508,158 @@ const UpdateAccelerateSetting = () => {
   )
 }
 
+const CacheModeSetting = () => {
+  const t = useTranslate()
+  const cacheModeEnabled = useSettings((state) => state.cacheModeEnabled)
+  const cacheBackendUrl = useSettings((state) => state.cacheBackendUrl)
+  const [busy, setBusy] = useState(false)
+  const [stats, setStats] = useState<CacheBackendStats>({
+    online: false,
+    searchCached: 0,
+    fetchCached: 0,
+    searchHits: 0,
+    fetchHits: 0,
+    upstreamCalls: 0,
+  })
+
+  const refreshStatus = async (url?: string) => {
+    const res = await pingCacheBackend(url)
+    setStats(res)
+    return res
+  }
+
+  useEffect(() => {
+    if (cacheModeEnabled) {
+      void refreshStatus(cacheBackendUrl)
+    }
+  }, [cacheModeEnabled, cacheBackendUrl])
+
+  const handleToggle = async (next: boolean) => {
+    setCacheModeEnabled(next)
+    if (!next) {
+      await stopNativeCacheBackend()
+      setStats((prev) => ({ ...prev, online: false }))
+      return
+    }
+    setBusy(true)
+    try {
+      const res = await startNativeOrProbeCacheBackend(cacheBackendUrl)
+      setStats(res)
+      if (!res.online) {
+        showToast({ key: 'settingsCacheConnectFailed', type: 'error' })
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleStartBackend = async () => {
+    setBusy(true)
+    try {
+      const res = await startNativeOrProbeCacheBackend(cacheBackendUrl)
+      setStats(res)
+      if (!res.online) {
+        showToast({ key: 'settingsCacheConnectFailed', type: 'error' })
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleClearCache = async () => {
+    const ok = await clearRemoteCacheBackend(cacheBackendUrl).catch(() => false)
+    if (ok) {
+      showToast({ key: 'settingsCacheCleared' })
+      await refreshStatus(cacheBackendUrl)
+    }
+  }
+
+  return (
+    <div className={styles.cellCard}>
+      <div className={styles.row}>
+        <span className={styles.label}>{t('settingsCacheMode')}</span>
+        <div className={styles.cacheToggleRight}>
+          {cacheModeEnabled ? (
+            <span className={stats.online ? styles.cacheOnlinePill : styles.cacheOfflinePill}>
+              {busy
+                ? t('settingsCacheStarting')
+                : stats.online
+                  ? t('settingsCacheRunning')
+                  : t('settingsCacheStopped')}
+            </span>
+          ) : null}
+          <input
+            type="checkbox"
+            aria-label={t('settingsCacheMode')}
+            checked={cacheModeEnabled}
+            disabled={busy}
+            onChange={(event) => void handleToggle(event.target.checked)}
+          />
+        </div>
+      </div>
+      {cacheModeEnabled ? (
+        <div className={styles.cacheDetail}>
+          <div className={styles.cacheUrlRow}>
+            <span className={styles.cacheSubLabel}>{t('settingsCacheUrl')}</span>
+            <input
+              type="url"
+              aria-label={t('settingsCacheUrl')}
+              className={styles.mirrorInput}
+              value={cacheBackendUrl}
+              placeholder="http://127.0.0.1:8787"
+              onChange={(event) => setCacheBackendUrl(event.target.value)}
+            />
+          </div>
+          <div className={styles.cacheActionRow}>
+            <Button
+              variant="outlined"
+              size="s"
+              className={styles.bgActionBtn}
+              disabled={busy}
+              onClick={() => void handleStartBackend()}
+            >
+              {hasNativeCacheController() && !stats.online ? t('settingsCacheStart') : t('retry')}
+            </Button>
+            {stats.online ? (
+              <>
+                {hasNativeCacheController() ? (
+                  <Button
+                    variant="outlined"
+                    size="s"
+                    className={styles.bgActionBtn}
+                    onClick={() => {
+                      void stopNativeCacheBackend().then(() =>
+                        setStats((prev) => ({ ...prev, online: false }))
+                      )
+                    }}
+                  >
+                    {t('settingsCacheStop')}
+                  </Button>
+                ) : null}
+                <Button
+                  variant="outlined"
+                  size="s"
+                  className={styles.bgActionBtn}
+                  onClick={() => void handleClearCache()}
+                >
+                  {t('settingsCacheClear')}
+                </Button>
+                <span className={styles.cacheStatsText}>
+                  {t('settingsCacheStats', {
+                    search: stats.searchCached,
+                    fetch: stats.fetchCached,
+                    hits: stats.searchHits + stats.fetchHits,
+                  })}
+                </span>
+              </>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 const AppNotice = () => {
   const t = useTranslate()
   return (
@@ -508,6 +671,7 @@ const AppNotice = () => {
         <li>{t('settingsNoticeItem3')}</li>
         <li>{t('settingsNoticeItem4')}</li>
         <li>{t('settingsNoticeItem5')}</li>
+        <li>{t('settingsNoticeItem6')}</li>
       </ul>
     </div>
   )
@@ -749,10 +913,11 @@ const ChatBackgroundSetting = () => {
 const DeepSeekExportSetting = () => {
   const t = useTranslate()
   return (
-    <SettingCell
-      label={t('settingsDeepSeekExport')}
-      status={null}
-      action={
+    <div className={styles.cellCard}>
+      <div className={styles.row}>
+        <div className={styles.text}>
+          <div className={styles.label}>{t('settingsDeepSeekExport')}</div>
+        </div>
         <Button
           variant="outlined"
           size="m"
@@ -761,8 +926,9 @@ const DeepSeekExportSetting = () => {
         >
           {t('settingsOpenDeepSeek')}
         </Button>
-      }
-    />
+      </div>
+      <div className={styles.exportGuide}>{t('settingsDeepSeekExportGuide')}</div>
+    </div>
   )
 }
 

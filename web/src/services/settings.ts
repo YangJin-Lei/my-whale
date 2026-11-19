@@ -36,6 +36,8 @@ type Settings = {
   activePetId: string
   updateAccelerate: boolean
   updateMirror: string
+  cacheModeEnabled: boolean
+  cacheBackendUrl: string
 }
 
 const KEYS = {
@@ -62,6 +64,8 @@ const KEYS = {
   activePetId: 'chat-demo:active-pet-id',
   updateAccelerate: 'chat-demo:update-accelerate',
   updateMirror: 'chat-demo:update-mirror',
+  cacheModeEnabled: 'chat-demo:cache-mode',
+  cacheBackendUrl: 'chat-demo:cache-backend-url',
 } as const
 
 const read = (key: string) => {
@@ -167,6 +171,8 @@ export const useSettings = create<Settings>(() => ({
       ? read(KEYS.updateAccelerate) === 'true'
       : isChineseBrowser(),
   updateMirror: read(KEYS.updateMirror) || 'https://ghfast.top/',
+  cacheModeEnabled: read(KEYS.cacheModeEnabled) === 'true',
+  cacheBackendUrl: read(KEYS.cacheBackendUrl) || 'http://127.0.0.1:8787',
 }))
 
 export const setLocale = (locale: Locale) => {
@@ -337,4 +343,15 @@ export const setUpdateMirror = (updateMirror: string) => {
   const cleaned = updateMirror.trim()
   write(KEYS.updateMirror, cleaned || null)
   useSettings.setState({ updateMirror: cleaned || 'https://ghfast.top/' })
+}
+
+export const setCacheModeEnabled = (cacheModeEnabled: boolean) => {
+  write(KEYS.cacheModeEnabled, String(cacheModeEnabled))
+  useSettings.setState({ cacheModeEnabled })
+}
+
+export const setCacheBackendUrl = (cacheBackendUrl: string) => {
+  const cleaned = cacheBackendUrl.trim().replace(/\/+$/, '')
+  write(KEYS.cacheBackendUrl, cleaned || null)
+  useSettings.setState({ cacheBackendUrl: cleaned || 'http://127.0.0.1:8787' })
 }
