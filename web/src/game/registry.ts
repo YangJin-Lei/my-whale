@@ -1,6 +1,8 @@
 import { doudizhuGame } from './doudizhu/index.js'
+import { drawGuessGame } from './drawguess/index.js'
 import { gomokuGame } from './gomoku/index.js'
 import type { GameId, GamePlugin } from './types.js'
+import { werewolfGame } from './werewolf/index.js'
 import { xiangqiGame } from './xiangqi/index.js'
 
 export type RegisteredGame = GamePlugin<unknown, unknown>
@@ -9,12 +11,14 @@ const asRegistered = <TState, TMove>(plugin: GamePlugin<TState, TMove>): Registe
   plugin as unknown as RegisteredGame
 
 /**
- * 小游戏注册表：内置五子棋、中国象棋与斗地主，后续按同接口追加麻将等玩法。
+ * 小游戏注册表：内置五子棋、中国象棋、斗地主、你画我猜、狼人杀，后续按同接口追加麻将。
  */
 export const GAME_REGISTRY: readonly RegisteredGame[] = [
   asRegistered(gomokuGame),
   asRegistered(xiangqiGame),
   asRegistered(doudizhuGame),
+  asRegistered(drawGuessGame),
+  asRegistered(werewolfGame),
 ]
 
 export const findRegisteredGame = (id: GameId | null): RegisteredGame | undefined =>

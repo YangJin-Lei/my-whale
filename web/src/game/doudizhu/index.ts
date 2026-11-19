@@ -12,12 +12,7 @@ import {
   resolveCardTokensFromHand,
 } from './engine.js'
 import { resolveDoudizhuSeatOpponent } from './seats.js'
-import {
-  getSeatLabel,
-  type DoudizhuMove,
-  type DoudizhuSeatId,
-  type DoudizhuState,
-} from './types.js'
+import type { DoudizhuMove, DoudizhuSeatId, DoudizhuState } from './types.js'
 
 const getActiveSeat = (state: DoudizhuState): DoudizhuSeatId => state.currentTurn
 
@@ -29,6 +24,26 @@ const getSeatRoleTag = (state: DoudizhuState, seat: DoudizhuSeatId, locale: Loca
     return locale === 'zh-CN' ? '地主' : 'Landlord'
   }
   return locale === 'zh-CN' ? '农民' : 'Peasant'
+}
+
+const describeSeatForAi = (
+  viewer: DoudizhuSeatId,
+  target: DoudizhuSeatId,
+  locale: Locale
+): string => {
+  if (target === viewer) {
+    return locale === 'zh-CN' ? '你自己' : 'Yourself'
+  }
+  if (target === 'player') {
+    return locale === 'zh-CN' ? '人类玩家' : 'Human Player'
+  }
+  return locale === 'zh-CN'
+    ? target === 'ai_right'
+      ? '右家电脑'
+      : '左家电脑'
+    : target === 'ai_right'
+      ? 'Right Bot'
+      : 'Left Bot'
 }
 
 export const doudizhuGame: GamePlugin<DoudizhuState, DoudizhuMove> = {
@@ -234,7 +249,7 @@ export const doudizhuGame: GamePlugin<DoudizhuState, DoudizhuMove> = {
     const seatCounts = (['player', 'ai_right', 'ai_left'] as const)
       .map(
         (s) =>
-          `${getSeatLabel(s, locale)}(${getSeatRoleTag(state, s, locale)}): ${state.hands[s].length}张`
+          `${describeSeatForAi(seat, s, locale)}(${getSeatRoleTag(state, s, locale)}): ${state.hands[s].length}张`
       )
       .join(' | ')
 
@@ -249,7 +264,7 @@ export const doudizhuGame: GamePlugin<DoudizhuState, DoudizhuMove> = {
       const legalBids = [0, 1, 2, 3].filter((s) => s === 0 || s > state.highestBid)
       const systemPrompt =
         locale === 'zh-CN'
-          ? `你正在三人斗地主牌桌上扮演「${opponent.name}」（${opponent.systemPrompt}）。现在是叫地主阶段，你绝不知道另外两家的暗牌。\n请严格只输出一个 JSON 对象：{"move": <整数 0/1/2/3，0代表不叫>, "thoughtSummary":"一句简短评估", "speech":"一句真人脱口而出的叫牌台词（不加Emoji、不提JSON）"}。`
+          ? `你正在三人斗地主牌桌上扮演「${opponent.name}」（${opponent.systemPrompt}）。现在是叫地主阶段，你不知道另外两家的暗牌。\n请严格只输出一个 JSON 对象：{"move": <整数 0/1/2/3，0代表不叫>, "thoughtSummary":"简短评估", "speech":"真人叫牌台词（不加Emoji、不提JSON）"}。`
           : `You are ${opponent.name} (${opponent.systemPrompt}) in a 3-player Dou Dizhu bidding round. Return ONLY JSON: {"move": 0|1|2|3, "thoughtSummary":"...", "speech":"..."}.`
 
       const userPrompt =
@@ -269,59 +284,70 @@ export const doudizhuGame: GamePlugin<DoudizhuState, DoudizhuMove> = {
     const bottomText = state.bottomCards.map((c) => formatCardToken(c, locale)).join(' ')
     const tableStr =
       !isLeading && state.tablePlay
-        ? `${getSeatLabel(state.tablePlay.seat, locale)} 打出 ${describeComboName(
+        ? `${describeSeatForAi(seat, state.tablePlay.seat, locale)}（${getSeatRoleTag(
+            state,
+            state.tablePlay.seat,
+            locale
+          )}）打出 ${describeComboName(
             state.tablePlay.combo.kind,
             locale
           )} [${state.tablePlay.combo.cards.map((c) => formatCardToken(c, locale)).join(' ')}]`
         : locale === 'zh-CN'
-          ? '无（轮到你先手领出，必须出牌，不得不要）'
+          ? '无（轮到你自己先手领出，必须出牌，不得不要）'
           : 'None (your lead—must play cards, cannot pass)'
 
+    const landlordLabel = describeSeatForAi(seat, state.landlordSeat ?? 'player', locale)
     const relationHint = isLandlord
       ? locale === 'zh-CN'
         ? '你的身份是【地主】，独战两位农民，争取最快走完手牌。'
         : 'You are Landlord vs 2 Peasants.'
       : locale === 'zh-CN'
-        ? `你的身份是【农民】，地主是「${getSeatLabel(
-            state.landlordSeat ?? 'player',
-            locale
-          )}」。另一位农民是你的队友，若队友已经出了很大控制牌，可选择不要（"pass"）让队友顺走！`
-        : `You are Peasant; Landlord is ${getSeatLabel(
-            state.landlordSeat ?? 'player',
-            locale
-          )}. Cooperate with your Peasant teammate.`
+        ? `你的身份是【农民】，地主是「${landlordLabel}」。只有另一位【农民】才是你的队友；地主出了牌要积极顶牌或抢牌权，不要白白放地主走完！`
+        : `You are Peasant; Landlord is ${landlordLabel}. Beat Landlord plays aggressively when possible, and only pass to let your Peasant teammate run.`
 
     const candidates = findBeatCandidates(
       ownHand,
       isLeading ? null : (state.tablePlay?.combo ?? null)
     )
     const examples = candidates
-      .slice(0, 6)
+      .slice(0, 8)
       .map((grp) => JSON.stringify(grp.map((c) => formatCardToken(c, locale))))
+
+    const candidatesHint =
+      examples.length > 0
+        ? locale === 'zh-CN'
+          ? `\n可直接出牌参考（按此数组格式填写 move）：${examples.join(' 、 ')}`
+          : `\nLegal play options (use array in move): ${examples.join(' , ')}`
+        : locale === 'zh-CN'
+          ? '\n当前手牌没有大过桌面的常规牌型，请选择 {"move":"pass",...}。'
+          : '\nNo beating plays available—choose {"move":"pass",...}.'
 
     const countHint =
       state.cardCountBudgetLeft > 0
         ? locale === 'zh-CN'
-          ? `\n如需查看外头未知残牌分布（本局全桌 AI 算牌共还剩 ${state.cardCountBudgetLeft}/5 次），可先返回 {"action":"count_cards"}；否则直接出牌。`
-          : `\nOptional card count (${state.cardCountBudgetLeft}/5 left): return {"action":"count_cards"} first, or play directly.`
+          ? `\n（可选：本局全桌 AI 算牌还剩 ${state.cardCountBudgetLeft}/5 次，如确需统计外头残牌可返回 {"action":"count_cards"}；建议多数常规回合直接出牌。）`
+          : `\n(Optional card count: ${state.cardCountBudgetLeft}/5 left via {"action":"count_cards"}, or play directly.)`
         : locale === 'zh-CN'
           ? '\n（本局算牌次数已用完 0/5，请直接决策）'
           : '\n(Card-count budget 0/5 exhausted)'
 
     const systemPrompt =
       locale === 'zh-CN'
-        ? `你正在三人斗地主牌桌上扮演「${opponent.name}」（${opponent.systemPrompt}）。\n${relationHint}\n重要：严禁编造手牌中不存在的牌；严格输出 JSON：出牌格式 {"move":["♠A","♥A"], "thoughtSummary":"简短推演", "speech":"真人牌桌口语台词，如王炸时喊王炸谁要"}；跟牌选择不要格式 {"move":"pass", "thoughtSummary":"...", "speech":"..."}。speech 不准用 Emoji 或技术词汇。`
-        : `You are ${opponent.name} (${opponent.systemPrompt}) playing Dou Dizhu. ${relationHint}\nReturn ONLY JSON: {"move":["♠A"], "thoughtSummary":"...", "speech":"..."} or {"move":"pass", "thoughtSummary":"...", "speech":"..."}.`
+        ? `你正在三人斗地主牌桌上扮演「${opponent.name}」（${opponent.systemPrompt}）。\n${relationHint}\n出牌规则：
+1. 若要出牌，JSON 中 move 必须写成牌数组，例如 {"move":["♠A","♥A"], "thoughtSummary":"...", "speech":"..."}；
+2. 只有决定不出（不要）时，才写 {"move":"pass", ...}；
+3. 严禁出现 speech 里喊着要出牌/压牌，但 move 却写了 "pass" 的矛盾情况！`
+        : `You are ${opponent.name} (${opponent.systemPrompt}) playing Dou Dizhu. ${relationHint}\nReturn ONLY JSON: {"move":["♠A"], "thoughtSummary":"...", "speech":"..."} or {"move":"pass", "thoughtSummary":"...", "speech":"..."}. Never say you are playing cards in speech while setting move to "pass".`
 
     const userPrompt =
       locale === 'zh-CN'
-        ? `你的当前手牌（${ownHand.length}张）：${handStr}\n三张公开底牌：${bottomText}\n三家余牌：${seatCounts}\n当前桌上待压牌：${tableStr}\n近期出牌：\n${recentText}${countHint}`
-        : `Your hand (${ownHand.length}): ${handStr}\nBottom 3: ${bottomText}\nCounts: ${seatCounts}\nTable play: ${tableStr}\nRecent:\n${recentText}${countHint}`
+        ? `你的手牌（${ownHand.length}张）：${handStr}\n公开底牌：${bottomText}\n三家身份与余牌：${seatCounts}\n当前桌面待压牌：${tableStr}${candidatesHint}\n近期出牌：\n${recentText}${countHint}`
+        : `Your hand (${ownHand.length}): ${handStr}\nKitty: ${bottomText}\nSeats: ${seatCounts}\nTable: ${tableStr}${candidatesHint}\nRecent:\n${recentText}${countHint}`
 
     return {
       systemPrompt,
       userPrompt,
-      legalExamples: isLeading ? examples : ['"pass"', ...examples],
+      legalExamples: isLeading ? examples : [...examples, '"pass"'],
     }
   },
 
@@ -371,7 +397,23 @@ export const doudizhuGame: GamePlugin<DoudizhuState, DoudizhuMove> = {
       return { valid: true, move: { type: 'pass' } }
     }
 
-    if (!Array.isArray(rawMove)) {
+    let tokens: unknown[] | null = null
+    if (Array.isArray(rawMove)) {
+      tokens = rawMove
+    } else if (typeof rawMove === 'string') {
+      tokens = rawMove
+        .split(/[\s,，、]+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+    } else if (
+      typeof rawMove === 'object' &&
+      rawMove !== null &&
+      Array.isArray((rawMove as { cards?: unknown }).cards)
+    ) {
+      tokens = (rawMove as { cards: unknown[] }).cards
+    }
+
+    if (!tokens || tokens.length === 0) {
       return {
         valid: false,
         reason:
@@ -381,7 +423,7 @@ export const doudizhuGame: GamePlugin<DoudizhuState, DoudizhuMove> = {
       }
     }
 
-    const resolved = resolveCardTokensFromHand(state.hands[seat], rawMove)
+    const resolved = resolveCardTokensFromHand(state.hands[seat], tokens)
     if ('error' in resolved) {
       return { valid: false, reason: resolved.error }
     }

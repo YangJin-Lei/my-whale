@@ -383,6 +383,8 @@ export const en = {
   miniGames: 'Mini Games',
   gameDrawerTitle: 'Play with AI',
   gameSwitch: 'Games',
+  gameExpand: 'Expand',
+  gameCollapse: 'Dock',
   gameVoiceOn: 'Voice On',
   gameVoiceOff: 'Voice Off',
   gameUndo: 'Undo',

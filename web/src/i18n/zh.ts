@@ -363,6 +363,8 @@ export const zh = {
   miniGames: '小游戏',
   gameDrawerTitle: 'AI 休闲对弈',
   gameSwitch: '换游戏',
+  gameExpand: '放大',
+  gameCollapse: '收回',
   gameVoiceOn: '语音开',
   gameVoiceOff: '语音关',
   gameUndo: '悔棋',

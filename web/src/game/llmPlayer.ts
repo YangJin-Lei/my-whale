@@ -3,11 +3,13 @@ import { streamMessage } from '../services/api/client.js'
 import type { MessageParam } from '../services/api/types.js'
 import type { AiTurnDecision, GameOpponent, GamePlugin } from './types.js'
 
-const MAX_ATTEMPTS = 4
+const MAX_MOVE_ATTEMPTS = 3
+const MAX_CONTROL_USES = 2
 const DEFAULT_TIMEOUT_MS = 65_000
 
 type RawDecisionJson = {
   move?: unknown
+  cards?: unknown
   thoughtSummary?: unknown
   speech?: unknown
 }
@@ -152,8 +154,10 @@ export const requestAiMoveFromLlm = async <TState, TMove>({
 
   let latestThinkingTrace = ''
   const deadline = Date.now() + requestTimeoutMs
+  let moveAttempt = 0
+  let controlCount = 0
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  while (moveAttempt < MAX_MOVE_ATTEMPTS) {
     if (signal.aborted) {
       throw new DOMException('Aborted', 'AbortError')
     }
@@ -175,6 +179,7 @@ export const requestAiMoveFromLlm = async <TState, TMove>({
 
     const parsed = extractJsonObject(rawText)
     if (!parsed) {
+      moveAttempt += 1
       const retryMsg =
         locale === 'zh-CN'
           ? '你的输出不是合法 JSON 对象。请仅返回 JSON，格式为 {"move":..., "thoughtSummary":"...", "speech":"..."}，不要包含其他文字。'
@@ -184,13 +189,14 @@ export const requestAiMoveFromLlm = async <TState, TMove>({
       continue
     }
 
-    if (plugin.processAiControlAction) {
+    if (plugin.processAiControlAction && controlCount < MAX_CONTROL_USES) {
       const ctrl = plugin.processAiControlAction(
         currentState,
         parsed as Record<string, unknown>,
         locale
       )
       if (ctrl.handled) {
+        controlCount += 1
         currentState = ctrl.nextState
         onStateUpdate?.(currentState)
         history.push({ role: 'assistant', content: [{ type: 'text', text: rawText }] })
@@ -199,7 +205,8 @@ export const requestAiMoveFromLlm = async <TState, TMove>({
       }
     }
 
-    const validation = plugin.parseAndValidateAiMove(currentState, parsed.move, locale)
+    const rawCandidate = parsed.move !== undefined ? parsed.move : parsed.cards
+    const validation = plugin.parseAndValidateAiMove(currentState, rawCandidate, locale)
     if (validation.valid) {
       const defaultThought =
         locale === 'zh-CN'
@@ -219,6 +226,7 @@ export const requestAiMoveFromLlm = async <TState, TMove>({
       }
     }
 
+    moveAttempt += 1
     const sampleHint = promptPayload.legalExamples?.length
       ? locale === 'zh-CN'
         ? ` 当前可选合法着法示例：${promptPayload.legalExamples.slice(0, 8).join(', ')}。`

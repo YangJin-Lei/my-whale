@@ -11,6 +11,7 @@ import { speakGameLine, stopGameVoice, unlockGameAudio } from './voiceCue.js'
 
 type GameStoreState = {
   drawerOpen: boolean
+  expanded: boolean
   activeGameId: GameId | null
   gameState: unknown
   aiThinking: boolean
@@ -58,6 +59,7 @@ const getInitialVoicePref = (): boolean => {
 
 export const useGameStore = create<GameStoreState>(() => ({
   drawerOpen: false,
+  expanded: false,
   activeGameId: null,
   gameState: null,
   aiThinking: false,
@@ -338,6 +340,29 @@ const triggerAiTurn = async (plugin: RegisteredGame, expectedEpoch: number) => {
 
 export const openGameDrawer = () => {
   useGameStore.setState({ drawerOpen: true })
+}
+
+export const toggleGameExpanded = () => {
+  useGameStore.setState((prev) => ({ expanded: !prev.expanded }))
+}
+
+export const updateGameFeedback = (patch: {
+  aiThinking?: boolean
+  bubbleText?: string
+  thoughtText?: string
+  errorText?: string | null
+  speechToSpeak?: string
+}) => {
+  const { speechToSpeak, ...rest } = patch
+  useGameStore.setState({
+    ...rest,
+    ...(speechToSpeak ? { lastSpeechText: speechToSpeak } : {}),
+  })
+  if (speechToSpeak && useGameStore.getState().gameVoiceOn) {
+    const locale = useSettings.getState().locale
+    const opponent = resolveCurrentOpponent(locale)
+    speakGameLine(speechToSpeak, opponent.preferredVoice)
+  }
 }
 
 export const closeGameDrawer = () => {

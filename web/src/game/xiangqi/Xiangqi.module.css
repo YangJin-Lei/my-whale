@@ -9,7 +9,7 @@
 
 .boardSlab {
   position: relative;
-  width: min(100%, 384px);
+  width: min(100%, 500px);
   aspect-ratio: 9 / 10;
   padding: 12px 10px;
   box-sizing: border-box;

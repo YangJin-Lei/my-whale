@@ -867,7 +867,7 @@ export const computeCardCountReport = (
     : `Unseen cards outside your hand: ${entries.join(', ')}`
 }
 
-/** 把模型返回的文本令牌（如 "♠A" / "A" / "大王" / "小王" / "BJ" / "10"）精准映射回手牌 ID */
+/** 把模型返回的文本令牌（兼容 "♠A"、"A♠"、"黑桃A"、"2"、"大王"、"小王"、"BJ"、"10" 等）精准映射回手牌 ID */
 export const resolveCardTokensFromHand = (
   hand: readonly Card[],
   rawTokens: unknown[]
@@ -875,45 +875,72 @@ export const resolveCardTokensFromHand = (
   const available = [...hand]
   const chosenIds: string[] = []
 
+  const extractSuit = (s: string): { suit?: CardSuit; rest: string } => {
+    const suitPrefixes: Array<[string, CardSuit]> = [
+      ['黑桃', 'S'],
+      ['红桃', 'H'],
+      ['红心', 'H'],
+      ['梅花', 'C'],
+      ['草花', 'C'],
+      ['方块', 'D'],
+      ['方片', 'D'],
+      ['♠', 'S'],
+      ['♥', 'H'],
+      ['♣', 'C'],
+      ['♦', 'D'],
+      ['S', 'S'],
+      ['H', 'H'],
+      ['C', 'C'],
+      ['D', 'D'],
+    ]
+    for (const [token, suit] of suitPrefixes) {
+      if (s.startsWith(token)) {
+        return { suit, rest: s.slice(token.length).trim() }
+      }
+      if (s.endsWith(token)) {
+        return { suit, rest: s.slice(0, s.length - token.length).trim() }
+      }
+    }
+    return { rest: s }
+  }
+
   const normalizeToken = (raw: string): { rank: number; suit?: CardSuit } | null => {
-    const clean = raw.trim().toUpperCase()
+    const clean = raw.trim().toUpperCase().replace(/\s+/g, ' ')
     if (!clean) {
       return null
     }
-    if (clean === 'BJ' || clean === 'BIG JOKER' || clean === '大王' || clean === 'RED JOKER') {
+    if (
+      clean === 'BJ' ||
+      clean === 'BIG JOKER' ||
+      clean === '大王' ||
+      clean === 'RED JOKER' ||
+      clean === '17J'
+    ) {
       return { rank: 17, suit: 'J' }
     }
-    if (clean === 'SJ' || clean === 'SMALL JOKER' || clean === '小王' || clean === 'BLACK JOKER') {
+    if (
+      clean === 'SJ' ||
+      clean === 'SMALL JOKER' ||
+      clean === '小王' ||
+      clean === 'BLACK JOKER' ||
+      clean === '16J'
+    ) {
       return { rank: 16, suit: 'J' }
     }
 
-    let suit: CardSuit | undefined
-    let body = clean
-    const suitChar = clean[0]
-    if (suitChar === '♠' || suitChar === 'S') {
-      suit = 'S'
-      body = clean.slice(1)
-    } else if (suitChar === '♥' || suitChar === 'H') {
-      suit = 'H'
-      body = clean.slice(1)
-    } else if (suitChar === '♣' || suitChar === 'C') {
-      suit = 'C'
-      body = clean.slice(1)
-    } else if (suitChar === '♦' || suitChar === 'D') {
-      suit = 'D'
-      body = clean.slice(1)
-    }
+    const { suit, rest } = extractSuit(clean)
+    const body = rest.replace(/^10$/, '10').trim()
 
     let rank = 0
-    if (body === 'J') {
+    if (body === 'J' || body === '11') {
       rank = 11
-    } else if (body === 'Q') {
+    } else if (body === 'Q' || body === '12') {
       rank = 12
-    } else if (body === 'K') {
+    } else if (body === 'K' || body === '13') {
       rank = 13
-    } else if (body === 'A') {
+    } else if (body === 'A' || body === '14' || body === '1') {
       rank = 14
-    } else if (body === '2') {
+    } else if (body === '2' || body === '15') {
       rank = 15
     } else {
       const n = Number(body)
@@ -928,12 +955,12 @@ export const resolveCardTokensFromHand = (
   }
 
   for (const item of rawTokens) {
-    if (typeof item !== 'string') {
+    if (typeof item !== 'string' && typeof item !== 'number') {
       return { error: `Invalid card token: ${String(item)}` }
     }
-    const parsed = normalizeToken(item)
+    const parsed = normalizeToken(String(item))
     if (!parsed) {
-      return { error: `Unrecognized card token: ${item}` }
+      return { error: `Unrecognized card token: ${String(item)}` }
     }
     const matchIndex = available.findIndex(
       (c) => c.rank === parsed.rank && (!parsed.suit || c.suit === parsed.suit)
@@ -941,7 +968,7 @@ export const resolveCardTokensFromHand = (
     const fallbackIndex =
       matchIndex === -1 ? available.findIndex((c) => c.rank === parsed.rank) : matchIndex
     if (fallbackIndex === -1) {
-      return { error: `Card not in hand: ${item}` }
+      return { error: `Card not in hand: ${String(item)}` }
     }
     const [picked] = available.splice(fallbackIndex, 1)
     chosenIds.push(picked.id)

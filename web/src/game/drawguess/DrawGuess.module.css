@@ -1,0 +1,201 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scoreBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer1, rgba(128, 134, 146, 0.08));
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.turnTag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(77, 107, 254, 0.12);
+  color: var(--dsw-alias-brand-primary);
+  font-size: 11.5px;
+}
+
+.modeTabs {
+  display: flex;
+  gap: 6px;
+}
+
+.tabBtn,
+.toolBtn,
+.primaryBtn {
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+}
+
+.tabBtnActive,
+.toolBtnActive {
+  border-color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-brand-primary);
+  background: rgba(77, 107, 254, 0.08);
+}
+
+.primaryBtn {
+  border-color: var(--dsw-alias-brand-primary);
+  background: var(--dsw-alias-brand-primary);
+  color: #ffffff;
+}
+
+.canvasCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toolRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.colorList {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: auto;
+}
+
+.colorDot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.colorDotActive {
+  border-color: #ffffff;
+  box-shadow: 0 0 0 2px var(--dsw-alias-brand-primary);
+}
+
+.canvas {
+  width: 100%;
+  aspect-ratio: 520 / 340;
+  border-radius: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: #ffffff;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.htmlWorkspace {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.codeArea {
+  width: 100%;
+  min-height: 110px;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  resize: vertical;
+}
+
+.previewFrame {
+  width: 100%;
+  height: 220px;
+  border-radius: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: #ffffff;
+}
+
+.answerBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.textInput {
+  flex: 1;
+  min-width: 140px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+
+  &:focus {
+    border-color: var(--dsw-alias-brand-primary);
+  }
+}
+
+.aiPuzzleBox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.puzzleHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.puzzleActions {
+  display: flex;
+  gap: 6px;
+}
+
+.codePreview {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.06);
+  font-size: 11.5px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.loadingPuzzle {
+  padding: 40px 12px;
+  text-align: center;
+  border-radius: 12px;
+  border: 1px dashed var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}

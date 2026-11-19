@@ -1,0 +1,239 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.phasePill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(77, 107, 254, 0.12);
+  color: var(--dsw-alias-brand-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.roleTag {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.seatGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+@media (min-width: 720px) {
+  .seatGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.seatCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+}
+
+.seatDead {
+  opacity: 0.52;
+}
+
+.seatSpeaking {
+  border-color: var(--dsw-alias-brand-primary);
+  box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary);
+}
+
+.seatHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.petSwapBtn {
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.humanBadge {
+  width: 34px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(77, 107, 254, 0.14);
+  color: var(--dsw-alias-brand-primary);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.seatMeta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.seatName {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.seatBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.aliveTag,
+.deadTag,
+.revealTag,
+.wolfCheck,
+.goodCheck {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 999px;
+}
+
+.aliveTag {
+  background: rgba(22, 163, 74, 0.14);
+  color: #15803d;
+}
+
+.deadTag {
+  background: rgba(148, 163, 184, 0.22);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.revealTag,
+.wolfCheck {
+  background: rgba(239, 68, 68, 0.15);
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.goodCheck {
+  background: rgba(37, 99, 235, 0.14);
+  color: #2563eb;
+}
+
+.petSelect {
+  width: 100%;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font-size: 11.5px;
+}
+
+.seatSpeech {
+  font-size: 11.5px;
+  line-height: 1.4;
+  padding: 5px 7px;
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer1, rgba(128, 134, 146, 0.08));
+  color: var(--dsw-alias-label-primary);
+  word-break: break-word;
+}
+
+.actionBox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--dsw-alias-brand-primary);
+  background: rgba(77, 107, 254, 0.06);
+}
+
+.actionTitle {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.targetRow,
+.speechRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.speechInput {
+  flex: 1;
+  min-width: 140px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.actionBtn,
+.primaryBtn {
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+}
+
+.primaryBtn {
+  border-color: var(--dsw-alias-brand-primary);
+  background: var(--dsw-alias-brand-primary);
+  color: #ffffff;
+}
+
+.logBox {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 140px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-layer1, rgba(128, 134, 146, 0.05));
+}
+
+.logLine {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--dsw-alias-label-secondary);
+}

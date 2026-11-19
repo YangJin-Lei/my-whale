@@ -1,5 +1,6 @@
 import clsx from 'clsx'
 import { useEffect, useState } from 'react'
+import { useIsMobile } from '../app/viewport.js'
 import logoUrl from '../assets/logo.png'
 import { Button } from '../components/base/Button.js'
 import { IconButton } from '../components/base/IconButton.js'
@@ -33,6 +34,7 @@ import {
   retryAiTurn,
   startGame,
   submitPlayerGameMove,
+  toggleGameExpanded,
   toggleGameThinkingMode,
   toggleGameVoice,
   undoGameRound,
@@ -42,15 +44,17 @@ import { useGameVoice } from './voiceCue.js'
 
 /**
  * 右侧可收合 AI 对弈抽屉：
- * 1) 未选择具体游戏时展示对手（默认使用当前桌宠，可切换 Logo / 人设 / 自定义）与游戏列表；
- * 2) 进入棋局后展示 2.5D 棋盘、对坐动态桌宠/头像气泡与折叠思考/语音播报。
+ * 1) 支持电脑端一键「放大弹窗」以独立大窗口对弈；
+ * 2) 未选择具体游戏时展示对手与游戏列表；进入后展示 2.5D 棋/牌桌与折叠思考/语音。
  */
 export const GameDrawer = () => {
   const t = useTranslate()
+  const isMobile = useIsMobile()
   const locale = useSettings((state) => state.locale)
   useSettings((state) => state.activePetId)
   usePetCatalog()
   const drawerOpen = useGameStore((state) => state.drawerOpen)
+  const expanded = useGameStore((state) => state.expanded)
   const activeGameId = useGameStore((state) => state.activeGameId)
   const gameState = useGameStore((state) => state.gameState)
   const aiThinking = useGameStore((state) => state.aiThinking)
@@ -140,9 +144,13 @@ export const GameDrawer = () => {
   }
 
   const showRetryButton = Boolean(errorText && plugin && gameState && turn === 'ai' && !aiThinking)
+  const isExpandedModal = expanded && !isMobile
 
-  return (
-    <aside className={styles.drawer} aria-label={t('gameDrawerTitle')}>
+  const drawerNode = (
+    <aside
+      className={clsx(styles.drawer, isExpandedModal && styles.drawerExpanded)}
+      aria-label={t('gameDrawerTitle')}
+    >
       <div className={styles.header}>
         {plugin ? (
           <button type="button" className={styles.backBtn} onClick={backToGamePicker}>
@@ -154,6 +162,16 @@ export const GameDrawer = () => {
         <div className={styles.headerTitle}>
           {plugin ? plugin.name[locale] : t('gameDrawerTitle')}
         </div>
+        {!isMobile ? (
+          <button
+            type="button"
+            className={styles.backBtn}
+            onClick={toggleGameExpanded}
+            aria-pressed={isExpandedModal}
+          >
+            {isExpandedModal ? t('gameCollapse') : t('gameExpand')}
+          </button>
+        ) : null}
         <IconButton
           icon={<IconCloseOutline16 />}
           aria-label={t('close')}
@@ -441,4 +459,21 @@ export const GameDrawer = () => {
       )}
     </aside>
   )
+
+  if (isExpandedModal) {
+    return (
+      <div
+        className={styles.expandedBackdrop}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) {
+            toggleGameExpanded()
+          }
+        }}
+      >
+        {drawerNode}
+      </div>
+    )
+  }
+
+  return drawerNode
 }
