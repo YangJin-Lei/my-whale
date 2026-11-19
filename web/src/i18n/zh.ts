@@ -440,9 +440,42 @@ export const zh = {
   settingsNoticeItem5:
     '注意事项：玩小游戏会高频调用 API（尤其在斗地主、狼人杀或开启深度思考时），消耗的 API 费用比普通对话更多，请留意账户余额。',
   settingsNoticeItem6:
-    '注意事项：开启「缓存模式」后，搜索与抓取优先使用内置缓存后端，同时固定历史前缀以提高 API 前缀缓存命中率；关闭即恢复默认直连官方 API。',
+    '注意事项：「缓存模式」默认开启，搜索优先使用内置缓存后端（若连续搜索无结果将自动切换官方联网搜索），同时固定历史前缀以提高 API 缓存命中率；在网页端无本地后端时会自动直连官方 API。',
   gameCostNotice:
     '注意事项：玩小游戏会高频调用 API（尤其是斗地主、狼人杀或开启深度思考时），消耗的 API 费用比普通对话更多，请留意余额。',
   drawGuessCopyPrompt: '复制提示词',
   drawGuessAiIdiom: 'AI 想词',
+  compactionTitle: '上下文压缩',
+  compactionInlineIdle: '上下文压缩({level})',
+  compactionInlineActive: '已压缩{count}轮({level})',
+  compactionLevelLight: '轻度',
+  compactionLevelMedium: '中度',
+  compactionLevelHeavy: '重度',
+  compactionLevelLightTag: '轻度 · 默认',
+  compactionLevelMediumTag: '中度',
+  compactionLevelHeavyTag: '重度',
+  compactionLevelLightDesc: '保留约 16k tokens 最近完整对话（≥6 轮），超过 28k 触发。',
+  compactionLevelMediumDesc: '保留约 9k tokens 最近对话（≥4 轮），超过 18k 触发。',
+  compactionLevelHeavyDesc: '仅保留约 4.2k tokens 最近对话（≥2 轮），超过 10k 触发。',
+  compactionAutoLabel: '超限时自动按当前档位压缩',
+  compactionStatusLine:
+    '当前估算 {tokens} tokens（{total} 轮）· 已压缩 {compacted} 轮 / 保留 {retained} 轮',
+  compactionMemoryLine: '已提炼阶段摘要 {segments} 段 · 结构化记忆 {records} 条',
+  compactionNotCompacted: '当前尚未触发压缩（完整历史随请求发送）',
+  compactionNoticeTitle: '注意事项与档位推荐',
+  compactionNoticeCost:
+    '1. 压缩原理与费用：基于论文层级记忆提取（保留设定/偏好/约束/纠正并按需召回早期原文），仅裁剪发送给模型的上下文，绝不删除本地聊天记录或附件；每次执行压缩会调用 1 次轻量摘要请求，压缩完成后会锁定前缀以提高后续缓存命中。',
+  compactionNoticeLight:
+    '• 推荐「轻度」（默认）：日常长聊、写作分析、代码排查、需要保留大量细节与高缓存命中时优先使用。',
+  compactionNoticeMedium:
+    '• 推荐「中度」：超长多轮对话、上传了多份文档/PDF 导致上下文膨胀较快，想兼顾连贯性与费用时使用。',
+  compactionNoticeHeavy:
+    '• 推荐「重度」：上下文快触及模型上限、或只想大幅压低单轮输入费用且只关心当前最近几轮讨论时使用。',
+  compactionRunNow: '立即压缩',
+  compactionRunning: '压缩中…',
+  compactionStop: '停止压缩',
+  compactionReset: '恢复完整上下文',
+  compactionDoneToast: '上下文压缩完成',
+  compactionNothingToCompact: '当前对话轮次较少，暂无需压缩',
+  compactionResetDoneToast: '已恢复发送完整上下文',
 } as const

@@ -38,6 +38,8 @@ type Settings = {
   updateMirror: string
   cacheModeEnabled: boolean
   cacheBackendUrl: string
+  compactionAuto: boolean
+  compactionLevel: 'light' | 'medium' | 'heavy'
 }
 
 const KEYS = {
@@ -66,6 +68,8 @@ const KEYS = {
   updateMirror: 'chat-demo:update-mirror',
   cacheModeEnabled: 'chat-demo:cache-mode',
   cacheBackendUrl: 'chat-demo:cache-backend-url',
+  compactionAuto: 'chat-demo:compaction-auto',
+  compactionLevel: 'chat-demo:compaction-level',
 } as const
 
 const read = (key: string) => {
@@ -171,8 +175,10 @@ export const useSettings = create<Settings>(() => ({
       ? read(KEYS.updateAccelerate) === 'true'
       : isChineseBrowser(),
   updateMirror: read(KEYS.updateMirror) || 'https://ghfast.top/',
-  cacheModeEnabled: read(KEYS.cacheModeEnabled) === 'true',
+  cacheModeEnabled: read(KEYS.cacheModeEnabled) !== 'false',
   cacheBackendUrl: read(KEYS.cacheBackendUrl) || 'http://127.0.0.1:8787',
+  compactionAuto: read(KEYS.compactionAuto) !== 'false',
+  compactionLevel: (read(KEYS.compactionLevel) as 'light' | 'medium' | 'heavy' | null) || 'light',
 }))
 
 export const setLocale = (locale: Locale) => {
@@ -354,4 +360,16 @@ export const setCacheBackendUrl = (cacheBackendUrl: string) => {
   const cleaned = cacheBackendUrl.trim().replace(/\/+$/, '')
   write(KEYS.cacheBackendUrl, cleaned || null)
   useSettings.setState({ cacheBackendUrl: cleaned || 'http://127.0.0.1:8787' })
+}
+
+export type CompactionLevel = 'light' | 'medium' | 'heavy'
+
+export const setCompactionAuto = (compactionAuto: boolean) => {
+  write(KEYS.compactionAuto, String(compactionAuto))
+  useSettings.setState({ compactionAuto })
+}
+
+export const setCompactionLevel = (compactionLevel: CompactionLevel) => {
+  write(KEYS.compactionLevel, compactionLevel)
+  useSettings.setState({ compactionLevel })
 }

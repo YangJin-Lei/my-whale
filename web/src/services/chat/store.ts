@@ -6,10 +6,22 @@ import {
   classifyApiError,
   extractFileIds,
   getFileErrorCode,
+  isContextLengthError,
   isRetryableApiError,
 } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
 import { debouncedRefreshBalance, markInsufficient } from '../balance.js'
+import {
+  COMPACTION_PRESETS,
+  abortCompaction,
+  clearCompactionController,
+  estimateHistoryTokens,
+  fitRequestHistory,
+  formatCompactionSystemBlock,
+  recallCompactedEvidence,
+  registerCompactionController,
+  runCompactionPass,
+} from './compaction.js'
 import {
   flushPendingExtracts,
   registerLocalMemorySink,
@@ -51,6 +63,7 @@ import {
 import {
   toSessionSummary,
   type AssistantMessage,
+  type CompactionLevel,
   type FileAttachment,
   type Message,
   type Session,
@@ -1195,10 +1208,12 @@ const resolveSessionSystemPrompt = (
       session?.persona?.tunedMidSession || (session?.personaNotices?.length ?? 0) > 0
     ),
   })
+  const compactionBlock = formatCompactionSystemBlock(session?.compaction)
+  const combinedBase = compactionBlock ? `${basePrompt}\n\n${compactionBlock}` : basePrompt
   if (!freezeForCache) {
-    return basePrompt
+    return combinedBase
   }
-  const frozen = `${basePrompt}\n\n[会话环境] ${createLatestReminder(useSettings.getState())}`
+  const frozen = `${combinedBase}\n\n[会话环境] ${createLatestReminder(useSettings.getState())}`
   updateSession(sessionId, (current) => ({
     ...current,
     persona: {
@@ -1450,6 +1465,115 @@ export const extractSessionNow = async (sessionId: string): Promise<number> => {
   )
 }
 
+export const getSessionCompactionStats = (sessionId: string) => {
+  const session = getSession(sessionId)
+  if (!session) {
+    return {
+      totalRounds: 0,
+      compactedRounds: 0,
+      retainedRounds: 0,
+      estimatedTokens: 0,
+      retainedTokens: 0,
+      recordCount: 0,
+      segmentCount: 0,
+      activeLevel: null as CompactionLevel | null,
+      updatedAt: null as number | null,
+    }
+  }
+  const visible = getVisibleMessages(session)
+  const rounds = getContextRounds(visible)
+  const compaction = session.compaction
+  let retainedRounds = rounds.length
+  let retainedHistory: Message[] = visible
+  if (compaction?.retainedFromId) {
+    const cutIdx = rounds.findIndex(([u]) => u.id === compaction.retainedFromId)
+    if (cutIdx > 0) {
+      retainedRounds = rounds.length - cutIdx
+      retainedHistory = rounds.slice(cutIdx).flat()
+    }
+  }
+  return {
+    totalRounds: rounds.length,
+    compactedRounds: Math.max(0, rounds.length - retainedRounds),
+    retainedRounds,
+    estimatedTokens: estimateHistoryTokens(visible),
+    retainedTokens: estimateHistoryTokens(retainedHistory),
+    recordCount: compaction?.records.length ?? 0,
+    segmentCount: compaction?.segments.length ?? 0,
+    activeLevel: compaction?.level ?? null,
+    updatedAt: compaction?.updatedAt ?? null,
+  }
+}
+
+export const abortSessionCompaction = (sessionId: string) => {
+  abortCompaction(sessionId)
+}
+
+export const clearSessionCompaction = (sessionId: string) => {
+  const session = getSession(sessionId)
+  if (!session || getStreamController(sessionId)) {
+    return
+  }
+  updateSession(sessionId, (current) => ({
+    ...current,
+    compaction: undefined,
+    persona: current.persona
+      ? {
+          ...current.persona,
+          frozenSystemPrompt: undefined,
+        }
+      : undefined,
+    updatedAt: Date.now(),
+  }))
+  persist(sessionId)
+}
+
+export const compactSessionNow = async (
+  sessionId: string,
+  level: CompactionLevel
+): Promise<boolean> => {
+  const session = getSession(sessionId)
+  if (!session || getStreamController(sessionId)) {
+    return false
+  }
+  const visible = getVisibleMessages(session)
+  const controller = new AbortController()
+  registerCompactionController(sessionId, controller)
+  try {
+    const result = await runCompactionPass({
+      session,
+      history: visible,
+      level,
+      forceManual: true,
+      signal: controller.signal,
+    })
+    if (result.changed && result.compaction) {
+      updateSession(sessionId, (current) => ({
+        ...current,
+        compaction: result.compaction,
+        persona: current.persona
+          ? {
+              ...current.persona,
+              frozenSystemPrompt: undefined,
+            }
+          : undefined,
+        updatedAt: Date.now(),
+      }))
+      persist(sessionId)
+    }
+    clearCompactionController(sessionId, null)
+    return result.changed
+  } catch (error) {
+    if (controller.signal.aborted) {
+      clearCompactionController(sessionId, null)
+      return false
+    }
+    const msg = error instanceof Error ? error.message : String(error)
+    clearCompactionController(sessionId, msg)
+    return false
+  }
+}
+
 useMemoryStore.subscribe((state, prev) => {
   if (state.memories.length === 0 && prev.memories.length > 0) {
     set((chat) => ({
@@ -1505,6 +1629,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
   streamFlushes.set(sessionId, flush)
 
   try {
+    let trimFactor = 1
     for (let attempt = 0; ; attempt += 1) {
       /** 附件补齐前出错属于上传失败，请求还没有发出 */
       let preparing = true
@@ -1519,10 +1644,71 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         reply = { ...reply, latestReminder }
         updateReply(sessionId, reply)
         persist(sessionId)
-        const cacheModeEnabled = useSettings.getState().cacheModeEnabled
+        const { cacheModeEnabled, compactionAuto, compactionLevel } = useSettings.getState()
+        const currentSession = getSession(sessionId)
+        let activeHistory = prepared.history
+        let activeCompaction = currentSession?.compaction
+
+        if (currentSession && !prepared.prefix) {
+          if (compactionAuto) {
+            const compacted = await runCompactionPass({
+              session: currentSession,
+              history: prepared.history,
+              level: compactionLevel,
+              forceManual: false,
+              signal: controller.signal,
+            })
+            activeHistory = compacted.tailHistory
+            activeCompaction = compacted.compaction
+            if (compacted.changed && compacted.compaction) {
+              updateSession(sessionId, (current) => ({
+                ...current,
+                compaction: compacted.compaction,
+                persona: current.persona
+                  ? {
+                      ...current.persona,
+                      frozenSystemPrompt: undefined,
+                    }
+                  : undefined,
+              }))
+              persist(sessionId)
+            }
+          } else if (activeCompaction?.retainedFromId) {
+            const rounds = getContextRounds(prepared.history)
+            const cutIdx = rounds.findIndex(([u]) => u.id === activeCompaction?.retainedFromId)
+            if (cutIdx > 0) {
+              activeHistory = rounds.slice(cutIdx).flat()
+            }
+          }
+        }
+
+        if (trimFactor < 1) {
+          const reducedBudget = Math.max(
+            2400,
+            Math.round(estimateHistoryTokens(activeHistory) * trimFactor)
+          )
+          activeHistory = fitRequestHistory(activeHistory, reducedBudget)
+        }
+
+        const recallBlock =
+          activeCompaction?.retainedFromId && !prepared.prefix
+            ? recallCompactedEvidence(
+                prepared.history,
+                activeCompaction.retainedFromId,
+                prepared.question.content,
+                COMPACTION_PRESETS[activeCompaction.level].evidenceBudget
+              )
+            : ''
+        const requestQuestion = recallBlock
+          ? {
+              ...prepared.question,
+              content: `${recallBlock}\n\n${prepared.question.content}`,
+            }
+          : prepared.question
+
         const messages = toRequestMessages(
-          prepared.history,
-          prepared.question,
+          activeHistory,
+          requestQuestion,
           prepared.prefix,
           initial.thinking ?? false,
           latestReminder,
@@ -1586,6 +1772,10 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             retryable: isRetryableApiError(error),
           })
           break
+        }
+        if (!receivedContent && isContextLengthError(error) && trimFactor > 0.25 && attempt < 4) {
+          trimFactor *= 0.65
+          continue
         }
         // 附件失效：重新补传后重发。收到过内容块（含丢弃的客户端工具）后不自动重发。
         if (

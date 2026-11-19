@@ -197,6 +197,7 @@ async function handleMessagesProxy(req, res) {
 
   const syntheticBlocks = []
   const groundingParts = []
+  let officialSearchFallback = false
 
   for (const targetUrl of urls) {
     const fetched = await runCachedFetch(cacheStore, targetUrl)
@@ -245,37 +246,39 @@ async function handleMessagesProxy(req, res) {
     const query = sanitizeSearchQuery(lastUserText)
     if (query) {
       const searchOut = await runCachedSearch(cacheStore, query, 6)
-      const toolId = `srvtoolu_s_${crypto.randomBytes(8).toString('hex')}`
-      syntheticBlocks.push({
-        type: 'server_tool_use',
-        id: toolId,
-        name: 'deepseek_web_search',
-        input: { action: 'search', query, queries: [query] },
-        caller: { type: 'direct' },
-        kind: 'search',
-      })
-      syntheticBlocks.push({
-        type: 'web_search_tool_result',
-        tool_use_id: toolId,
-        kind: 'search',
-        content: (searchOut.results || []).map((r) => ({
-          type: 'web_search_result',
-          title: r.title,
-          url: r.url,
-          snippet: r.snippet || '',
-          site_name: siteNameOf(r.url),
-          site_icon: null,
-          encrypted_content: '',
-          page_age: null,
-        })),
-      })
       if (searchOut.results?.length > 0) {
+        const toolId = `srvtoolu_s_${crypto.randomBytes(8).toString('hex')}`
+        syntheticBlocks.push({
+          type: 'server_tool_use',
+          id: toolId,
+          name: 'deepseek_web_search',
+          input: { action: 'search', query, queries: [query] },
+          caller: { type: 'direct' },
+          kind: 'search',
+        })
+        syntheticBlocks.push({
+          type: 'web_search_tool_result',
+          tool_use_id: toolId,
+          kind: 'search',
+          content: searchOut.results.map((r) => ({
+            type: 'web_search_result',
+            title: r.title,
+            url: r.url,
+            snippet: r.snippet || '',
+            site_name: siteNameOf(r.url),
+            site_icon: null,
+            encrypted_content: '',
+            page_age: null,
+          })),
+        })
         const lines = searchOut.results.map(
           (r, idx) => `${idx + 1}. ${r.title}\nURL: ${r.url}\n摘要: ${r.snippet}`
         )
         groundingParts.push(
           `【系统已通过内置缓存搜索工具(${searchOut.backend}${searchOut.cached ? ', 命中缓存' : ''})获取以下实时结果，请直接结合这些结果回答用户，不要说自己没有搜索工具或无法联网】\n关键词: ${query}\n${lines.join('\n\n')}`
         )
+      } else {
+        officialSearchFallback = true
       }
     }
   }
@@ -288,13 +291,15 @@ async function handleMessagesProxy(req, res) {
   const upstreamBody = {
     ...body,
     messages: appendGroundingToLastUserMessage(stableMessages, groundingText),
-    tools: incomingTools.filter(
-      (t) =>
-        t?.name !== 'deepseek_web_search' &&
-        t?.name !== 'deepseek_read_url' &&
-        t?.type !== 'deepseek_web_search' &&
-        t?.type !== 'deepseek_read_url'
-    ),
+    tools: officialSearchFallback
+      ? incomingTools
+      : incomingTools.filter(
+          (t) =>
+            t?.name !== 'deepseek_web_search' &&
+            t?.name !== 'deepseek_read_url' &&
+            t?.type !== 'deepseek_web_search' &&
+            t?.type !== 'deepseek_read_url'
+        ),
   }
   if (upstreamBody.tools.length === 0) {
     delete upstreamBody.tools

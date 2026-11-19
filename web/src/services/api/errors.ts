@@ -114,3 +114,16 @@ export const getUploadErrorInfo = (error: unknown): UploadErrorInfo | null => {
   }
   return null
 }
+
+const CONTEXT_LENGTH_PATTERNS = [
+  /maximum context length/i,
+  /context_length_exceeded/i,
+  /too many tokens/i,
+  /prompt is too long/i,
+  /input length.*exceeds/i,
+]
+
+export const isContextLengthError = (error: unknown): boolean =>
+  error instanceof ApiError &&
+  error.status === 400 &&
+  CONTEXT_LENGTH_PATTERNS.some((pattern) => pattern.test(error.message))

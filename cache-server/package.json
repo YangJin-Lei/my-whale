@@ -1,6 +1,6 @@
 {
   "name": "my-whale-cache-server",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "private": true,
   "type": "module",
   "description": "Lightweight local cache backend & built-in search/fetch proxy for my-whale",

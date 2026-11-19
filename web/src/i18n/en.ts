@@ -461,9 +461,42 @@ export const en = {
   settingsNoticeItem5:
     'Notice: Playing mini-games invokes the API frequently (especially in Dou Dizhu, Werewolf, or DeepThink mode) and consumes more API credits than regular chat.',
   settingsNoticeItem6:
-    'Notice: When Cache Mode is on, search & fetch run via the built-in cached backend and preserve prompt prefixes to lower API costs; off uses default direct DeepSeek API.',
+    'Notice: Cache Mode is enabled by default. Search & fetch prefer the built-in cached backend (falling back to official DeepSeek search if built-in search returns no results) and preserve prompt prefixes; if unreachable on static Web it falls back to direct DeepSeek API.',
   gameCostNotice:
     'Notice: Mini-games invoke DeepSeek API frequently and consume more API credits than normal chat.',
   drawGuessCopyPrompt: 'Copy prompt',
   drawGuessAiIdiom: 'AI Idiom',
+  compactionTitle: 'Context Compaction',
+  compactionInlineIdle: 'Compact({level})',
+  compactionInlineActive: 'Compacted {count} turns({level})',
+  compactionLevelLight: 'Light',
+  compactionLevelMedium: 'Medium',
+  compactionLevelHeavy: 'Heavy',
+  compactionLevelLightTag: 'Light · Default',
+  compactionLevelMediumTag: 'Medium',
+  compactionLevelHeavyTag: 'Heavy',
+  compactionLevelLightDesc: 'Keeps ~16k recent tokens (>=6 turns); auto triggers >28k.',
+  compactionLevelMediumDesc: 'Keeps ~9k recent tokens (>=4 turns); auto triggers >18k.',
+  compactionLevelHeavyDesc: 'Keeps ~4.2k recent tokens (>=2 turns); auto triggers >10k.',
+  compactionAutoLabel: 'Auto-compact using selected tier when over budget',
+  compactionStatusLine:
+    'Est. {tokens} tokens ({total} turns) · {compacted} compacted / {retained} verbatim',
+  compactionMemoryLine: '{segments} segment summaries · {records} structured records',
+  compactionNotCompacted: 'Not compacted yet (full conversation history sent)',
+  compactionNoticeTitle: 'Notices & Tier Guide',
+  compactionNoticeCost:
+    '1. How it works & cost: Uses paper-grounded hierarchical extraction (settings/preferences/boundaries/corrections + on-demand recall). Never deletes local history or files; each compaction makes 1 lightweight summary call, then locks the prefix for high KV cache hits.',
+  compactionNoticeLight:
+    '• Light (Default): Best for everyday long chats, coding, writing, and keeping maximal context detail.',
+  compactionNoticeMedium:
+    '• Medium: Best for long sessions with documents/PDFs where token growth needs balance between recall and cost.',
+  compactionNoticeHeavy:
+    '• Heavy: Best near context limits or when you want minimal input cost and only need the latest turns.',
+  compactionRunNow: 'Compact Now',
+  compactionRunning: 'Compacting…',
+  compactionStop: 'Stop',
+  compactionReset: 'Restore Full History',
+  compactionDoneToast: 'Context compacted',
+  compactionNothingToCompact: 'Too few turns to compact yet',
+  compactionResetDoneToast: 'Full context history restored for requests',
 } satisfies Record<keyof typeof zh, string>

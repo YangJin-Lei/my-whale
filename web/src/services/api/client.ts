@@ -1,5 +1,10 @@
 import { translate, type TranslationMessage } from '../../i18n/index.js'
-import { resolveEffectiveOrigin } from '../cacheBackend.js'
+import {
+  ensureNativeCacheStarted,
+  normalizeCacheBackendUrl,
+  resolveEffectiveOrigin,
+} from '../cacheBackend.js'
+import { useSettings } from '../settings.js'
 import { readMessageEvent } from './parseEvent.js'
 import { readServerSentEvents } from './sse.js'
 import type {
@@ -69,6 +74,12 @@ const readErrorResponse = async (
 }
 
 export const request = async (url: string, init: RequestInit): Promise<Response> => {
+  const { cacheModeEnabled, cacheBackendUrl } = useSettings.getState()
+  const cacheOrigin = normalizeCacheBackendUrl(cacheBackendUrl)
+  const isCacheTarget = cacheModeEnabled && url.startsWith(cacheOrigin)
+  if (isCacheTarget) {
+    await ensureNativeCacheStarted()
+  }
   let response: Response
   try {
     response = await fetch(url, init)
@@ -76,7 +87,22 @@ export const request = async (url: string, init: RequestInit): Promise<Response>
     if (init.signal?.aborted) {
       throw error
     }
-    throw new ApiError('network', error instanceof Error ? error.message : String(error))
+    if (isCacheTarget && cacheOrigin !== API_ORIGIN) {
+      const directUrl = `${API_ORIGIN}${url.slice(cacheOrigin.length)}`
+      try {
+        response = await fetch(directUrl, init)
+      } catch (fallbackError) {
+        if (init.signal?.aborted) {
+          throw fallbackError
+        }
+        throw new ApiError(
+          'network',
+          fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+        )
+      }
+    } else {
+      throw new ApiError('network', error instanceof Error ? error.message : String(error))
+    }
   }
   if (!response.ok) {
     throw await readErrorResponse(response)

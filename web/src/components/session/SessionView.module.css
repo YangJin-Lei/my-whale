@@ -79,6 +79,11 @@
 }
 
 .caveat {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 5px;
   width: 100%;
   padding: 6px 0;
   font-size: 11px;
@@ -86,6 +91,26 @@
   text-align: center;
   color: var(--dsw-alias-label-tertiary);
   user-select: none;
+}
+
+.caveatSep {
+  opacity: 0.6;
+}
+
+.compactTrigger {
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: var(--dsw-alias-brand-primary);
+  }
 }
 
 @media not all and (min-width: 768px) {

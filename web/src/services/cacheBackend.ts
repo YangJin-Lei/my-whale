@@ -96,7 +96,28 @@ export const startNativeOrProbeCacheBackend = async (
   return pingCacheBackend(base)
 }
 
+let nativeStartPromise: Promise<void> | null = null
+
+export const ensureNativeCacheStarted = async (): Promise<void> => {
+  if (!nativeController) {
+    return
+  }
+  if (!nativeStartPromise) {
+    nativeStartPromise = startNativeOrProbeCacheBackend()
+      .then((stats) => {
+        if (!stats.online) {
+          nativeStartPromise = null
+        }
+      })
+      .catch(() => {
+        nativeStartPromise = null
+      })
+  }
+  await nativeStartPromise
+}
+
 export const stopNativeCacheBackend = async (): Promise<void> => {
+  nativeStartPromise = null
   if (nativeController) {
     await nativeController.stop().catch(() => {})
   }

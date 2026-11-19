@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   IconCameraOutline16,
+  IconCompressOutline16,
   IconGlobeLanguageOutline14,
   IconImageOutline16,
   IconPaperclipOutline16,
@@ -10,6 +11,7 @@ import {
   IconStopFill16,
   IconThinkOutline14,
 } from '../base/icons.js'
+import { openCompactionModal } from '../../services/chat/compaction.js'
 import { setSearch, setThinking, useSettings } from '../../services/settings.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { sendMessage, stopReply, useChatStore } from '../../services/chat/store.js'
@@ -249,6 +251,20 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
             <IconPaperclipOutline16 />
             <span>{t('chatAttachFile')}</span>
           </button>
+          {sessionId !== null ? (
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.plusMenuItem}
+              onClick={() => {
+                setMenuOpen(false)
+                openCompactionModal(sessionId)
+              }}
+            >
+              <IconCompressOutline16 />
+              <span>{t('compactionTitle')}</span>
+            </button>
+          ) : null}
         </div>
       ) : null}
       <input

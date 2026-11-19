@@ -1,0 +1,124 @@
+.modal {
+  width: min(500px, calc(100vw - 32px));
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.statusBox {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer2, rgba(0, 0, 0, 0.03));
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.statusMain {
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+
+.tiers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.tierCard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.tierCard:hover {
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.tierActive {
+  border-color: var(--dsw-alias-brand-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, var(--dsw-alias-bg-base));
+}
+
+.tierTitle {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.tierDesc {
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.autoRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.autoRow input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--dsw-alias-brand-primary);
+  cursor: pointer;
+}
+
+.noticeBox {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer2, rgba(0, 0, 0, 0.025));
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.noticeTitle {
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.errorText {
+  font-size: 12px;
+  color: var(--dsw-alias-error, #d93025);
+}
+
+.footerRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+}
+
+@media not all and (min-width: 768px) {
+  .tiers {
+    grid-template-columns: 1fr;
+  }
+}

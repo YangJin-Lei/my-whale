@@ -298,30 +298,31 @@ public class LocalCacheServer {
             }
         }
 
+        boolean officialSearchFallback = false;
         if (wantsSearch) {
             String query = sanitizeSearchQuery(lastUserText);
             if (!query.isEmpty()) {
                 JSONObject searchOut = runCachedSearch(query, 6);
-                String toolId = "srvtoolu_s_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
-
-                JSONObject useBlock = new JSONObject();
-                useBlock.put("type", "server_tool_use");
-                useBlock.put("id", toolId);
-                useBlock.put("name", "deepseek_web_search");
-                useBlock.put(
-                    "input",
-                    new JSONObject()
-                        .put("action", "search")
-                        .put("query", query)
-                        .put("queries", new JSONArray().put(query))
-                );
-                useBlock.put("caller", new JSONObject().put("type", "direct"));
-                useBlock.put("kind", "search");
-                syntheticBlocks.add(useBlock);
-
                 JSONArray items = searchOut.optJSONArray("results");
-                JSONArray mappedResults = new JSONArray();
-                if (items != null) {
+                if (items != null && items.length() > 0) {
+                    String toolId = "srvtoolu_s_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+
+                    JSONObject useBlock = new JSONObject();
+                    useBlock.put("type", "server_tool_use");
+                    useBlock.put("id", toolId);
+                    useBlock.put("name", "deepseek_web_search");
+                    useBlock.put(
+                        "input",
+                        new JSONObject()
+                            .put("action", "search")
+                            .put("query", query)
+                            .put("queries", new JSONArray().put(query))
+                    );
+                    useBlock.put("caller", new JSONObject().put("type", "direct"));
+                    useBlock.put("kind", "search");
+                    syntheticBlocks.add(useBlock);
+
+                    JSONArray mappedResults = new JSONArray();
                     for (int i = 0; i < items.length(); i++) {
                         JSONObject r = items.getJSONObject(i);
                         String rUrl = r.optString("url", "");
@@ -339,35 +340,35 @@ public class LocalCacheServer {
                                 .put("page_age", JSONObject.NULL)
                         );
                     }
-                    if (items.length() > 0) {
+                    grounding
+                        .append("【系统已通过内置缓存搜索工具(")
+                        .append(searchOut.optString("backend", "search"))
+                        .append(searchOut.optBoolean("cached", false) ? ", 命中缓存" : "")
+                        .append(")获取以下实时结果，请直接结合这些结果回答用户，不要说自己没有搜索工具或无法联网】\n关键词: ")
+                        .append(query)
+                        .append('\n');
+                    for (int i = 0; i < items.length(); i++) {
+                        JSONObject r = items.getJSONObject(i);
                         grounding
-                            .append("【系统已通过内置缓存搜索工具(")
-                            .append(searchOut.optString("backend", "search"))
-                            .append(searchOut.optBoolean("cached", false) ? ", 命中缓存" : "")
-                            .append(")获取以下实时结果，请直接结合这些结果回答用户，不要说自己没有搜索工具或无法联网】\n关键词: ")
-                            .append(query)
-                            .append('\n');
-                        for (int i = 0; i < items.length(); i++) {
-                            JSONObject r = items.getJSONObject(i);
-                            grounding
-                                .append(i + 1)
-                                .append(". ")
-                                .append(r.optString("title", ""))
-                                .append("\nURL: ")
-                                .append(r.optString("url", ""))
-                                .append("\n摘要: ")
-                                .append(r.optString("snippet", ""))
-                                .append("\n\n");
-                        }
+                            .append(i + 1)
+                            .append(". ")
+                            .append(r.optString("title", ""))
+                            .append("\nURL: ")
+                            .append(r.optString("url", ""))
+                            .append("\n摘要: ")
+                            .append(r.optString("snippet", ""))
+                            .append("\n\n");
                     }
+                    syntheticBlocks.add(
+                        new JSONObject()
+                            .put("type", "web_search_tool_result")
+                            .put("tool_use_id", toolId)
+                            .put("kind", "search")
+                            .put("content", mappedResults)
+                    );
+                } else {
+                    officialSearchFallback = true;
                 }
-                syntheticBlocks.add(
-                    new JSONObject()
-                        .put("type", "web_search_tool_result")
-                        .put("tool_use_id", toolId)
-                        .put("kind", "search")
-                        .put("content", mappedResults)
-                );
             }
         }
 
@@ -378,9 +379,9 @@ public class LocalCacheServer {
         appendGroundingToLastUser(stableMessages, groundingStr);
         body.put("messages", stableMessages);
 
-        JSONArray filteredTools = filterTools(incomingTools);
-        if (filteredTools.length() > 0) {
-            body.put("tools", filteredTools);
+        JSONArray effectiveTools = officialSearchFallback ? incomingTools : filterTools(incomingTools);
+        if (effectiveTools != null && effectiveTools.length() > 0) {
+            body.put("tools", effectiveTools);
         } else {
             body.remove("tools");
         }

@@ -666,3 +666,15 @@ export const IconPetOutline16 = () => (
     />
   </svg>
 )
+
+export const IconCompressOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M3 3.25H13M3 12.75H13M8 1.75V5.75M8 5.75L6 4M8 5.75L10 4M8 14.25V10.25M8 10.25L6 12M8 10.25L10 12"
+      stroke="currentColor"
+      strokeWidth="1.35"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)

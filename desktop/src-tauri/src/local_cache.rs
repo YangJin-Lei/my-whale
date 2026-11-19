@@ -635,6 +635,7 @@ fn handle_tcp_client(mut stream: TcpStream, client: reqwest::Client, cache: Arc<
             }
         }
 
+        let mut official_search_fallback = false;
         if wants_search {
             let query: String = last_user_text
                 .split_whitespace()
@@ -646,42 +647,44 @@ fn handle_tcp_client(mut stream: TcpStream, client: reqwest::Client, cache: Arc<
                 .collect();
             if !query.is_empty() {
                 let s_out = run_search(&client, &cache, &query, 6);
-                let id = format!("srvtoolu_s_{}", now_secs());
-                synthetic_blocks.push(json!({
-                    "type": "server_tool_use",
-                    "id": id,
-                    "name": "deepseek_web_search",
-                    "input": { "action": "search", "query": query, "queries": [query] },
-                    "caller": { "type": "direct" },
-                    "kind": "search"
-                }));
                 let items = s_out.get("results").and_then(|v| v.as_array()).cloned().unwrap_or_default();
-                let mut mapped = Vec::new();
-                if !items.is_empty() {
-                    grounding.push(format!("【系统已通过内置缓存搜索工具获取以下实时结果，请直接结合这些结果回答用户，不要说自己没有搜索工具或无法联网】\n关键词: {}", query));
-                }
-                for (i, item) in items.iter().enumerate() {
-                    let t = item.get("title").and_then(|v| v.as_str()).unwrap_or("");
-                    let u = item.get("url").and_then(|v| v.as_str()).unwrap_or("");
-                    let sn = item.get("snippet").and_then(|v| v.as_str()).unwrap_or("");
-                    mapped.push(json!({
-                        "type": "web_search_result",
-                        "title": t,
-                        "url": u,
-                        "snippet": sn,
-                        "site_name": Value::Null,
-                        "site_icon": Value::Null,
-                        "encrypted_content": "",
-                        "page_age": Value::Null
+                if items.is_empty() {
+                    official_search_fallback = true;
+                } else {
+                    let id = format!("srvtoolu_s_{}", now_secs());
+                    synthetic_blocks.push(json!({
+                        "type": "server_tool_use",
+                        "id": id,
+                        "name": "deepseek_web_search",
+                        "input": { "action": "search", "query": query, "queries": [query] },
+                        "caller": { "type": "direct" },
+                        "kind": "search"
                     }));
-                    grounding.push(format!("{}. {}\nURL: {}\n摘要: {}", i + 1, t, u, sn));
+                    let mut mapped = Vec::new();
+                    grounding.push(format!("【系统已通过内置缓存搜索工具获取以下实时结果，请直接结合这些结果回答用户，不要说自己没有搜索工具或无法联网】\n关键词: {}", query));
+                    for (i, item) in items.iter().enumerate() {
+                        let t = item.get("title").and_then(|v| v.as_str()).unwrap_or("");
+                        let u = item.get("url").and_then(|v| v.as_str()).unwrap_or("");
+                        let sn = item.get("snippet").and_then(|v| v.as_str()).unwrap_or("");
+                        mapped.push(json!({
+                            "type": "web_search_result",
+                            "title": t,
+                            "url": u,
+                            "snippet": sn,
+                            "site_name": Value::Null,
+                            "site_icon": Value::Null,
+                            "encrypted_content": "",
+                            "page_age": Value::Null
+                        }));
+                        grounding.push(format!("{}. {}\nURL: {}\n摘要: {}", i + 1, t, u, sn));
+                    }
+                    synthetic_blocks.push(json!({
+                        "type": "web_search_tool_result",
+                        "tool_use_id": id,
+                        "kind": "search",
+                        "content": mapped
+                    }));
                 }
-                synthetic_blocks.push(json!({
-                    "type": "web_search_tool_result",
-                    "tool_use_id": id,
-                    "kind": "search",
-                    "content": mapped
-                }));
             }
         }
 
@@ -707,13 +710,17 @@ fn handle_tcp_client(mut stream: TcpStream, client: reqwest::Client, cache: Arc<
 
         if let Some(obj) = msg_body.as_object_mut() {
             obj.insert("messages".into(), Value::Array(stable_msgs));
-            let filtered: Vec<Value> = tools_arr
-                .into_iter()
-                .filter(|t| {
-                    let n = t.get("name").and_then(|v| v.as_str()).unwrap_or("");
-                    n != "deepseek_web_search" && n != "deepseek_read_url"
-                })
-                .collect();
+            let filtered: Vec<Value> = if official_search_fallback {
+                tools_arr
+            } else {
+                tools_arr
+                    .into_iter()
+                    .filter(|t| {
+                        let n = t.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                        n != "deepseek_web_search" && n != "deepseek_read_url"
+                    })
+                    .collect()
+            };
             if filtered.is_empty() {
                 obj.remove("tools");
             } else {

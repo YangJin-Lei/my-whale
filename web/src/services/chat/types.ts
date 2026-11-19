@@ -114,6 +114,45 @@ export type PersonaNotice = {
   personaName: string
 }
 
+export type CompactionLevel = 'light' | 'medium' | 'heavy'
+
+export type CompactionRecordCategory =
+  | 'setting'
+  | 'preference'
+  | 'boundary'
+  | 'event'
+  | 'promise'
+  | 'correction'
+
+export type CompactionRecord = {
+  id: string
+  category: CompactionRecordCategory
+  content: string
+  quote: string
+  sourceMessageId: string
+  importance: number
+  supersedes?: string
+  updatedAt: number
+}
+
+export type CompactionSegment = {
+  id: string
+  fromMessageId: string
+  toMessageId: string
+  roundCount: number
+  summary: string
+  updatedAt: number
+}
+
+export type SessionCompaction = {
+  level: CompactionLevel
+  retainedFromId: string | null
+  lastReplyId: string | null
+  segments: CompactionSegment[]
+  records: CompactionRecord[]
+  updatedAt: number
+}
+
 export type Session = {
   id: string
   title: string
@@ -127,6 +166,8 @@ export type Session = {
   persona?: SessionPersona
   /** 会话中切换人设的展示提示（不参与请求） */
   personaNotices?: PersonaNotice[]
+  /** 分档上下文压缩状态（只裁剪请求历史，不删除本地原文） */
+  compaction?: SessionCompaction
 }
 
 /** 会话列表元数据；消息只在打开会话时加载。 */
