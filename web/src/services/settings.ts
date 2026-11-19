@@ -44,6 +44,7 @@ type Settings = {
   updateMirror: string
   cacheModeEnabled: boolean
   cacheBackendUrl: string
+  compactionEnabled: boolean
   compactionAuto: boolean
   compactionLevel: 'light' | 'medium' | 'heavy'
 }
@@ -74,6 +75,7 @@ const KEYS = {
   updateMirror: 'chat-demo:update-mirror',
   cacheModeEnabled: 'chat-demo:cache-mode',
   cacheBackendUrl: 'chat-demo:cache-backend-url',
+  compactionEnabled: 'chat-demo:compaction-enabled',
   compactionAuto: 'chat-demo:compaction-auto',
   compactionLevel: 'chat-demo:compaction-level',
 } as const
@@ -183,7 +185,10 @@ export const useSettings = create<Settings>(() => ({
   updateMirror: read(KEYS.updateMirror) || 'https://ghfast.top/',
   cacheModeEnabled: read(KEYS.cacheModeEnabled) !== 'false',
   cacheBackendUrl: read(KEYS.cacheBackendUrl) || 'http://127.0.0.1:8787',
-  compactionAuto: read(KEYS.compactionAuto) !== 'false',
+  // 默认关闭自动压缩：自动压缩会在回复前串行调用多次 API 提炼摘要（很慢），且会改写前缀导致缓存失效
+  // 上下文压缩总开关：默认关闭，用户手动开启后才显示压缩入口与档位选择
+  compactionEnabled: read(KEYS.compactionEnabled) === 'true',
+  compactionAuto: read(KEYS.compactionAuto) === 'true',
   compactionLevel: (read(KEYS.compactionLevel) as 'light' | 'medium' | 'heavy' | null) || 'light',
 }))
 
@@ -429,6 +434,9 @@ export const applySettingsSnapshot = (raw: Partial<SettingsSnapshot>) => {
   if (typeof raw.cacheBackendUrl === 'string') {
     setCacheBackendUrl(raw.cacheBackendUrl)
   }
+  if (typeof raw.compactionEnabled === 'boolean') {
+    setCompactionEnabled(raw.compactionEnabled)
+  }
   if (typeof raw.compactionAuto === 'boolean') {
     setCompactionAuto(raw.compactionAuto)
   }
@@ -514,6 +522,11 @@ export const setCacheBackendUrl = (cacheBackendUrl: string) => {
 }
 
 export type CompactionLevel = 'light' | 'medium' | 'heavy'
+
+export const setCompactionEnabled = (compactionEnabled: boolean) => {
+  write(KEYS.compactionEnabled, String(compactionEnabled))
+  useSettings.setState({ compactionEnabled })
+}
 
 export const setCompactionAuto = (compactionAuto: boolean) => {
   write(KEYS.compactionAuto, String(compactionAuto))

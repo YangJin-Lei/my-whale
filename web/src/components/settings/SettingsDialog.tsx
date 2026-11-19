@@ -43,6 +43,7 @@ import {
   isChineseBrowser,
   setCacheBackendUrl,
   setCacheModeEnabled,
+  setCompactionEnabled,
   setChatBgImage,
   setChatBgPreset,
   setFontFollowSystem,
@@ -200,6 +201,7 @@ const SettingsContent = () => {
                 <VoiceModeSetting />
                 <LocationSetting />
                 <CacheModeSetting />
+                <CompactionSetting />
                 <UpdateSetting />
                 <UpdateAccelerateSetting />
                 <AppNotice />
@@ -515,6 +517,25 @@ const UpdateAccelerateSetting = () => {
         />
       ) : null}
     </>
+  )
+}
+
+const CompactionSetting = () => {
+  const t = useTranslate()
+  const compactionEnabled = useSettings((state) => state.compactionEnabled)
+  return (
+    <div className={styles.cellCard}>
+      <div className={styles.row}>
+        <span className={styles.label}>{t('settingsCompaction')}</span>
+        <input
+          type="checkbox"
+          aria-label={t('settingsCompaction')}
+          checked={compactionEnabled}
+          onChange={(event) => setCompactionEnabled(event.target.checked)}
+        />
+      </div>
+      <div className={styles.cacheSubLabel}>{t('settingsCompactionHint')}</div>
+    </div>
   )
 }
 

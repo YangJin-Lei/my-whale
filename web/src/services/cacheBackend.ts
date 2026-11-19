@@ -97,9 +97,15 @@ export const startNativeOrProbeCacheBackend = async (
 }
 
 let nativeStartPromise: Promise<void> | null = null
+let nativeStartFailedAt = 0
+const NATIVE_RETRY_COOLDOWN_MS = 60_000
 
 export const ensureNativeCacheStarted = async (): Promise<void> => {
   if (!nativeController) {
+    return
+  }
+  // 启动失败后冷却一段时间，避免每次发消息都卡在 start + 2.5s 健康探测上
+  if (!nativeStartPromise && Date.now() - nativeStartFailedAt < NATIVE_RETRY_COOLDOWN_MS) {
     return
   }
   if (!nativeStartPromise) {
@@ -107,10 +113,12 @@ export const ensureNativeCacheStarted = async (): Promise<void> => {
       .then((stats) => {
         if (!stats.online) {
           nativeStartPromise = null
+          nativeStartFailedAt = Date.now()
         }
       })
       .catch(() => {
         nativeStartPromise = null
+        nativeStartFailedAt = Date.now()
       })
   }
   await nativeStartPromise

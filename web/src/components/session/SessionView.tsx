@@ -33,6 +33,7 @@ export const SessionView = ({
   const t = useTranslate()
   const isMobile = useIsMobile()
   const compactionLevel = useSettings((s) => s.compactionLevel)
+  const compactionEnabled = useSettings((s) => s.compactionEnabled)
   const title = session.title || t('untitledChat')
   const stats = getSessionCompactionStats(session.id)
   const activeTierLabel = t(LEVEL_KEY_MAP[stats.activeLevel ?? compactionLevel])
@@ -65,21 +66,25 @@ export const SessionView = ({
             <ChatInput sessionId={session.id} />
             <div className={styles.caveat}>
               <span>{t('contentCaveat')}</span>
-              <span className={styles.caveatSep} aria-hidden="true">
-                ·
-              </span>
-              <button
-                type="button"
-                className={styles.compactTrigger}
-                onClick={() => openCompactionModal(session.id)}
-              >
-                {stats.compactedRounds > 0
-                  ? t('compactionInlineActive', {
-                      count: stats.compactedRounds,
-                      level: activeTierLabel,
-                    })
-                  : t('compactionInlineIdle', { level: activeTierLabel })}
-              </button>
+              {compactionEnabled ? (
+                <>
+                  <span className={styles.caveatSep} aria-hidden="true">
+                    ·
+                  </span>
+                  <button
+                    type="button"
+                    className={styles.compactTrigger}
+                    onClick={() => openCompactionModal(session.id)}
+                  >
+                    {stats.compactedRounds > 0
+                      ? t('compactionInlineActive', {
+                          count: stats.compactedRounds,
+                          level: activeTierLabel,
+                        })
+                      : t('compactionInlineIdle', { level: activeTierLabel })}
+                  </button>
+                </>
+              ) : null}
             </div>
           </div>
         }

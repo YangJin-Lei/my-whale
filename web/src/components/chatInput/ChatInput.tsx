@@ -76,6 +76,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const importingHistory = useChatStore((state) => state.importingHistory)
   const isMobile = useIsMobile()
   const search = useSettings((state) => state.search)
+  const compactionEnabled = useSettings((state) => state.compactionEnabled)
   const [menuOpen, setMenuOpen] = useState(false)
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const albumInputRef = useRef<HTMLInputElement>(null)
@@ -251,7 +252,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
             <IconPaperclipOutline16 />
             <span>{t('chatAttachFile')}</span>
           </button>
-          {sessionId !== null ? (
+          {sessionId !== null && compactionEnabled ? (
             <button
               type="button"
               role="menuitem"

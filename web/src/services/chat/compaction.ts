@@ -28,42 +28,44 @@ export type CompactionPreset = {
   maxRecords: number
 }
 
+// 参照官方做法（接近上下文窗口时才压缩、一次大批量摘要）：
+// 触发阈值大幅提高，单批 token 加大以减少回复前的串行 API 调用次数。
 export const COMPACTION_PRESETS: Record<CompactionLevel, CompactionPreset> = {
   light: {
     level: 'light',
-    inputBudget: 28_000,
-    tailBudget: 16_000,
-    minTailRounds: 6,
-    maxTailRounds: 36,
-    batchTokens: 6_000,
-    summaryMaxChars: 420,
-    minGrowthRounds: 6,
-    evidenceBudget: 1_200,
+    inputBudget: 96_000,
+    tailBudget: 48_000,
+    minTailRounds: 8,
+    maxTailRounds: 80,
+    batchTokens: 32_000,
+    summaryMaxChars: 900,
+    minGrowthRounds: 10,
+    evidenceBudget: 1_500,
     maxSegments: 8,
     maxRecords: 48,
   },
   medium: {
     level: 'medium',
-    inputBudget: 18_000,
-    tailBudget: 9_000,
-    minTailRounds: 4,
-    maxTailRounds: 20,
-    batchTokens: 6_000,
-    summaryMaxChars: 500,
-    minGrowthRounds: 4,
+    inputBudget: 64_000,
+    tailBudget: 28_000,
+    minTailRounds: 6,
+    maxTailRounds: 48,
+    batchTokens: 32_000,
+    summaryMaxChars: 800,
+    minGrowthRounds: 8,
     evidenceBudget: 1_800,
     maxSegments: 6,
     maxRecords: 36,
   },
   heavy: {
     level: 'heavy',
-    inputBudget: 10_000,
-    tailBudget: 4_200,
-    minTailRounds: 2,
-    maxTailRounds: 8,
-    batchTokens: 5_000,
-    summaryMaxChars: 350,
-    minGrowthRounds: 3,
+    inputBudget: 32_000,
+    tailBudget: 12_000,
+    minTailRounds: 3,
+    maxTailRounds: 20,
+    batchTokens: 24_000,
+    summaryMaxChars: 600,
+    minGrowthRounds: 5,
     evidenceBudget: 1_000,
     maxSegments: 4,
     maxRecords: 24,
@@ -654,10 +656,12 @@ export const runCompactionPass = async ({
     const threshold = existing ? Math.round(preset.inputBudget * 0.85) : preset.inputBudget
 
     if (estTokens <= threshold || (existing && growthRounds < preset.minGrowthRounds)) {
+      // 不做滑动窗口裁剪：每轮从头部丢弃旧消息会让请求前缀每次都变，DeepSeek 前缀缓存全部失效。
+      // 真正超出模型上下文时由 store 的 context-length 重试兜底。
       return {
         compaction: existing,
         changed: false,
-        tailHistory: fitRequestHistory(uncompactedHistory, preset.inputBudget),
+        tailHistory: uncompactedHistory,
       }
     }
   }

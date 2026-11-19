@@ -1192,7 +1192,15 @@ const resolveSessionSystemPrompt = (
   freezeForCache = false
 ): string => {
   const session = getSession(sessionId)
-  if (freezeForCache && session?.persona?.frozenSystemPrompt) {
+  const compactionBlock = useSettings.getState().compactionEnabled
+    ? formatCompactionSystemBlock(session?.compaction)
+    : ''
+  const withCompaction = compactionBlock !== ''
+  if (
+    freezeForCache &&
+    session?.persona?.frozenSystemPrompt &&
+    Boolean(session.persona.frozenWithCompaction) === withCompaction
+  ) {
     return session.persona.frozenSystemPrompt
   }
   const { memoryEnabled, profile } = useSettings.getState()
@@ -1246,7 +1254,6 @@ const resolveSessionSystemPrompt = (
       session?.persona?.tunedMidSession || (session?.personaNotices?.length ?? 0) > 0
     ),
   })
-  const compactionBlock = formatCompactionSystemBlock(session?.compaction)
   const combinedBase = compactionBlock ? `${basePrompt}\n\n${compactionBlock}` : basePrompt
   if (!freezeForCache) {
     return combinedBase
@@ -1259,6 +1266,7 @@ const resolveSessionSystemPrompt = (
       snapshot: current.persona?.snapshot ?? null,
       ...current.persona,
       frozenSystemPrompt: frozen,
+      frozenWithCompaction: withCompaction,
     },
   }))
   persist(sessionId)
@@ -1682,12 +1690,14 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         reply = { ...reply, latestReminder }
         updateReply(sessionId, reply)
         persist(sessionId)
-        const { cacheModeEnabled, compactionAuto, compactionLevel } = useSettings.getState()
+        const { cacheModeEnabled, compactionEnabled, compactionAuto, compactionLevel } =
+          useSettings.getState()
         const currentSession = getSession(sessionId)
         let activeHistory = prepared.history
-        let activeCompaction = currentSession?.compaction
+        // 压缩总开关关闭时完全忽略已有压缩记录，按完整历史发送（前缀稳定，缓存友好）
+        let activeCompaction = compactionEnabled ? currentSession?.compaction : undefined
 
-        if (currentSession && !prepared.prefix) {
+        if (compactionEnabled && currentSession && !prepared.prefix) {
           if (compactionAuto) {
             const compacted = await runCompactionPass({
               session: currentSession,

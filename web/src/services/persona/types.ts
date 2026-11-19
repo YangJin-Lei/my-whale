@@ -41,6 +41,8 @@ export type SessionPersona = {
   tunedMidSession?: boolean
   /** 缓存模式下冻结首轮完整系统提示词，保障 DeepSeek KV 前缀缓存跨轮命中 */
   frozenSystemPrompt?: string
+  /** 冻结时是否包含了压缩记忆块；与当前压缩开关状态不一致时重新生成 */
+  frozenWithCompaction?: boolean
 }
 
 export const PERSONA_NAME_MAX = 20
