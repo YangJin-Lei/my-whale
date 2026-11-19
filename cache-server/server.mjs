@@ -69,9 +69,31 @@ function extractLastUserText(messages) {
 function sanitizeSearchQuery(rawText) {
   return rawText
     .replace(/https?:\/\/[^\s]+/gi, ' ')
+    .replace(/^(请|帮我|给我|麻烦)?(上网|联网)?(搜索|搜一下|查一下|查询)\s*/i, '')
+    .replace(/[呢吗吧呀啊？?!！。.\s]+$/g, '')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 140)
+}
+
+function getTurnText(msg) {
+  if (typeof msg?.content === 'string') {
+    return msg.content
+  }
+  if (Array.isArray(msg?.content)) {
+    return msg.content
+      .filter((b) => b?.type === 'text' && typeof b.text === 'string')
+      .map((b) => b.text)
+      .join('\n')
+  }
+  return ''
+}
+
+function makeTurnKey(sessionKey, rawText) {
+  if (!sessionKey || !rawText) {
+    return ''
+  }
+  return `${sessionKey}::${crypto.createHash('sha256').update(rawText).digest('hex').slice(0, 24)}`
 }
 
 /**
@@ -144,7 +166,32 @@ async function handleMessagesProxy(req, res) {
     (t) => t?.name === 'deepseek_read_url' || t?.type === 'deepseek_read_url'
   )
 
-  const stableMessages = stabilizeMessagesForPrefixCache(body.messages || [])
+  const sessionKey = req.headers['x-session-id'] ? String(req.headers['x-session-id']) : ''
+  const stableMessages = stabilizeMessagesForPrefixCache(body.messages || []).map((m) => ({ ...m }))
+  if (sessionKey) {
+    let lastUserIdx = -1
+    for (let i = stableMessages.length - 1; i >= 0; i -= 1) {
+      if (stableMessages[i]?.role === 'user') {
+        lastUserIdx = i
+        break
+      }
+    }
+    for (let i = 0; i < lastUserIdx; i += 1) {
+      const m = stableMessages[i]
+      if (m?.role !== 'user') {
+        continue
+      }
+      const rawText = getTurnText(m)
+      const savedNote = await cacheStore.getAugmentedTurn(makeTurnKey(sessionKey, rawText))
+      if (savedNote) {
+        if (typeof m.content === 'string') {
+          m.content = `${m.content}\n\n${savedNote}`
+        } else if (Array.isArray(m.content)) {
+          m.content = [...m.content, { type: 'text', text: `\n\n${savedNote}` }]
+        }
+      }
+    }
+  }
   const lastUserText = extractLastUserText(stableMessages)
   const urls = wantsReadUrl ? extractUrls(lastUserText) : []
 
@@ -227,15 +274,20 @@ async function handleMessagesProxy(req, res) {
           (r, idx) => `${idx + 1}. ${r.title}\nURL: ${r.url}\n摘要: ${r.snippet}`
         )
         groundingParts.push(
-          `[内置缓存搜索(${searchOut.backend}${searchOut.cached ? ', 命中缓存' : ''}): ${query}]\n${lines.join('\n\n')}`
+          `【系统已通过内置缓存搜索工具(${searchOut.backend}${searchOut.cached ? ', 命中缓存' : ''})获取以下实时结果，请直接结合这些结果回答用户，不要说自己没有搜索工具或无法联网】\n关键词: ${query}\n${lines.join('\n\n')}`
         )
       }
     }
   }
 
+  const groundingText = groundingParts.join('\n\n')
+  if (sessionKey && groundingText && lastUserText) {
+    await cacheStore.saveAugmentedTurn(makeTurnKey(sessionKey, lastUserText), groundingText)
+  }
+
   const upstreamBody = {
     ...body,
-    messages: appendGroundingToLastUserMessage(stableMessages, groundingParts.join('\n\n')),
+    messages: appendGroundingToLastUserMessage(stableMessages, groundingText),
     tools: incomingTools.filter(
       (t) =>
         t?.name !== 'deepseek_web_search' &&
@@ -248,7 +300,6 @@ async function handleMessagesProxy(req, res) {
     delete upstreamBody.tools
   }
 
-  const sessionKey = req.headers['x-session-id'] ? String(req.headers['x-session-id']) : ''
   if (sessionKey) {
     void cacheStore.recordSessionTurn(sessionKey, stableMessages)
   }

@@ -434,8 +434,9 @@ export const zh = {
   settingsCacheUrl: '后端地址',
   settingsCacheClear: '清空缓存',
   settingsCacheCleared: '缓存已清空',
-  settingsCacheStats: '搜索 {search} · 抓取 {fetch} · 命中 {hits}',
+  settingsCacheStats: '前缀命中 {rate}% · 搜索 {search} · 抓取 {fetch}',
   settingsCacheConnectFailed: '未检测到缓存后端，请先启动后端',
+  cacheHitBadge: '缓存 {pct}%',
   settingsNoticeItem5:
     '注意事项：玩小游戏会高频调用 API（尤其在斗地主、狼人杀或开启深度思考时），消耗的 API 费用比普通对话更多，请留意账户余额。',
   settingsNoticeItem6:

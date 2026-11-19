@@ -198,12 +198,14 @@ export const createMessage = async (
 export async function* streamMessage(
   apiKey: string,
   body: CreateMessageRequest,
-  signal: AbortSignal
+  signal: AbortSignal,
+  sessionId?: string
 ): AsyncGenerator<MessageStreamEvent> {
   const response = await request(`${getAnthropicBaseUrl()}/messages`, {
     method: 'POST',
     headers: {
       ...anthropicHeaders(apiKey, hasFile(body)),
+      ...(sessionId ? { 'x-session-id': sessionId } : {}),
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
     },

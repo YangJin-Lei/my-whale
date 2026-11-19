@@ -520,7 +520,13 @@ const CacheModeSetting = () => {
     searchHits: 0,
     fetchHits: 0,
     upstreamCalls: 0,
+    prefixReadTokens: 0,
+    prefixCreateTokens: 0,
+    prefixInputTokens: 0,
   })
+  const totalPrefix = stats.prefixReadTokens + stats.prefixCreateTokens + stats.prefixInputTokens
+  const prefixHitRate =
+    totalPrefix > 0 ? Math.round((stats.prefixReadTokens / totalPrefix) * 100) : 0
 
   const refreshStatus = async (url?: string) => {
     const res = await pingCacheBackend(url)
@@ -646,9 +652,9 @@ const CacheModeSetting = () => {
                 </Button>
                 <span className={styles.cacheStatsText}>
                   {t('settingsCacheStats', {
+                    rate: prefixHitRate,
                     search: stats.searchCached,
                     fetch: stats.fetchCached,
-                    hits: stats.searchHits + stats.fetchHits,
                   })}
                 </span>
               </>

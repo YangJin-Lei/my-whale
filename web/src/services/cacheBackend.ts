@@ -10,6 +10,9 @@ export type CacheBackendStats = {
   searchHits: number
   fetchHits: number
   upstreamCalls: number
+  prefixReadTokens: number
+  prefixCreateTokens: number
+  prefixInputTokens: number
 }
 
 export type NativeCacheController = {
@@ -36,6 +39,18 @@ export const resolveEffectiveOrigin = (fallbackOrigin: string): string => {
   return cacheModeEnabled ? normalizeCacheBackendUrl(cacheBackendUrl) : fallbackOrigin
 }
 
+const EMPTY_STATS: CacheBackendStats = {
+  online: false,
+  searchCached: 0,
+  fetchCached: 0,
+  searchHits: 0,
+  fetchHits: 0,
+  upstreamCalls: 0,
+  prefixReadTokens: 0,
+  prefixCreateTokens: 0,
+  prefixInputTokens: 0,
+}
+
 export const pingCacheBackend = async (rawUrl?: string): Promise<CacheBackendStats> => {
   const base = normalizeCacheBackendUrl(rawUrl ?? useSettings.getState().cacheBackendUrl)
   const controller = new AbortController()
@@ -43,14 +58,7 @@ export const pingCacheBackend = async (rawUrl?: string): Promise<CacheBackendSta
   try {
     const res = await fetch(`${base}/health`, { method: 'GET', signal: controller.signal })
     if (!res.ok) {
-      return {
-        online: false,
-        searchCached: 0,
-        fetchCached: 0,
-        searchHits: 0,
-        fetchHits: 0,
-        upstreamCalls: 0,
-      }
+      return EMPTY_STATS
     }
     const json = (await res.json()) as Partial<CacheBackendStats> & { ok?: boolean }
     return {
@@ -61,16 +69,12 @@ export const pingCacheBackend = async (rawUrl?: string): Promise<CacheBackendSta
       searchHits: Number(json.searchHits ?? 0),
       fetchHits: Number(json.fetchHits ?? 0),
       upstreamCalls: Number(json.upstreamCalls ?? 0),
+      prefixReadTokens: Number(json.prefixReadTokens ?? 0),
+      prefixCreateTokens: Number(json.prefixCreateTokens ?? 0),
+      prefixInputTokens: Number(json.prefixInputTokens ?? 0),
     }
   } catch {
-    return {
-      online: false,
-      searchCached: 0,
-      fetchCached: 0,
-      searchHits: 0,
-      fetchHits: 0,
-      upstreamCalls: 0,
-    }
+    return EMPTY_STATS
   } finally {
     clearTimeout(timer)
   }

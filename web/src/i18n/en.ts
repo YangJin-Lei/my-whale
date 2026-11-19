@@ -455,8 +455,9 @@ export const en = {
   settingsCacheUrl: 'Backend URL',
   settingsCacheClear: 'Clear cache',
   settingsCacheCleared: 'Cache cleared',
-  settingsCacheStats: 'Search {search} · Fetch {fetch} · Hits {hits}',
+  settingsCacheStats: 'Prefix {rate}% · Search {search} · Fetch {fetch}',
   settingsCacheConnectFailed: 'Cache backend unreachable. Start the backend first.',
+  cacheHitBadge: 'Cache {pct}%',
   settingsNoticeItem5:
     'Notice: Playing mini-games invokes the API frequently (especially in Dou Dizhu, Werewolf, or DeepThink mode) and consumes more API credits than regular chat.',
   settingsNoticeItem6:

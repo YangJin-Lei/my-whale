@@ -144,6 +144,25 @@ function extractDdgRealUrl(ddgUrl) {
   }
 }
 
+function parseBaiduHtml(html, limit = 8) {
+  const blocks = collectMatches(
+    /<h3[^>]*class="[^"]*\bt\b[^"]*"[^>]*>[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi,
+    html
+  )
+  const results = []
+  for (const match of blocks) {
+    if (results.length >= limit) {
+      break
+    }
+    const url = match[1] || ''
+    const title = stripTags(match[2] || '')
+    if (title && url.startsWith('http')) {
+      results.push({ title, url, snippet: '', source: 'baidu' })
+    }
+  }
+  return results
+}
+
 function parseDuckDuckGoHtml(html, limit = 8) {
   const links = collectMatches(
     /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi,
@@ -210,15 +229,18 @@ export async function runCachedSearch(cacheStore, query, limit = 6) {
     }
   }
 
-  for (const engine of ['bing', 'duckduckgo']) {
+  for (const engine of ['bing', 'baidu', 'duckduckgo']) {
     try {
       const url =
         engine === 'bing'
           ? `https://cn.bing.com/search?q=${encodeURIComponent(cleanQuery)}&count=${safeLimit}`
-          : `https://html.duckduckgo.com/html/?q=${encodeURIComponent(cleanQuery)}`
+          : engine === 'baidu'
+            ? `https://www.baidu.com/s?wd=${encodeURIComponent(cleanQuery)}&rn=${safeLimit}`
+            : `https://html.duckduckgo.com/html/?q=${encodeURIComponent(cleanQuery)}`
       const res = await fetchWithTimeout(url, {
         headers: {
           'User-Agent': USER_AGENT,
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
         },
         timeoutMs: 12_000,
@@ -228,7 +250,11 @@ export async function runCachedSearch(cacheStore, query, limit = 6) {
       }
       const html = res.buffer.toString('utf8')
       const results =
-        engine === 'bing' ? parseBingHtml(html, safeLimit) : parseDuckDuckGoHtml(html, safeLimit)
+        engine === 'bing'
+          ? parseBingHtml(html, safeLimit)
+          : engine === 'baidu'
+            ? parseBaiduHtml(html, safeLimit)
+            : parseDuckDuckGoHtml(html, safeLimit)
       if (results.length > 0) {
         const outcome = { ok: true, query: cleanQuery, backend: engine, results }
         await cacheStore.setSearch(cacheKey, outcome)

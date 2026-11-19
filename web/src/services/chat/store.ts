@@ -1132,8 +1132,18 @@ const waitForRetry = (attempt: number, signal: AbortSignal) =>
     signal.addEventListener('abort', onAbort, { once: true })
   })
 
-const resolveSessionSystemPrompt = (sessionId: string, query: string): string => {
+const EXPLICIT_SEARCH_INTENT_RE =
+  /(?:搜索|搜一下|查一下|帮我查|上网查|联网查|最新消息|最新新闻|今日新闻|实时动态)/i
+
+const resolveSessionSystemPrompt = (
+  sessionId: string,
+  query: string,
+  freezeForCache = false
+): string => {
   const session = getSession(sessionId)
+  if (freezeForCache && session?.persona?.frozenSystemPrompt) {
+    return session.persona.frozenSystemPrompt
+  }
   const { memoryEnabled, profile } = useSettings.getState()
   const incognito = Boolean(session?.persona?.incognito)
   const memoryScope: MemoryScope = session?.persona?.memoryScope ?? 'global_and_local'
@@ -1172,7 +1182,7 @@ const resolveSessionSystemPrompt = (sessionId: string, query: string): string =>
     }
   }
 
-  return buildSystemPrompt({
+  const basePrompt = buildSystemPrompt({
     persona: session?.persona?.snapshot ?? null,
     sessionNote: session?.persona?.note,
     memoryEnabled,
@@ -1185,6 +1195,21 @@ const resolveSessionSystemPrompt = (sessionId: string, query: string): string =>
       session?.persona?.tunedMidSession || (session?.personaNotices?.length ?? 0) > 0
     ),
   })
+  if (!freezeForCache) {
+    return basePrompt
+  }
+  const frozen = `${basePrompt}\n\n[会话环境] ${createLatestReminder(useSettings.getState())}`
+  updateSession(sessionId, (current) => ({
+    ...current,
+    persona: {
+      personaId: current.persona?.personaId ?? null,
+      snapshot: current.persona?.snapshot ?? null,
+      ...current.persona,
+      frozenSystemPrompt: frozen,
+    },
+  }))
+  persist(sessionId)
+  return frozen
 }
 
 export const getSessionUsedMemories = (sessionId: string): Memory[] => {
@@ -1226,6 +1251,7 @@ export const switchSessionPersona = (sessionId: string, persona: Persona) => {
       ...current.persona,
       personaId: persona.id,
       snapshot: nextSnapshot,
+      frozenSystemPrompt: undefined,
     },
     personaNotices: [
       ...(current.personaNotices ?? []),
@@ -1247,6 +1273,7 @@ export const syncSessionPersonaSnapshot = (sessionId: string, persona: Persona) 
       ...current.persona,
       personaId: persona.id,
       snapshot: toPersonaSnapshot(persona),
+      frozenSystemPrompt: undefined,
     },
     updatedAt: Date.now(),
   }))
@@ -1281,6 +1308,7 @@ export const tuneSessionAssistant = (
         instructions: cleanInstructions,
       },
       tunedMidSession: true,
+      frozenSystemPrompt: undefined,
     },
     messages: current.messages.map((msg) =>
       msg.role === 'assistant'
@@ -1491,15 +1519,22 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         reply = { ...reply, latestReminder }
         updateReply(sessionId, reply)
         persist(sessionId)
+        const cacheModeEnabled = useSettings.getState().cacheModeEnabled
         const messages = toRequestMessages(
           prepared.history,
           prepared.question,
           prepared.prefix,
           initial.thinking ?? false,
           latestReminder,
-          useSettings.getState().cacheModeEnabled
+          cacheModeEnabled
         )
-        const systemPrompt = resolveSessionSystemPrompt(sessionId, prepared.question.content)
+        const systemPrompt = resolveSessionSystemPrompt(
+          sessionId,
+          prepared.question.content,
+          cacheModeEnabled
+        )
+        const explicitSearch =
+          cacheModeEnabled && EXPLICIT_SEARCH_INTENT_RE.test(prepared.question.content)
         const events = streamMessage(
           useSettings.getState().apiKey ?? '',
           {
@@ -1508,10 +1543,11 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             messages,
             thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
             safety_check: SAFETY_CHECK,
-            tools: serverTools(initial.search ?? false),
+            tools: serverTools(Boolean(initial.search) || explicitSearch),
             ...(titleRequests.has(controller) ? { title: { enabled: true } } : {}),
           },
-          controller.signal
+          controller.signal,
+          sessionId
         )
         const blockIndexes = new Map<number, number>()
         for await (const event of events) {

@@ -326,7 +326,9 @@ export const toRequestMessages = (
     }
     messages.push(toUserParam(user), toAssistantParam(reply))
   }
-  appendReminder(latestReminder)
+  if (!prefixCacheStable) {
+    appendReminder(latestReminder)
+  }
   messages.push(toUserParam(question))
   if (prefix?.prefix) {
     const assistant = toAssistantParam(prefix, true, thinking)

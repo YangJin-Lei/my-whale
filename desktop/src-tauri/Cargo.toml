@@ -1,6 +1,6 @@
 [package]
 name = "my-whale"
-version = "0.1.12"
+version = "0.1.13"
 description = "Local-first DeepSeek client"
 authors = ["my-whale contributors"]
 edition = "2021"

@@ -39,6 +39,8 @@ export type SessionPersona = {
   localMemories?: LocalMemory[]
   /** 是否在当前会话中就地微调过助手人设 */
   tunedMidSession?: boolean
+  /** 缓存模式下冻结首轮完整系统提示词，保障 DeepSeek KV 前缀缓存跨轮命中 */
+  frozenSystemPrompt?: string
 }
 
 export const PERSONA_NAME_MAX = 20

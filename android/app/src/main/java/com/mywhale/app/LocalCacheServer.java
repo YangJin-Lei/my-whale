@@ -23,6 +23,7 @@ import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -34,6 +35,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
@@ -57,6 +59,9 @@ public class LocalCacheServer {
     private final AtomicInteger searchHits = new AtomicInteger(0);
     private final AtomicInteger fetchHits = new AtomicInteger(0);
     private final AtomicInteger upstreamCalls = new AtomicInteger(0);
+    private final AtomicLong prefixReadTokens = new AtomicLong(0);
+    private final AtomicLong prefixCreateTokens = new AtomicLong(0);
+    private final AtomicLong prefixInputTokens = new AtomicLong(0);
 
     private volatile ServerSocket serverSocket;
     private volatile boolean running = false;
@@ -123,6 +128,9 @@ public class LocalCacheServer {
         obj.put("searchHits", searchHits.get());
         obj.put("fetchHits", fetchHits.get());
         obj.put("upstreamCalls", upstreamCalls.get());
+        obj.put("prefixReadTokens", prefixReadTokens.get());
+        obj.put("prefixCreateTokens", prefixCreateTokens.get());
+        obj.put("prefixInputTokens", prefixInputTokens.get());
         return obj;
     }
 
@@ -179,6 +187,9 @@ public class LocalCacheServer {
                 searchHits.set(0);
                 fetchHits.set(0);
                 upstreamCalls.set(0);
+                prefixReadTokens.set(0);
+                prefixCreateTokens.set(0);
+                prefixInputTokens.set(0);
                 sendJson(out, 200, "{\"ok\":true}");
                 return;
             }
@@ -222,7 +233,9 @@ public class LocalCacheServer {
         boolean wantsSearch = hasTool(incomingTools, "deepseek_web_search");
         boolean wantsReadUrl = hasTool(incomingTools, "deepseek_read_url");
 
+        String sessionKey = headers.getOrDefault("x-session-id", "");
         JSONArray stableMessages = stabilizePrefixMessages(body.optJSONArray("messages"));
+        replayHistoricalTurns(sessionKey, stableMessages);
         String lastUserText = extractLastUserText(stableMessages);
 
         List<JSONObject> syntheticBlocks = new ArrayList<>();
@@ -325,15 +338,27 @@ public class LocalCacheServer {
                                 .put("encrypted_content", "")
                                 .put("page_age", JSONObject.NULL)
                         );
+                    }
+                    if (items.length() > 0) {
                         grounding
-                            .append(i + 1)
-                            .append(". ")
-                            .append(rTitle)
-                            .append("\nURL: ")
-                            .append(rUrl)
-                            .append("\n摘要: ")
-                            .append(rSnippet)
-                            .append("\n\n");
+                            .append("【系统已通过内置缓存搜索工具(")
+                            .append(searchOut.optString("backend", "search"))
+                            .append(searchOut.optBoolean("cached", false) ? ", 命中缓存" : "")
+                            .append(")获取以下实时结果，请直接结合这些结果回答用户，不要说自己没有搜索工具或无法联网】\n关键词: ")
+                            .append(query)
+                            .append('\n');
+                        for (int i = 0; i < items.length(); i++) {
+                            JSONObject r = items.getJSONObject(i);
+                            grounding
+                                .append(i + 1)
+                                .append(". ")
+                                .append(r.optString("title", ""))
+                                .append("\nURL: ")
+                                .append(r.optString("url", ""))
+                                .append("\n摘要: ")
+                                .append(r.optString("snippet", ""))
+                                .append("\n\n");
+                        }
                     }
                 }
                 syntheticBlocks.add(
@@ -346,7 +371,11 @@ public class LocalCacheServer {
             }
         }
 
-        appendGroundingToLastUser(stableMessages, grounding.toString().trim());
+        String groundingStr = grounding.toString().trim();
+        if (!sessionKey.isEmpty() && !groundingStr.isEmpty() && !lastUserText.isEmpty()) {
+            dbHelper.put("turn", makeTurnKey(sessionKey, lastUserText), groundingStr, System.currentTimeMillis() + 30L * 86400_000L);
+        }
+        appendGroundingToLastUser(stableMessages, groundingStr);
         body.put("messages", stableMessages);
 
         JSONArray filteredTools = filterTools(incomingTools);
@@ -438,6 +467,7 @@ public class LocalCacheServer {
                             if (emittedStart && rawFrame.contains("\"message_start\"")) {
                                 continue;
                             }
+                            recordSseUsage(rawFrame);
                             out.write((rawFrame + "\n\n").getBytes(StandardCharsets.UTF_8));
                             out.flush();
                         }
@@ -505,20 +535,43 @@ public class LocalCacheServer {
             }
         }
 
-        JSONArray bing = searchBing(clean, safeLimit);
+        JSONArray results = searchBing(clean, safeLimit);
         String backend = "bing";
-        if (bing.length() == 0) {
-            bing = searchDuckDuckGo(clean, safeLimit);
-            backend = bing.length() > 0 ? "duckduckgo" : "none";
+        if (results.length() == 0) {
+            results = searchBaidu(clean, safeLimit);
+            backend = "baidu";
+        }
+        if (results.length() == 0) {
+            results = searchDuckDuckGo(clean, safeLimit);
+            backend = results.length() > 0 ? "duckduckgo" : "none";
         }
         try {
-            res.put("ok", true).put("query", clean).put("backend", backend).put("results", bing).put("cached", false);
-            if (bing.length() > 0) {
+            res.put("ok", true).put("query", clean).put("backend", backend).put("results", results).put("cached", false);
+            if (results.length() > 0) {
                 dbHelper.put("search", key, res.toString(), System.currentTimeMillis() + SEARCH_TTL_MS);
             }
         } catch (Exception ignored) {
         }
         return res;
+    }
+
+    private JSONArray searchBaidu(String query, int limit) {
+        JSONArray results = new JSONArray();
+        try {
+            String url = "https://www.baidu.com/s?wd=" + URLEncoder.encode(query, "UTF-8") + "&rn=" + limit;
+            String html = new String(httpGet(url).bytes, StandardCharsets.UTF_8);
+            Pattern pat = Pattern.compile("<h3[^>]*class=\"[^\"]*\\bt\\b[^\"]*\"[^>]*>[\\s\\S]*?<a[^>]*href=\"([^\"]+)\"[^>]*>([\\s\\S]*?)</a>", Pattern.CASE_INSENSITIVE);
+            Matcher m = pat.matcher(html);
+            while (m.find() && results.length() < limit) {
+                String targetUrl = m.group(1);
+                String title = stripTags(m.group(2));
+                if (!title.isEmpty() && targetUrl.startsWith("http")) {
+                    results.put(new JSONObject().put("title", title).put("url", targetUrl).put("snippet", "").put("source", "baidu"));
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return results;
     }
 
     private JSONArray searchBing(String query, int limit) {
@@ -873,8 +926,104 @@ public class LocalCacheServer {
         return new ArrayList<>(urls);
     }
 
+    private void recordSseUsage(String rawFrame) {
+        if (!rawFrame.contains("\"usage\"")) {
+            return;
+        }
+        for (String line : rawFrame.split("\n")) {
+            if (!line.startsWith("data:")) {
+                continue;
+            }
+            try {
+                JSONObject evt = new JSONObject(line.substring(5).trim());
+                JSONObject usage = evt.optJSONObject("usage");
+                if (usage != null) {
+                    prefixInputTokens.addAndGet(usage.optLong("input_tokens", 0));
+                    prefixReadTokens.addAndGet(usage.optLong("cache_read_input_tokens", 0));
+                    prefixCreateTokens.addAndGet(usage.optLong("cache_creation_input_tokens", 0));
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private void replayHistoricalTurns(String sessionKey, JSONArray messages) {
+        if (sessionKey == null || sessionKey.isEmpty() || messages == null) {
+            return;
+        }
+        int lastUserIdx = -1;
+        for (int i = messages.length() - 1; i >= 0; i--) {
+            JSONObject m = messages.optJSONObject(i);
+            if (m != null && "user".equals(m.optString("role"))) {
+                lastUserIdx = i;
+                break;
+            }
+        }
+        for (int i = 0; i < lastUserIdx; i++) {
+            JSONObject m = messages.optJSONObject(i);
+            if (m == null || !"user".equals(m.optString("role"))) {
+                continue;
+            }
+            String rawText = extractSingleUserText(m);
+            if (rawText.isEmpty()) {
+                continue;
+            }
+            String saved = dbHelper.get("turn", makeTurnKey(sessionKey, rawText));
+            if (saved == null || saved.isEmpty()) {
+                continue;
+            }
+            try {
+                Object c = m.opt("content");
+                if (c instanceof String) {
+                    m.put("content", c + "\n\n" + saved);
+                } else if (c instanceof JSONArray) {
+                    ((JSONArray) c).put(new JSONObject().put("type", "text").put("text", "\n\n" + saved));
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private static String extractSingleUserText(JSONObject m) {
+        Object c = m.opt("content");
+        if (c instanceof String) {
+            return (String) c;
+        }
+        if (c instanceof JSONArray) {
+            StringBuilder sb = new StringBuilder();
+            JSONArray arr = (JSONArray) c;
+            for (int j = 0; j < arr.length(); j++) {
+                JSONObject b = arr.optJSONObject(j);
+                if (b != null && "text".equals(b.optString("type"))) {
+                    sb.append(b.optString("text", "")).append('\n');
+                }
+            }
+            return sb.toString();
+        }
+        return "";
+    }
+
+    private static String makeTurnKey(String sessionKey, String rawText) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] dig = md.digest(rawText.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder();
+            for (int i = 0; i < Math.min(12, dig.length); i++) {
+                hex.append(String.format(Locale.ROOT, "%02x", dig[i]));
+            }
+            return sessionKey + "::" + hex;
+        } catch (Exception ignored) {
+            return sessionKey + "::" + rawText.hashCode();
+        }
+    }
+
     private static String sanitizeSearchQuery(String text) {
-        String cleaned = text.replaceAll("https?://\\S+", " ").replaceAll("\\s+", " ").trim();
+        String cleaned = text
+            .replaceAll("https?://\\S+", " ")
+            .replaceFirst("^(?:请|帮我|给我|麻烦)?(?:上网|联网)?(?:搜索|搜一下|查一下|查询)\\s*", "")
+            .replaceAll("[呢吗吧呀啊？?!！。.\\s]+$", "")
+            .replaceAll("\\s+", " ")
+            .trim();
         return cleaned.length() > 140 ? cleaned.substring(0, 140) : cleaned;
     }
 

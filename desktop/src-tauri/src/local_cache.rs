@@ -25,9 +25,13 @@ struct CacheEntry {
 struct MemoryToolCache {
     search: Mutex<HashMap<String, CacheEntry>>,
     fetch: Mutex<HashMap<String, CacheEntry>>,
+    turns: Mutex<HashMap<String, String>>,
     search_hits: AtomicU64,
     fetch_hits: AtomicU64,
     upstream_calls: AtomicU64,
+    prefix_read_tokens: AtomicU64,
+    prefix_create_tokens: AtomicU64,
+    prefix_input_tokens: AtomicU64,
 }
 
 pub struct CacheServerHolder {
@@ -59,6 +63,9 @@ pub struct CacheServerStatus {
     pub search_hits: u64,
     pub fetch_hits: u64,
     pub upstream_calls: u64,
+    pub prefix_read_tokens: u64,
+    pub prefix_create_tokens: u64,
+    pub prefix_input_tokens: u64,
 }
 
 fn now_secs() -> u64 {
@@ -201,6 +208,39 @@ fn parse_bing_links(html: &str, limit: usize) -> Vec<Value> {
     results
 }
 
+fn parse_baidu_links(html: &str, limit: usize) -> Vec<Value> {
+    let mut results = Vec::new();
+    let lower = html.to_lowercase();
+    let mut pos = 0;
+    while results.len() < limit {
+        let Some(idx_rel) = lower[pos..].find("<h3") else { break };
+        let h_start = pos + idx_rel;
+        let h_end = lower[h_start..].find("</h3>").map(|x| h_start + x).unwrap_or(html.len());
+        let block = &html[h_start..h_end];
+        if let Some(href_start) = block.find("href=\"") {
+            let after_href = &block[href_start + 6..];
+            if let Some(href_end) = after_href.find('"') {
+                let raw_url = &after_href[..href_end];
+                let title_area = &after_href[href_end + 1..];
+                let title = title_area
+                    .find('>')
+                    .and_then(|gt| title_area[gt + 1..].find("</a>").map(|end| strip_html_tags(&title_area[gt + 1..gt + 1 + end])))
+                    .unwrap_or_default();
+                if raw_url.starts_with("http") && !title.is_empty() {
+                    results.push(json!({
+                        "title": title,
+                        "url": raw_url,
+                        "snippet": "",
+                        "source": "baidu"
+                    }));
+                }
+            }
+        }
+        pos = h_end;
+    }
+    results
+}
+
 fn run_search(client: &reqwest::Client, cache: &MemoryToolCache, query: &str, limit: usize) -> Value {
     let clean = query.trim();
     if clean.is_empty() {
@@ -229,13 +269,35 @@ fn run_search(client: &reqwest::Client, cache: &MemoryToolCache, query: &str, li
         let resp = client
             .get(&url)
             .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0.0.0 Safari/537.36")
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
             .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
             .send()
             .await;
-        match resp {
+        let bing_res = match resp {
             Ok(r) if r.status().is_success() => {
                 let html = r.text().await.unwrap_or_default();
                 parse_bing_links(&html, limit)
+            }
+            _ => Vec::new(),
+        };
+        if !bing_res.is_empty() {
+            return bing_res;
+        }
+        let baidu_url = format!(
+            "https://www.baidu.com/s?wd={}&rn={}",
+            clean.replace(' ', "+"),
+            limit
+        );
+        let br = client
+            .get(&baidu_url)
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0.0.0 Safari/537.36")
+            .header("Accept", "text/html")
+            .send()
+            .await;
+        match br {
+            Ok(r) if r.status().is_success() => {
+                let html = r.text().await.unwrap_or_default();
+                parse_baidu_links(&html, limit)
             }
             _ => Vec::new(),
         }
@@ -444,6 +506,9 @@ fn handle_tcp_client(mut stream: TcpStream, client: reqwest::Client, cache: Arc<
             "searchHits": cache.search_hits.load(Ordering::Relaxed),
             "fetchHits": cache.fetch_hits.load(Ordering::Relaxed),
             "upstreamCalls": cache.upstream_calls.load(Ordering::Relaxed),
+            "prefixReadTokens": cache.prefix_read_tokens.load(Ordering::Relaxed),
+            "prefixCreateTokens": cache.prefix_create_tokens.load(Ordering::Relaxed),
+            "prefixInputTokens": cache.prefix_input_tokens.load(Ordering::Relaxed),
         });
         send_http(&mut stream, 200, "application/json; charset=utf-8", payload.to_string().as_bytes());
         return;
@@ -452,9 +517,13 @@ fn handle_tcp_client(mut stream: TcpStream, client: reqwest::Client, cache: Arc<
     if method == "POST" && path_only == "/api/cache/clear" {
         if let Ok(mut g) = cache.search.lock() { g.clear(); }
         if let Ok(mut g) = cache.fetch.lock() { g.clear(); }
+        if let Ok(mut g) = cache.turns.lock() { g.clear(); }
         cache.search_hits.store(0, Ordering::Relaxed);
         cache.fetch_hits.store(0, Ordering::Relaxed);
         cache.upstream_calls.store(0, Ordering::Relaxed);
+        cache.prefix_read_tokens.store(0, Ordering::Relaxed);
+        cache.prefix_create_tokens.store(0, Ordering::Relaxed);
+        cache.prefix_input_tokens.store(0, Ordering::Relaxed);
         send_http(&mut stream, 200, "application/json; charset=utf-8", b"{\"ok\":true}");
         return;
     }
@@ -488,8 +557,28 @@ fn handle_tcp_client(mut stream: TcpStream, client: reqwest::Client, cache: Arc<
         let wants_search = tools_arr.iter().any(|t| t.get("name").and_then(|n| n.as_str()) == Some("deepseek_web_search"));
         let wants_fetch = tools_arr.iter().any(|t| t.get("name").and_then(|n| n.as_str()) == Some("deepseek_read_url"));
 
+        let session_key = headers.get("x-session-id").cloned().unwrap_or_default();
         let raw_msgs = msg_body.get("messages").and_then(|v| v.as_array()).cloned().unwrap_or_default();
         let mut stable_msgs = stabilize_messages_prefix(raw_msgs);
+        if !session_key.is_empty() {
+            let last_u_idx = stable_msgs.iter().rposition(|m| m.get("role").and_then(|r| r.as_str()) == Some("user")).unwrap_or(0);
+            if let Ok(tg) = cache.turns.lock() {
+                for m in stable_msgs.iter_mut().take(last_u_idx) {
+                    if m.get("role").and_then(|r| r.as_str()) != Some("user") {
+                        continue;
+                    }
+                    let raw = match m.get("content") {
+                        Some(Value::String(s)) => s.clone(),
+                        _ => String::new(),
+                    };
+                    if let Some(saved) = tg.get(&format!("{}::{}", session_key, raw)) {
+                        if let Some(Value::String(s)) = m.get_mut("content") {
+                            *s = format!("{}\n\n{}", s, saved);
+                        }
+                    }
+                }
+            }
+        }
         let last_user_text = stable_msgs
             .iter()
             .rev()
@@ -568,6 +657,9 @@ fn handle_tcp_client(mut stream: TcpStream, client: reqwest::Client, cache: Arc<
                 }));
                 let items = s_out.get("results").and_then(|v| v.as_array()).cloned().unwrap_or_default();
                 let mut mapped = Vec::new();
+                if !items.is_empty() {
+                    grounding.push(format!("【系统已通过内置缓存搜索工具获取以下实时结果，请直接结合这些结果回答用户，不要说自己没有搜索工具或无法联网】\n关键词: {}", query));
+                }
                 for (i, item) in items.iter().enumerate() {
                     let t = item.get("title").and_then(|v| v.as_str()).unwrap_or("");
                     let u = item.get("url").and_then(|v| v.as_str()).unwrap_or("");
@@ -595,6 +687,11 @@ fn handle_tcp_client(mut stream: TcpStream, client: reqwest::Client, cache: Arc<
 
         if !grounding.is_empty() {
             let note = grounding.join("\n\n");
+            if !session_key.is_empty() && !last_user_text.is_empty() {
+                if let Ok(mut tg) = cache.turns.lock() {
+                    tg.insert(format!("{}::{}", session_key, last_user_text), note.clone());
+                }
+            }
             if let Some(last_u) = stable_msgs.iter_mut().rev().find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user")) {
                 match last_u.get_mut("content") {
                     Some(Value::String(s)) => {
@@ -676,6 +773,25 @@ fn handle_tcp_client(mut stream: TcpStream, client: reqwest::Client, cache: Arc<
                     buf.drain(..pos + 2);
                     if emitted_start && frame.contains("\"message_start\"") {
                         continue;
+                    }
+                    if frame.contains("\"usage\"") {
+                        for line in frame.lines() {
+                            if let Some(json_str) = line.strip_prefix("data:") {
+                                if let Ok(v) = serde_json::from_str::<Value>(json_str.trim()) {
+                                    if let Some(u) = v.get("usage") {
+                                        if let Some(n) = u.get("input_tokens").and_then(|x| x.as_u64()) {
+                                            cache.prefix_input_tokens.fetch_add(n, Ordering::Relaxed);
+                                        }
+                                        if let Some(n) = u.get("cache_read_input_tokens").and_then(|x| x.as_u64()) {
+                                            cache.prefix_read_tokens.fetch_add(n, Ordering::Relaxed);
+                                        }
+                                        if let Some(n) = u.get("cache_creation_input_tokens").and_then(|x| x.as_u64()) {
+                                            cache.prefix_create_tokens.fetch_add(n, Ordering::Relaxed);
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                     let _ = stream.write_all(format!("{}\n\n", frame).as_bytes());
                     let _ = stream.flush();
@@ -804,5 +920,8 @@ pub fn get_cache_server_status(holder: tauri::State<'_, CacheServerHolder>) -> C
         search_hits: holder.cache.search_hits.load(Ordering::Relaxed),
         fetch_hits: holder.cache.fetch_hits.load(Ordering::Relaxed),
         upstream_calls: holder.cache.upstream_calls.load(Ordering::Relaxed),
+        prefix_read_tokens: holder.cache.prefix_read_tokens.load(Ordering::Relaxed),
+        prefix_create_tokens: holder.cache.prefix_create_tokens.load(Ordering::Relaxed),
+        prefix_input_tokens: holder.cache.prefix_input_tokens.load(Ordering::Relaxed),
     }
 }

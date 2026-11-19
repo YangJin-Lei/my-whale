@@ -6,6 +6,7 @@ import { describeReply } from '../../services/chat/describe.js'
 import { canContinueReply } from '../../services/chat/reply.js'
 import { continueReply, regenerateReply } from '../../services/chat/store.js'
 import { stopReadAloud } from '../../services/speech/readAloud.js'
+import { useSettings } from '../../services/settings.js'
 import { openExternal, PLATFORM_TOP_UP_URL } from '../../services/links.js'
 import type { AssistantMessage as AssistantMessageType } from '../../services/chat/types.js'
 import { openSettings } from '../settings/settingsDialogState.js'
@@ -45,7 +46,16 @@ export const AssistantMessage = memo(function AssistantMessage({
   onSelectVersion: SelectMessageVersion
 }) {
   const t = useTranslate()
+  const cacheModeEnabled = useSettings((state) => state.cacheModeEnabled)
   const view = useReplyView(message, streaming)
+  const totalInputTokens =
+    (message.usage?.input_tokens ?? 0) +
+    (message.usage?.cache_creation_input_tokens ?? 0) +
+    (message.usage?.cache_read_input_tokens ?? 0)
+  const cachePct =
+    totalInputTokens > 0 && message.usage
+      ? Math.round((message.usage.cache_read_input_tokens / totalInputTokens) * 100)
+      : null
   const panelEntry = useSearchPanel((state) => state.entry)
   const notice = streaming ? null : describeReply(message)
   // 安全拒绝：已下发的思考与正文按协议丢弃，只显示模板答复。
@@ -169,6 +179,9 @@ export const AssistantMessage = memo(function AssistantMessage({
             />
             {responseText && !refused ? (
               <RememberAction sessionId={sessionId} text={responseText} />
+            ) : null}
+            {cachePct !== null && (cacheModeEnabled || cachePct > 0) ? (
+              <span className={styles.cacheBadge}>{t('cacheHitBadge', { pct: cachePct })}</span>
             ) : null}
           </div>
           {isLast && canContinueReply(message) ? (

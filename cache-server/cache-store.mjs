@@ -13,12 +13,14 @@ export class CacheStore {
     this.state = {
       search: {},
       fetch: {},
+      turns: {},
       sessions: {},
       stats: {
         searchHits: 0,
         fetchHits: 0,
         prefixReadTokens: 0,
         prefixCreateTokens: 0,
+        prefixInputTokens: 0,
         upstreamCalls: 0,
       },
     }
@@ -60,6 +62,7 @@ export class CacheStore {
           this.state = {
             search: raw.search || {},
             fetch: raw.fetch || {},
+            turns: raw.turns || {},
             sessions: raw.sessions || {},
             stats: { ...this.state.stats, ...(raw.stats || {}) },
           }
@@ -177,9 +180,46 @@ export class CacheStore {
     this.flushJson()
   }
 
+  async getAugmentedTurn(turnKey) {
+    await this.initPromise
+    if (!turnKey) {
+      return null
+    }
+    if (this.db) {
+      const row = this.db
+        .prepare('SELECT payload FROM kv_cache WHERE namespace = ? AND cache_key = ?')
+        .get('turn', turnKey)
+      return row ? String(row.payload) : null
+    }
+    return this.state.turns[turnKey]?.payload ?? null
+  }
+
+  async saveAugmentedTurn(turnKey, payload) {
+    await this.initPromise
+    if (!turnKey || !payload) {
+      return
+    }
+    const now = Date.now()
+    const farFuture = now + 30 * 24 * 60 * 60 * 1000
+    if (this.db) {
+      this.db
+        .prepare(
+          'INSERT OR REPLACE INTO kv_cache (namespace, cache_key, payload, expires_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+        )
+        .run('turn', turnKey, payload, farFuture, now)
+      return
+    }
+    this.state.turns[turnKey] = { payload, updatedAt: now }
+    this.pruneMap(this.state.turns)
+    this.flushJson()
+  }
+
   recordUsage(usage) {
     this.state.stats.upstreamCalls += 1
     if (usage && typeof usage === 'object') {
+      if (typeof usage.input_tokens === 'number') {
+        this.state.stats.prefixInputTokens += usage.input_tokens
+      }
       if (typeof usage.cache_read_input_tokens === 'number') {
         this.state.stats.prefixReadTokens += usage.cache_read_input_tokens
       }
@@ -217,12 +257,14 @@ export class CacheStore {
     }
     this.state.search = {}
     this.state.fetch = {}
+    this.state.turns = {}
     this.state.sessions = {}
     this.state.stats = {
       searchHits: 0,
       fetchHits: 0,
       prefixReadTokens: 0,
       prefixCreateTokens: 0,
+      prefixInputTokens: 0,
       upstreamCalls: 0,
     }
     this.flushJson()
