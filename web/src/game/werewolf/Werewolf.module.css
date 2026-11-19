@@ -12,6 +12,30 @@
   flex-wrap: wrap;
 }
 
+.countTabs {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.countBtn {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.countBtnActive {
+  border-color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-brand-primary);
+  background: rgba(77, 107, 254, 0.1);
+  font-weight: 600;
+}
+
 .phasePill {
   padding: 4px 10px;
   border-radius: 999px;
@@ -36,6 +60,10 @@
 @media (min-width: 720px) {
   .seatGrid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .seatGrid12 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 

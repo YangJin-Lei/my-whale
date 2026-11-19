@@ -209,103 +209,107 @@ export const GameDrawer = () => {
             <button type="button" className={styles.pillBtn} onClick={restartCurrentGame}>
               {t('gameRestart')}
             </button>
+            <button
+              type="button"
+              className={clsx(
+                styles.pillBtn,
+                thoughtExpanded && thoughtText && styles.pillBtnActive
+              )}
+              disabled={!thoughtText}
+              onClick={() => setThoughtExpanded((prev) => !prev)}
+            >
+              <span>
+                {thoughtExpanded && thoughtText ? t('gameHideThought') : t('gameViewThought')}
+              </span>
+            </button>
           </div>
 
-          <div className={styles.body}>
-            {!plugin.hideGenericOpponentHeader ? (
-              <div className={styles.opponentStage}>
-                <div
-                  className={clsx(
-                    styles.avatarBox,
-                    (aiThinking || voiceStatus === 'playing') && styles.avatarThinking
-                  )}
-                >
-                  {renderOpponentAvatar()}
+          <div className={styles.bodyWrap}>
+            {thoughtExpanded && thoughtText ? (
+              <div
+                className={styles.thoughtPopover}
+                role="region"
+                aria-label={t('gameViewThought')}
+              >
+                <div className={styles.thoughtPopoverHeader}>
+                  <span>{t('gameViewThought')}</span>
+                  <button
+                    type="button"
+                    className={styles.thoughtCloseBtn}
+                    onClick={() => setThoughtExpanded(false)}
+                  >
+                    {t('gameHideThought')}
+                  </button>
                 </div>
-                <div className={styles.opponentMeta}>
-                  <div className={styles.opponentTop}>
-                    <span className={styles.opponentName}>{opponent.name}</span>
-                    <span className={styles.opponentBadge}>{opponentStatusLabel}</span>
+                <div className={styles.thoughtPanel}>{thoughtText}</div>
+              </div>
+            ) : null}
+
+            <div className={styles.body}>
+              {!plugin.hideGenericOpponentHeader ? (
+                <div className={styles.opponentStage}>
+                  <div
+                    className={clsx(
+                      styles.avatarBox,
+                      (aiThinking || voiceStatus === 'playing') && styles.avatarThinking
+                    )}
+                  >
+                    {renderOpponentAvatar()}
                   </div>
-                  <div className={styles.bubbleRow}>
-                    <div className={styles.speechBubble}>{bubbleText || opponent.greeting}</div>
-                    <button
-                      type="button"
-                      className={styles.speakReplay}
-                      aria-label={t('gameReplayVoice')}
-                      title={t('gameReplayVoice')}
-                      onClick={replayOpponentSpeech}
-                    >
-                      <IconPlayMediaOutline16 />
-                    </button>
-                  </div>
-                  {thoughtText ? (
-                    <div className={styles.thoughtWrap}>
+                  <div className={styles.opponentMeta}>
+                    <div className={styles.opponentTop}>
+                      <span className={styles.opponentName}>{opponent.name}</span>
+                      <span className={styles.opponentBadge}>{opponentStatusLabel}</span>
+                    </div>
+                    <div className={styles.bubbleRow}>
+                      <div className={styles.speechBubble}>{bubbleText || opponent.greeting}</div>
                       <button
                         type="button"
-                        className={styles.thoughtToggle}
-                        onClick={() => setThoughtExpanded((prev) => !prev)}
+                        className={styles.speakReplay}
+                        aria-label={t('gameReplayVoice')}
+                        title={t('gameReplayVoice')}
+                        onClick={replayOpponentSpeech}
                       >
-                        <span>
-                          {thoughtExpanded
-                            ? `▾ ${t('gameHideThought')}`
-                            : `▸ ${t('gameViewThought')}`}
-                        </span>
+                        <IconPlayMediaOutline16 />
                       </button>
-                      {thoughtExpanded ? (
-                        <div className={styles.thoughtPanel}>{thoughtText}</div>
-                      ) : null}
                     </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {statusNote ? (
+                <div className={styles.noticeBar} role="status">
+                  <span>{statusNote}</span>
+                </div>
+              ) : null}
+
+              {errorText ? (
+                <div className={styles.errorBar} role="alert">
+                  <span>{errorText}</span>
+                  {showRetryButton ? (
+                    <Button variant="outlined" size="s" onClick={retryAiTurn}>
+                      {t('retry')}
+                    </Button>
                   ) : null}
                 </div>
-              </div>
-            ) : thoughtText ? (
-              <div className={styles.thoughtWrap}>
-                <button
-                  type="button"
-                  className={styles.thoughtToggle}
-                  onClick={() => setThoughtExpanded((prev) => !prev)}
-                >
-                  <span>
-                    {thoughtExpanded ? `▾ ${t('gameHideThought')}` : `▸ ${t('gameViewThought')}`}
-                  </span>
-                </button>
-                {thoughtExpanded ? <div className={styles.thoughtPanel}>{thoughtText}</div> : null}
-              </div>
-            ) : null}
+              ) : null}
 
-            {statusNote ? (
-              <div className={styles.noticeBar} role="status">
-                <span>{statusNote}</span>
-              </div>
-            ) : null}
+              <plugin.BoardComponent
+                state={gameState}
+                disabled={aiThinking || status !== 'playing' || turn !== 'player'}
+                turnSecondsLeft={turnSecondsLeft}
+                aiThinking={aiThinking}
+                onPlayerMove={submitPlayerGameMove}
+              />
 
-            {errorText ? (
-              <div className={styles.errorBar} role="alert">
-                <span>{errorText}</span>
-                {showRetryButton ? (
-                  <Button variant="outlined" size="s" onClick={retryAiTurn}>
-                    {t('retry')}
+              <div className={styles.boardFooter}>
+                <span>{plugin.badge[locale]}</span>
+                {status !== 'playing' ? (
+                  <Button variant="primary" size="s" onClick={restartCurrentGame}>
+                    {t('gamePlayAgain')}
                   </Button>
                 ) : null}
               </div>
-            ) : null}
-
-            <plugin.BoardComponent
-              state={gameState}
-              disabled={aiThinking || status !== 'playing' || turn !== 'player'}
-              turnSecondsLeft={turnSecondsLeft}
-              aiThinking={aiThinking}
-              onPlayerMove={submitPlayerGameMove}
-            />
-
-            <div className={styles.boardFooter}>
-              <span>{plugin.badge[locale]}</span>
-              {status !== 'playing' ? (
-                <Button variant="primary" size="s" onClick={restartCurrentGame}>
-                  {t('gamePlayAgain')}
-                </Button>
-              ) : null}
             </div>
           </div>
         </>

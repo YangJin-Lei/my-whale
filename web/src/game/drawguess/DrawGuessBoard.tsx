@@ -587,6 +587,11 @@ export const DrawGuessBoard = ({
                 srcDoc={sanitizeDrawingHtml(htmlInput)}
                 className={styles.previewFrame}
               />
+              <div className={styles.htmlHelpTip}>
+                {locale === 'zh-CN'
+                  ? '提示：如果您不会写 HTML，可以使用主页对话框让 AI 帮你写哦；游戏消息与主页消息隔开的，它不会作弊的哦。'
+                  : 'Tip: You can ask the AI in the main chat to write HTML code for you—game state is isolated so it will not peek or cheat.'}
+              </div>
             </div>
           )}
 

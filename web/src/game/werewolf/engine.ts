@@ -1,31 +1,46 @@
 import type { Locale } from '../../services/settings.js'
-import type { WerewolfRole, WerewolfSeat, WerewolfState } from './types.js'
+import type { WerewolfPlayerCount, WerewolfRole, WerewolfSeat, WerewolfState } from './types.js'
 
-const DEFAULT_AI_PET_IDS = ['nailong', 'jiyi', 'usagi', 'conan-detective', 'pikachu-local'] as const
+const DEFAULT_AI_PET_POOL = [
+  'nailong',
+  'jiyi',
+  'usagi',
+  'conan-detective',
+  'pikachu-local',
+  'hachiware',
+  'shisa',
+  'xiaohuang',
+  'ikkun',
+  'gali-boo',
+  'natu-white-victory',
+] as const
 
-const STORAGE_KEY = 'mywhale_werewolf_pets_v1'
+const STORAGE_KEY = 'mywhale_werewolf_pets_v2'
 
-export const loadWerewolfAiPets = (): string[] => {
+export const loadWerewolfAiPets = (aiCount: number): string[] => {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as unknown
-      if (
-        Array.isArray(parsed) &&
-        parsed.length === 5 &&
-        parsed.every((x) => typeof x === 'string')
-      ) {
-        return parsed
+      if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string')) {
+        return Array.from({ length: aiCount }, (_, i) =>
+          typeof parsed[i] === 'string' && parsed[i]
+            ? parsed[i]
+            : DEFAULT_AI_PET_POOL[i % DEFAULT_AI_PET_POOL.length]
+        )
       }
     }
   } catch {
     // 忽略存储限制
   }
-  return [...DEFAULT_AI_PET_IDS]
+  return Array.from(
+    { length: aiCount },
+    (_, i) => DEFAULT_AI_PET_POOL[i % DEFAULT_AI_PET_POOL.length]
+  )
 }
 
 export const saveWerewolfAiPet = (aiIndex: number, petId: string): void => {
-  const list = loadWerewolfAiPets()
+  const list = loadWerewolfAiPets(11)
   if (aiIndex >= 0 && aiIndex < list.length) {
     list[aiIndex] = petId
     try {
@@ -44,7 +59,9 @@ export const roleLabel = (role: WerewolfRole, locale: Locale): string => {
         ? '预言家'
         : role === 'witch'
           ? '女巫'
-          : '平民'
+          : role === 'hunter'
+            ? '猎人'
+            : '平民'
   }
   return role === 'wolf'
     ? 'Werewolf'
@@ -52,28 +69,57 @@ export const roleLabel = (role: WerewolfRole, locale: Locale): string => {
       ? 'Seer'
       : role === 'witch'
         ? 'Witch'
-        : 'Villager'
+        : role === 'hunter'
+          ? 'Hunter'
+          : 'Villager'
 }
 
-export const createInitialWerewolfState = (): WerewolfState => {
-  const pool: WerewolfRole[] = ['wolf', 'wolf', 'seer', 'witch', 'villager', 'villager']
+const buildRolePool = (count: WerewolfPlayerCount): WerewolfRole[] => {
+  if (count === 9) {
+    return ['wolf', 'wolf', 'wolf', 'seer', 'witch', 'hunter', 'villager', 'villager', 'villager']
+  }
+  if (count === 12) {
+    return [
+      'wolf',
+      'wolf',
+      'wolf',
+      'wolf',
+      'seer',
+      'witch',
+      'hunter',
+      'villager',
+      'villager',
+      'villager',
+      'villager',
+      'villager',
+    ]
+  }
+  return ['wolf', 'wolf', 'seer', 'witch', 'villager', 'villager']
+}
+
+export const createInitialWerewolfState = (playerCount: WerewolfPlayerCount = 6): WerewolfState => {
+  const pool = buildRolePool(playerCount)
   for (let i = pool.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1))
     const tmp = pool[i]
     pool[i] = pool[j]
     pool[j] = tmp
   }
-  const aiPets = loadWerewolfAiPets()
+  const aiPets = loadWerewolfAiPets(playerCount - 1)
   const seats: WerewolfSeat[] = pool.map((role, idx) => ({
     seatIndex: idx,
     isHuman: idx === 0,
-    petId: idx === 0 ? '' : (aiPets[idx - 1] ?? DEFAULT_AI_PET_IDS[idx - 1]),
+    petId:
+      idx === 0
+        ? ''
+        : (aiPets[idx - 1] ?? DEFAULT_AI_PET_POOL[(idx - 1) % DEFAULT_AI_PET_POOL.length]),
     role,
     alive: true,
     lastSpeech: '',
   }))
 
   return {
+    playerCount,
     day: 1,
     phase: 'night_wolf',
     seats,
@@ -92,7 +138,7 @@ export const createInitialWerewolfState = (): WerewolfState => {
       {
         day: 1,
         kind: 'system',
-        text: '第 1 夜降临：天黑请闭眼，狼人请行动…',
+        text: `第 1 夜降临（${playerCount}人局）：天黑请闭眼，狼人请行动…`,
       },
     ],
     winner: null,

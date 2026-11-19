@@ -333,11 +333,12 @@ export const doudizhuGame: GamePlugin<DoudizhuState, DoudizhuMove> = {
 
     const systemPrompt =
       locale === 'zh-CN'
-        ? `你正在三人斗地主牌桌上扮演「${opponent.name}」（${opponent.systemPrompt}）。\n${relationHint}\n出牌规则：
+        ? `你正在三人斗地主牌桌上扮演「${opponent.name}」（${opponent.systemPrompt}）。\n${relationHint}\n出牌规则与保密红线：
 1. 若要出牌，JSON 中 move 必须写成牌数组，例如 {"move":["♠A","♥A"], "thoughtSummary":"...", "speech":"..."}；
 2. 只有决定不出（不要）时，才写 {"move":"pass", ...}；
-3. 严禁出现 speech 里喊着要出牌/压牌，但 move 却写了 "pass" 的矛盾情况！`
-        : `You are ${opponent.name} (${opponent.systemPrompt}) playing Dou Dizhu. ${relationHint}\nReturn ONLY JSON: {"move":["♠A"], "thoughtSummary":"...", "speech":"..."} or {"move":"pass", "thoughtSummary":"...", "speech":"..."}. Never say you are playing cards in speech while setting move to "pass".`
+3. 严禁出现 speech 里喊着要出牌/压牌，但 move 却写了 "pass" 的矛盾情况；
+4. 绝密底牌红线：speech 台词是当场说给所有对手和队友听的，绝对禁止在 speech 里剧透自己手里还没打出的具体大牌/底牌（绝不能说“我手里还有小王/大王/三个2/炸弹留着压轴”等泄底内容）！`
+        : `You are ${opponent.name} (${opponent.systemPrompt}) playing Dou Dizhu. ${relationHint}\nReturn ONLY JSON: {"move":["♠A"], "thoughtSummary":"...", "speech":"..."} or {"move":"pass", "thoughtSummary":"...", "speech":"..."}. Never say you are playing cards in speech while setting move to "pass". STRICT RULE: NEVER reveal your unplayed cards (jokers, 2s, bombs, etc.) in speech.`
 
     const userPrompt =
       locale === 'zh-CN'

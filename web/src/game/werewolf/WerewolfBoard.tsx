@@ -10,11 +10,12 @@ import type { BoardComponentProps } from '../types.js'
 import {
   advanceNightPhase,
   advanceSpeechTurn,
+  createInitialWerewolfState,
   resolveVoteExile,
   roleLabel,
   saveWerewolfAiPet,
 } from './engine.js'
-import type { WerewolfState } from './types.js'
+import type { WerewolfPlayerCount, WerewolfState } from './types.js'
 import styles from './Werewolf.module.css'
 
 const extractJson = (raw: string): Record<string, unknown> | null => {
@@ -150,7 +151,7 @@ export const WerewolfBoard = ({
             .map((x) => `${x.seatIndex + 1}号`)
             .join('、')
           const nonWolfAlive = s.seats.filter((x) => x.alive && x.role !== 'wolf')
-          const sys = `你在 6 人狼人杀中扮演 ${aliveWolf.seatIndex + 1}号【狼人】。存活狼同伴：${partnerSeats}。仅根据公开局势刀一名好人，绝不自爆。严格返回 JSON：{"target": <整数座位号 1~6>, "speech":"简短心声"}。`
+          const sys = `你在 ${s.playerCount} 人狼人杀中扮演 ${aliveWolf.seatIndex + 1}号【狼人】。存活狼同伴：${partnerSeats}。仅根据公开局势刀一名好人，绝不自爆。严格返回 JSON：{"target": <整数座位号 1~${s.playerCount}>, "speech":"简短心声"}。`
           const usr = `当前第 ${s.day} 夜。全部存活座位：${aliveListText}。\n建议刀口候选（非狼玩家）：${nonWolfAlive.map((x) => `${x.seatIndex + 1}号`).join('、')}。\n公开记录：\n${publicSummary}`
           const { parsed } = await callAiWerewolf(aliveWolf.seatIndex, sys, usr)
           const rawNum = Number(parsed?.target)
@@ -175,7 +176,7 @@ export const WerewolfBoard = ({
           const candidates = s.seats.filter((x) => x.alive && x.seatIndex !== aliveSeer.seatIndex)
           const knownSet = new Set(s.seerHistory.map((h) => h.targetSeat))
           const unchecked = candidates.filter((c) => !knownSet.has(c.seatIndex))
-          const sys = `你在 6 人狼人杀中扮演 ${aliveSeer.seatIndex + 1}号【预言家】。请选择今晚查验的座位号（1~6），严格返回 JSON：{"target": <整数座位号>}。`
+          const sys = `你在 ${s.playerCount} 人狼人杀中扮演 ${aliveSeer.seatIndex + 1}号【预言家】。请选择今晚查验的座位号（1~${s.playerCount}），严格返回 JSON：{"target": <整数座位号>}。`
           const usr = `当前第 ${s.day} 夜。已查验：${s.seerHistory.map((h) => `${h.targetSeat + 1}号=${h.isWolf ? '狼' : '好人'}`).join('、') || '暂无'}。未查验存活座位：${(unchecked.length > 0 ? unchecked : candidates).map((x) => `${x.seatIndex + 1}号`).join('、')}。\n公开记录：\n${publicSummary}`
           const { parsed } = await callAiWerewolf(aliveSeer.seatIndex, sys, usr)
           const rawNum = Number(parsed?.target)
@@ -208,7 +209,7 @@ export const WerewolfBoard = ({
         runner = async () => {
           const victimText =
             s.tonightWolfTarget !== null ? `${s.tonightWolfTarget + 1}号` : '无人被刀'
-          const sys = `你在 6 人狼人杀中扮演 ${aliveWitch.seatIndex + 1}号【女巫】。每晚只能用一瓶药或跳过。返回 JSON：{"action":"heal"|"poison"|"skip", "target": <毒人时的座位号 1~6>}。`
+          const sys = `你在 ${s.playerCount} 人狼人杀中扮演 ${aliveWitch.seatIndex + 1}号【女巫】。每晚只能用一瓶药或跳过。返回 JSON：{"action":"heal"|"poison"|"skip", "target": <毒人时的座位号 1~${s.playerCount}>}。`
           const usr = `第 ${s.day} 夜，今晚倒牌的是：${victimText}。解药剩余：${s.witchHealLeft}，毒药剩余：${s.witchPoisonLeft}。存活座位：${aliveListText}。\n公开记录：\n${publicSummary}`
           const { parsed } = await callAiWerewolf(aliveWitch.seatIndex, sys, usr)
           const act = String(parsed?.action ?? 'skip')
@@ -259,7 +260,7 @@ export const WerewolfBoard = ({
           privateHint += `解药剩 ${s.witchHealLeft}，毒药剩 ${s.witchPoisonLeft}。`
         }
 
-        const sys = `你在 6 人狼人杀中扮演 ${speaker.seatIndex + 1}号「${pet.name[locale]}」（${pet.promptHint[locale]}）。${privateHint}\n请严格只输出 JSON：{"speech":"你的白日公开简短口语发言（25~60字，不要用Emoji）","thoughtSummary":"私密推理"}。`
+        const sys = `你在 ${s.playerCount} 人狼人杀中扮演 ${speaker.seatIndex + 1}号「${pet.name[locale]}」（${pet.promptHint[locale]}）。${privateHint}\n请严格只输出 JSON：{"speech":"你的白日公开简短口语发言（25~60字，不要用Emoji）","thoughtSummary":"私密推理"}。`
         const usr = `今天是第 ${s.day} 天白日。存活玩家：${aliveListText}（1号是人类玩家）。\n公开记录：\n${publicSummary}\n现在轮到你（${speaker.seatIndex + 1}号）发言：`
         const { parsed, rawThought } = await callAiWerewolf(speaker.seatIndex, sys, usr)
         const speechText =
@@ -294,7 +295,7 @@ export const WerewolfBoard = ({
                 .map((x) => `${x.seatIndex + 1}号`)
                 .join('、')}），请投给好人。`
             : `你的身份是【${roleLabel(voter.role, 'zh-CN')}】，请把票投给最像狼的玩家或 0 弃票。`
-        const sys = `6人狼人杀放逐投票。${partnerHint}返回 JSON：{"target": <整数座位号 1~6 或 0 弃票>}。`
+        const sys = `${s.playerCount}人狼人杀放逐投票。${partnerHint}返回 JSON：{"target": <整数座位号 1~${s.playerCount} 或 0 弃票>}。`
         const usr = `可投存活座位：${aliveOthers.map((x) => `${x.seatIndex + 1}号`).join('、')}。\n白日发言记录：\n${publicSummary}`
         const { parsed } = await callAiWerewolf(voter.seatIndex, sys, usr)
         const rawTarget = Number(parsed?.target)
@@ -357,6 +358,14 @@ export const WerewolfBoard = ({
     }
   }, [])
 
+  const switchPlayerCount = (count: WerewolfPlayerCount) => {
+    abortRef.current?.abort()
+    inflightKeyRef.current = null
+    setSeerBanner(null)
+    updateGameFeedback({ aiThinking: false, errorText: null, thoughtText: '' })
+    onPlayerMove(createInitialWerewolfState(count))
+  }
+
   const phaseTitle = (() => {
     if (state.phase === 'night_wolf') {
       return `第 ${state.day} 夜 · 狼人行动`
@@ -393,14 +402,26 @@ export const WerewolfBoard = ({
     <div className={styles.wrap}>
       <div className={styles.topBar}>
         <span className={styles.phasePill}>{phaseTitle}</span>
+        <div className={styles.countTabs}>
+          {([6, 9, 12] as const).map((cnt) => (
+            <button
+              key={cnt}
+              type="button"
+              className={clsx(styles.countBtn, state.playerCount === cnt && styles.countBtnActive)}
+              onClick={() => switchPlayerCount(cnt)}
+            >
+              {cnt}人
+            </button>
+          ))}
+        </div>
         <span className={styles.roleTag}>
           你的底牌：{roleLabel(humanSeat.role, locale)}
           {!humanSeat.alive ? '（已出局）' : ''}
         </span>
       </div>
 
-      {/* 6 人环桌席位 */}
-      <div className={styles.seatGrid}>
+      {/* 环桌席位 */}
+      <div className={clsx(styles.seatGrid, state.playerCount >= 12 && styles.seatGrid12)}>
         {state.seats.map((seat) => {
           const pet = !seat.isHuman ? findPetById(seat.petId) : null
           const isSpeaking = state.phase === 'day_speech' && currentSpeakerIdx === seat.seatIndex

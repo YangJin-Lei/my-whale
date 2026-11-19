@@ -7,14 +7,14 @@ export const werewolfGame: GamePlugin<WerewolfState, WerewolfState> = {
   id: 'werewolf',
   name: { 'zh-CN': '狼人杀', 'en-US': 'Werewolf' },
   subtitle: {
-    'zh-CN': '6 人多桌宠全明星局（2 狼 1 预 1 女巫 2 民），严格视角隔离',
-    'en-US': '6-player multi-pet Werewolf (2 Wolves, Seer, Witch, 2 Villagers)',
+    'zh-CN': '多桌宠全明星局（默认 6 人，支持 9/12 人局），严格视角隔离',
+    'en-US': 'Multi-pet Werewolf (6 / 9 / 12 players) with strict role isolation',
   },
-  badge: { 'zh-CN': '多宠推理', 'en-US': '6-Player' },
+  badge: { 'zh-CN': '6/9/12 人局', 'en-US': '6/9/12P' },
   firstTurn: 'player',
   hideGenericOpponentHeader: true,
 
-  createInitialState: createInitialWerewolfState,
+  createInitialState: () => createInitialWerewolfState(6),
 
   getTurn: (): GameSide => 'player',
 

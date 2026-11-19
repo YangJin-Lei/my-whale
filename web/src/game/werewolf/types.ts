@@ -1,4 +1,6 @@
-export type WerewolfRole = 'wolf' | 'seer' | 'witch' | 'villager'
+export type WerewolfRole = 'wolf' | 'seer' | 'witch' | 'hunter' | 'villager'
+
+export type WerewolfPlayerCount = 6 | 9 | 12
 
 export type WerewolfPhase =
   | 'night_wolf'
@@ -9,7 +11,7 @@ export type WerewolfPhase =
   | 'finished'
 
 export type WerewolfSeat = {
-  seatIndex: number // 0 = 人类玩家, 1..5 = 桌宠 AI
+  seatIndex: number // 0 = 人类玩家, 1..N-1 = 桌宠 AI
   isHuman: boolean
   petId: string
   role: WerewolfRole
@@ -26,6 +28,7 @@ export type WerewolfLogEntry = {
 }
 
 export type WerewolfState = {
+  playerCount: WerewolfPlayerCount
   day: number
   phase: WerewolfPhase
   seats: WerewolfSeat[]

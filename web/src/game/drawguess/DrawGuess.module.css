@@ -134,6 +134,15 @@
   background: #ffffff;
 }
 
+.htmlHelpTip {
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: rgba(77, 107, 254, 0.08);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .answerBar {
   display: flex;
   align-items: center;
