@@ -302,30 +302,41 @@ export const setApiKey = (apiKey: string | null) => {
   useSettings.setState({ apiKey: cleaned })
 }
 
+let apiKeyHydrationTask: Promise<void> | null = null
+
 /**
  * 原生端初始化时调用：
  * 1) 优先从 Android Keystore 解密读取 API Key，并彻底清除旧版 localStorage 明文；
  * 2) 若 Keystore 尚无记录但旧版 localStorage 存在明文 Key，自动无缝迁入 Keystore 后删除明文。
  */
-export const hydrateNativeApiKey = async (): Promise<void> => {
+export const hydrateNativeApiKey = (): Promise<void> => {
   if (!hasNativeSecureStorage()) {
-    return
+    return Promise.resolve()
   }
-  const secureKey = await loadSecureSecret(API_KEY_SECRET_ID)
-  const legacyKey = read(KEYS.apiKey)?.trim() || null
-  if (secureKey) {
-    if (legacyKey) {
-      write(KEYS.apiKey, null)
+  if (apiKeyHydrationTask) {
+    return apiKeyHydrationTask
+  }
+  apiKeyHydrationTask = (async () => {
+    const secureKey = await loadSecureSecret(API_KEY_SECRET_ID)
+    const legacyKey = read(KEYS.apiKey)?.trim() || null
+    if (secureKey) {
+      if (legacyKey) {
+        write(KEYS.apiKey, null)
+      }
+      useSettings.setState({ apiKey: secureKey })
+      return
     }
-    useSettings.setState({ apiKey: secureKey })
-    return
-  }
-  if (legacyKey) {
-    await saveSecureSecret(API_KEY_SECRET_ID, legacyKey)
-    write(KEYS.apiKey, null)
-    useSettings.setState({ apiKey: legacyKey })
-  }
+    if (legacyKey) {
+      await saveSecureSecret(API_KEY_SECRET_ID, legacyKey)
+      write(KEYS.apiKey, null)
+      useSettings.setState({ apiKey: legacyKey })
+    }
+  })()
+  return apiKeyHydrationTask
 }
+
+export const waitForApiKeyHydration = (): Promise<void> =>
+  apiKeyHydrationTask ?? hydrateNativeApiKey()
 
 export type SettingsSnapshot = Omit<Settings, 'apiKey'>
 

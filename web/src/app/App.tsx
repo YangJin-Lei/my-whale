@@ -1,6 +1,6 @@
 import { useEffect, type CSSProperties } from 'react'
 import { useTranslate } from '../i18n/index.js'
-import { useSettings, type ChatBgPreset } from '../services/settings.js'
+import { useSettings, waitForApiKeyHydration, type ChatBgPreset } from '../services/settings.js'
 import { useIsMobile, useMobileViewport, usePreventPageScroll } from './viewport.js'
 import {
   bindChatPersistence,
@@ -113,8 +113,10 @@ export const App = () => {
 
   useEffect(() => {
     void initChat()
-    // 首次打开先在设置里输入 API Key
-    ensureApiKey()
+    // 原生端先等待 Android Keystore 读取/迁移 API Key 完成，再判断是否需要弹出引导
+    void waitForApiKeyHydration().then(() => {
+      ensureApiKey()
+    })
     void checkForUpdates(false)
   }, [])
 

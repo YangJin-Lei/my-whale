@@ -10,7 +10,6 @@ import {
   type FullBackupInspection,
   type FullBackupProgress,
 } from '../../services/fullBackup.js'
-import { getSecureStorageBackendName } from '../../services/secureStorage.js'
 import { Button } from '../base/Button.js'
 import { IconDownloadOutline16, IconUploadOutline14 } from '../base/icons.js'
 import { Modal } from '../base/Modal.js'
@@ -32,9 +31,6 @@ export const FullBackupSection = ({ disabled }: { disabled?: boolean }) => {
   const [restorePassword, setRestorePassword] = useState('')
   const [skipSecrets, setSkipSecrets] = useState(false)
   const [restoreError, setRestoreError] = useState<string | null>(null)
-
-  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : ''
-  const backendName = getSecureStorageBackendName()
 
   const handleRunExport = async () => {
     if (busy) {
@@ -115,16 +111,10 @@ export const FullBackupSection = ({ disabled }: { disabled?: boolean }) => {
 
   return (
     <>
-      <div className={styles.cellCard}>
+      <div className={styles.cell}>
         <div className={styles.row}>
           <div className={styles.text}>
             <div className={styles.label}>{t('fullBackupSectionTitle')}</div>
-            <div className={styles.exportGuide}>
-              {t('fullBackupSecurityLine', {
-                origin: currentOrigin || 'localhost',
-                backend: backendName,
-              })}
-            </div>
           </div>
           <div className={styles.bgActions}>
             <Button
@@ -207,9 +197,6 @@ export const FullBackupSection = ({ disabled }: { disabled?: boolean }) => {
               placeholder={t('fullBackupExportPasswordPlaceholder')}
               onChange={(e) => setExportPassword(e.target.value)}
             />
-            {!exportPassword.trim() ? (
-              <div style={{ fontSize: 12, opacity: 0.8 }}>{t('fullBackupExportNoPwWarn')}</div>
-            ) : null}
           </div>
         </Modal>
       ) : null}
