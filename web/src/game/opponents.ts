@@ -123,6 +123,35 @@ export const saveCustomGameOpponent = (draft: CustomOpponentDraft, locale: Local
   })
 }
 
+export const getGameOpponentSnapshot = (): StoredOpponentConfig => useGameOpponentStore.getState()
+
+export const restoreGameOpponentSnapshot = (raw: unknown) => {
+  if (!raw || typeof raw !== 'object') {
+    return
+  }
+  const obj = raw as Partial<StoredOpponentConfig>
+  const choice: OpponentPresetChoice =
+    obj.selectedChoice === DEFAULT_OPPONENT_ID ||
+    obj.selectedChoice === ACTIVE_PERSONA_OPPONENT_ID ||
+    obj.selectedChoice === CUSTOM_OPPONENT_ID
+      ? obj.selectedChoice
+      : PET_OPPONENT_ID
+  const custom: CustomOpponentDraft = {
+    name: typeof obj.custom?.name === 'string' ? obj.custom.name : DEFAULT_CUSTOM_ZH.name,
+    tagline:
+      typeof obj.custom?.tagline === 'string' ? obj.custom.tagline : DEFAULT_CUSTOM_ZH.tagline,
+    systemPrompt:
+      typeof obj.custom?.systemPrompt === 'string'
+        ? obj.custom.systemPrompt
+        : DEFAULT_CUSTOM_ZH.systemPrompt,
+    greeting:
+      typeof obj.custom?.greeting === 'string' ? obj.custom.greeting : DEFAULT_CUSTOM_ZH.greeting,
+  }
+  const next: StoredOpponentConfig = { selectedChoice: choice, custom }
+  persistConfig(next)
+  useGameOpponentStore.setState(next)
+}
+
 /**
  * 解析当前坐在棋盘对面的 AI 对手：
  * - 默认使用应用 Logo（「my-whale 对弈官」）

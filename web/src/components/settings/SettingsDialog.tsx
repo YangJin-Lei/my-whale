@@ -69,6 +69,7 @@ import { MemorySettings } from '../memory/MemorySettings.js'
 import { PersonaSettings } from '../persona/PersonaSettings.js'
 import { PetSettings } from './PetSettings.js'
 import { ApiKeyConfirm, ApiKeyField, useApiKeyEditor } from './ApiKeyField.js'
+import { FullBackupSection } from './FullBackupSection.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
 import styles from './Settings.module.css'
 
@@ -212,6 +213,7 @@ const SettingsContent = () => {
             ) : (
               <>
                 <ApiKeyField editor={apiKeyEditor} />
+                <FullBackupSection disabled={historyBusy} />
                 <DeepSeekExportSetting />
                 <ImportHistory historyImport={historyImport} disabled={historyBusy} />
                 <ExportHistory disabled={historyBusy} />
@@ -407,8 +409,10 @@ const UpdateSetting = () => {
   const latestVersion = useUpdateStore((state) => state.latestVersion)
   const releaseUrl = useUpdateStore((state) => state.releaseUrl)
   const hasInAppUpdater = useUpdateStore((state) => state.hasInAppUpdater)
+  const nativeAppInfo = useUpdateStore((state) => state.nativeAppInfo)
   const downloadStatus = useUpdateStore((state) => state.downloadStatus)
   const downloadProgress = useUpdateStore((state) => state.downloadProgress)
+  const downloadError = useUpdateStore((state) => state.downloadError)
 
   const actionLabel =
     downloadStatus === 'downloading'
@@ -427,10 +431,28 @@ const UpdateSetting = () => {
                 : t('settingsUpdateNow')
               : t('settingsGoUpdate')
 
+  const updateCellStatus: Status =
+    downloadStatus === 'error' && downloadError
+      ? { key: 'updateDownloadErrorDetail', params: { message: downloadError }, error: true }
+      : status === 'error'
+        ? { key: 'settingsUpdateFailedDesc', error: true }
+        : nativeAppInfo
+          ? {
+              key: 'updateBuildTrace',
+              params: {
+                code: nativeAppInfo.versionCode,
+                sha: nativeAppInfo.gitCommitSha || 'unknown',
+                cert: nativeAppInfo.isFormalReleaseCert
+                  ? t('updateCertFormal')
+                  : t('updateCertDebug'),
+              },
+            }
+          : null
+
   return (
     <SettingCell
       label={`${t('settingsVersionLabel')} v${CURRENT_VERSION}`}
-      status={status === 'error' ? { key: 'settingsUpdateFailedDesc', error: true } : null}
+      status={updateCellStatus}
       action={
         status === 'available' ? (
           hasInAppUpdater ? (

@@ -4,6 +4,11 @@ const config: CapacitorConfig = {
   appId: 'com.mywhale.app',
   appName: 'my-whale',
   webDir: 'dist',
+  // 长期锁定 Android WebView Origin 为 https://localhost，防止修改站点地址导致 localStorage 与 IndexedDB 隔离丢失
+  server: {
+    androidScheme: 'https',
+    hostname: 'localhost',
+  },
   android: {
     path: '../android',
     allowMixedContent: false,

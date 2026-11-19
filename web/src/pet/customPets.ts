@@ -186,3 +186,30 @@ export const deleteCustomPet = async (id: string): Promise<void> => {
     await loadCustomPets()
   }
 }
+
+export const replaceAllCustomPets = async (records: readonly CustomPetRecord[]): Promise<void> => {
+  const db = await getDb()
+  const tx = db.transaction('pets', 'readwrite')
+  await tx.store.clear()
+  for (const item of records) {
+    await tx.store.put(item)
+  }
+  await tx.done
+  await loadCustomPets()
+}
+
+export const upsertCustomPets = async (records: readonly CustomPetRecord[]): Promise<void> => {
+  if (records.length === 0) {
+    return
+  }
+  const db = await getDb()
+  const tx = db.transaction('pets', 'readwrite')
+  for (const item of records) {
+    const existing = await tx.store.get(item.id)
+    if (!existing || item.createdAt >= existing.createdAt) {
+      await tx.store.put(item)
+    }
+  }
+  await tx.done
+  await loadCustomPets()
+}

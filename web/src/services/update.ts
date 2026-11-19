@@ -65,8 +65,20 @@ const readDismissed = (): string | null => {
 
 export type ReleaseAssets = {
   androidUrls: string[]
+  androidSha256?: string
   windowsUrls: string[]
   macosUrls: string[]
+}
+
+export type NativeAppInfo = {
+  packageName: string
+  versionCode: number
+  versionName: string
+  signingCertSha256: string
+  expectedReleaseCertSha256: string
+  isFormalReleaseCert: boolean
+  gitCommitSha: string
+  buildTimeUtc: string
 }
 
 export type InAppUpdateOutcome = 'installer_opened' | 'needs_permission'
@@ -91,6 +103,7 @@ type UpdateState = {
   releaseAssets: ReleaseAssets | null
   dismissedVersion: string | null
   hasInAppUpdater: boolean
+  nativeAppInfo: NativeAppInfo | null
   downloadStatus: DownloadStatus
   downloadProgress: number | null
   downloadError: string | null
@@ -103,10 +116,15 @@ export const useUpdateStore = create<UpdateState>(() => ({
   releaseAssets: null,
   dismissedVersion: readDismissed(),
   hasInAppUpdater: false,
+  nativeAppInfo: null,
   downloadStatus: 'idle',
   downloadProgress: null,
   downloadError: null,
 }))
+
+export const setNativeAppInfo = (nativeAppInfo: NativeAppInfo) => {
+  useUpdateStore.setState({ nativeAppInfo })
+}
 
 export const registerInAppUpdater = (updater: InAppUpdater) => {
   registeredUpdater = updater
@@ -118,10 +136,7 @@ const buildDefaultAssets = (tag: string): ReleaseAssets => {
   const ver = normalizedTag.replace(/^v/i, '')
   const base = `${RELEASES_PAGE_URL}/download/${normalizedTag}`
   return {
-    androidUrls: [
-      `${base}/my-whale-${normalizedTag}-android.apk`,
-      `${base}/my-whale-${normalizedTag}-android-debug.apk`,
-    ],
+    androidUrls: [`${base}/my-whale-${normalizedTag}-android.apk`],
     windowsUrls: [`${base}/my-whale_${ver}_x64-setup.exe`, `${base}/my-whale_${ver}_x64_en-US.msi`],
     macosUrls: [`${base}/my-whale_${ver}_aarch64.dmg`],
   }
@@ -132,21 +147,33 @@ const extractReleaseAssets = (tag: string, rawAssets: unknown): ReleaseAssets =>
   if (!Array.isArray(rawAssets)) {
     return defaults
   }
-  const urls = rawAssets
-    .map((item) =>
-      typeof item === 'object' && item !== null && 'browser_download_url' in item
-        ? (item as { browser_download_url?: unknown }).browser_download_url
-        : undefined
-    )
-    .filter((u): u is string => typeof u === 'string' && u.startsWith(`${RELEASES_PAGE_URL}/`))
+  const entries = rawAssets.filter(
+    (item): item is { browser_download_url: string; digest?: unknown } =>
+      typeof item === 'object' &&
+      item !== null &&
+      typeof (item as { browser_download_url?: unknown }).browser_download_url === 'string' &&
+      (item as { browser_download_url: string }).browser_download_url.startsWith(
+        `${RELEASES_PAGE_URL}/`
+      )
+  )
+  const urls = entries.map((e) => e.browser_download_url)
 
-  const apks = urls.filter((u) => u.endsWith('.apk'))
+  const releaseApkEntry = entries.find(
+    (e) => e.browser_download_url.endsWith('.apk') && !e.browser_download_url.endsWith('-debug.apk')
+  )
+  const apks = releaseApkEntry ? [releaseApkEntry.browser_download_url] : []
+  const digest =
+    typeof releaseApkEntry?.digest === 'string' && releaseApkEntry.digest.startsWith('sha256:')
+      ? releaseApkEntry.digest.slice('sha256:'.length).trim()
+      : undefined
+
   const winExes = urls.filter((u) => u.endsWith('-setup.exe'))
   const winMsis = urls.filter((u) => u.endsWith('.msi'))
   const dmgs = urls.filter((u) => u.endsWith('.dmg'))
 
   return {
     androidUrls: apks.length > 0 ? apks : defaults.androidUrls,
+    ...(digest ? { androidSha256: digest } : {}),
     windowsUrls:
       [...winExes, ...winMsis].length > 0 ? [...winExes, ...winMsis] : defaults.windowsUrls,
     macosUrls: dmgs.length > 0 ? dmgs : defaults.macosUrls,
@@ -159,6 +186,35 @@ type LatestReleaseMeta = {
   tag: string
   url: string
   assets: ReleaseAssets
+  verifiedRelease?: boolean
+}
+
+const verifyReleaseTagPublished = async (tag: string): Promise<LatestReleaseMeta | null> => {
+  const tagApi = `https://api.github.com/repos/YangJin-Lei/my-whale/releases/tags/${encodeURIComponent(tag)}`
+  const apiData = await fetchJsonWithTimeout(tagApi, { Accept: 'application/vnd.github+json' })
+  if (!apiData || !Array.isArray(apiData.assets)) {
+    return null
+  }
+  const hasApk = apiData.assets.some(
+    (item) =>
+      typeof item === 'object' &&
+      item !== null &&
+      typeof (item as { browser_download_url?: unknown }).browser_download_url === 'string' &&
+      (item as { browser_download_url: string }).browser_download_url.endsWith('-android.apk')
+  )
+  if (!hasApk) {
+    return null
+  }
+  const url =
+    typeof apiData.html_url === 'string' && apiData.html_url.startsWith('https://')
+      ? apiData.html_url
+      : `${RELEASES_PAGE_URL}/tag/${tag}`
+  return {
+    tag,
+    url,
+    assets: extractReleaseAssets(tag, apiData.assets),
+    verifiedRelease: true,
+  }
 }
 
 const fetchJsonWithTimeout = async (url: string, headers?: Record<string, string>) => {
@@ -217,7 +273,27 @@ const fetchLatestReleaseMeta = async (): Promise<LatestReleaseMeta | null> => {
             typeof apiData.html_url === 'string' && apiData.html_url.startsWith('https://')
               ? apiData.html_url
               : RELEASES_PAGE_URL
-          return { tag, url, assets: extractReleaseAssets(tag, apiData.assets) }
+          const hasApk =
+            Array.isArray(apiData.assets) &&
+            apiData.assets.some(
+              (item) =>
+                typeof item === 'object' &&
+                item !== null &&
+                typeof (item as { browser_download_url?: unknown }).browser_download_url ===
+                  'string' &&
+                (item as { browser_download_url: string }).browser_download_url.endsWith(
+                  '-android.apk'
+                )
+            )
+          if (!hasApk) {
+            return null
+          }
+          return {
+            tag,
+            url,
+            assets: extractReleaseAssets(tag, apiData.assets),
+            verifiedRelease: true,
+          }
         }
         return null
       }
@@ -251,6 +327,7 @@ const fetchLatestReleaseMeta = async (): Promise<LatestReleaseMeta | null> => {
     }),
   ])
 
+  const verifiedApi = results.find((item) => item?.verifiedRelease) ?? null
   let best: LatestReleaseMeta | null = null
   for (const item of results) {
     if (!item) {
@@ -260,6 +337,16 @@ const fetchLatestReleaseMeta = async (): Promise<LatestReleaseMeta | null> => {
       best = item
     }
   }
+  if (best && !best.verifiedRelease) {
+    // 防止 GitHub Pages / main package.json 比 Android CI Release 早产出导致 404
+    const confirmed = await verifyReleaseTagPublished(best.tag)
+    if (confirmed) {
+      return confirmed
+    }
+    if (verifiedApi) {
+      return verifiedApi
+    }
+  }
   if (best) {
     return best
   }
@@ -267,11 +354,13 @@ const fetchLatestReleaseMeta = async (): Promise<LatestReleaseMeta | null> => {
   const rawPkg = await fetchJsonWithTimeout(`${RAW_PACKAGE_URL}?t=${Date.now()}`)
   if (rawPkg && typeof rawPkg.version === 'string' && rawPkg.version.trim()) {
     const tag = `v${rawPkg.version.trim().replace(/^v/i, '')}`
-    return {
-      tag,
-      url: `${RELEASES_PAGE_URL}/latest`,
-      assets: buildDefaultAssets(tag),
-    }
+    return (
+      (await verifyReleaseTagPublished(tag)) ?? {
+        tag,
+        url: `${RELEASES_PAGE_URL}/latest`,
+        assets: buildDefaultAssets(tag),
+      }
+    )
   }
 
   return null
@@ -351,6 +440,7 @@ export const startInAppUpdate = async (): Promise<void> => {
     const baseAssets = state.releaseAssets ?? buildDefaultAssets(tag)
     const assets: ReleaseAssets = {
       androidUrls: applyMirrorCandidates(baseAssets.androidUrls),
+      ...(baseAssets.androidSha256 ? { androidSha256: baseAssets.androidSha256 } : {}),
       windowsUrls: applyMirrorCandidates(baseAssets.windowsUrls),
       macosUrls: applyMirrorCandidates(baseAssets.macosUrls),
     }

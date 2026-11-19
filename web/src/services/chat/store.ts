@@ -503,6 +503,44 @@ export const replaceHistory = async (write: () => Promise<void>): Promise<number
   }
 }
 
+export const mergeHistory = async (
+  sessions: readonly Session[],
+  files: readonly db.StoredFile[]
+): Promise<{ importedSessions: number; totalSessions: number }> => {
+  if (get().importingHistory) {
+    throw new Error('History replacement is already in progress')
+  }
+  set({ importingHistory: true })
+  try {
+    for (const controller of Object.values(get().streaming)) {
+      controller.abort()
+    }
+    await Promise.all(deletionTasks)
+    await waitForIdle()
+    const result = await db.mergeSessionsAndFiles(sessions, files)
+    set((state) => {
+      const incomingIds = new Set(sessions.map((s) => s.id))
+      const nextCache = Object.fromEntries(
+        Object.entries(state.sessionCache).filter(([id]) => !incomingIds.has(id))
+      )
+      return {
+        ready: true,
+        initError: false,
+        sessions: sortSessions(result.sessions),
+        sessionCache: nextCache,
+      }
+    })
+    return { importedSessions: result.importedSessions, totalSessions: result.sessions.length }
+  } finally {
+    set({ importingHistory: false })
+    retrySaveSessions()
+    const { activeId } = get()
+    if (activeId !== null) {
+      void ensureSessionLoaded(activeId)
+    }
+  }
+}
+
 const cleanupEphemeralIfLeaving = (nextActiveId: string | null) => {
   const prevId = get().activeId
   if (!prevId || prevId === nextActiveId || !ephemeralSessions.has(prevId)) {

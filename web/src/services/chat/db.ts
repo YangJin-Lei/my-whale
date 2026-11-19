@@ -100,6 +100,47 @@ export const loadSessionSummaries = async (): Promise<SessionSummary[]> =>
 export const loadSession = async (id: string): Promise<Session | undefined> =>
   (await getDB()).get('sessions', id)
 
+export const loadAllSessions = async (): Promise<Session[]> => (await getDB()).getAll('sessions')
+
+export const loadAllFiles = async (): Promise<StoredFile[]> => (await getDB()).getAll('files')
+
+export const mergeSessionsAndFiles = async (
+  sessions: readonly Session[],
+  files: readonly StoredFile[]
+): Promise<{ importedSessions: number; sessions: SessionSummary[] }> => {
+  const tx = (await getDB()).transaction(['sessions', 'sessionSummaries', 'files'], 'readwrite')
+  let importedSessions = 0
+  await Promise.all([
+    (async () => {
+      try {
+        const filesStore = tx.objectStore('files')
+        for (const file of files) {
+          const existingFile = await filesStore.get(file.id)
+          if (!existingFile) {
+            await filesStore.put(file)
+          }
+        }
+        const sessionStore = tx.objectStore('sessions')
+        const summaryStore = tx.objectStore('sessionSummaries')
+        for (const incoming of sessions) {
+          const existing = await sessionStore.get(incoming.id)
+          if (!existing || incoming.updatedAt > existing.updatedAt) {
+            await sessionStore.put(incoming)
+            await summaryStore.put(storedSummary(incoming))
+            importedSessions += 1
+          }
+        }
+      } catch (error) {
+        abortTransaction(tx)
+        throw error
+      }
+    })(),
+    tx.done,
+  ])
+  const allSummaries = await loadSessionSummaries()
+  return { importedSessions, sessions: allSummaries }
+}
+
 export const saveSession = async (session: Session, files: StoredFile[] = []): Promise<void> => {
   const summary = storedSummary(session)
   const tx = (await getDB()).transaction(['sessions', 'sessionSummaries', 'files'], 'readwrite')

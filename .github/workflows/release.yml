@@ -55,29 +55,47 @@ jobs:
           RAW_VER="${TAG_NAME#v}"
           IFS='.' read -r MAJ MIN PAT <<< "${RAW_VER%%-*}"
           VER_CODE=$(( ${MAJ:-0} * 10000 + ${MIN:-1} * 100 + ${PAT:-0} ))
+          BUILD_TIME_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          SHORT_SHA="${GITHUB_SHA::7}"
           mkdir -p ../release-assets
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > app/release-keystore.jks
-            ./gradlew assembleRelease --no-daemon \
-              -PMYWHALE_VERSION_CODE="$VER_CODE" \
-              -PMYWHALE_VERSION_NAME="$RAW_VER" \
-              -Pandroid.injected.signing.store.file="$(pwd)/app/release-keystore.jks" \
-              -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
-              -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
-              -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
-            cp app/build/outputs/apk/release/app-release.apk "../release-assets/my-whale-${TAG_NAME}-android.apk"
-          else
-            ./gradlew assembleDebug --no-daemon \
-              -PMYWHALE_VERSION_CODE="$VER_CODE" \
-              -PMYWHALE_VERSION_NAME="$RAW_VER"
-            cp app/build/outputs/apk/debug/app-debug.apk "../release-assets/my-whale-${TAG_NAME}-android-debug.apk"
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 secret is missing. Refusing to publish debug-signed release APK."
+            exit 1
           fi
+          echo "$KEYSTORE_BASE64" | base64 -d > app/release-keystore.jks
+          ./gradlew assembleRelease --no-daemon \
+            -PMYWHALE_VERSION_CODE="$VER_CODE" \
+            -PMYWHALE_VERSION_NAME="$RAW_VER" \
+            -PMYWHALE_GIT_SHA="$SHORT_SHA" \
+            -PMYWHALE_BUILD_TIME="$BUILD_TIME_UTC" \
+            -Pandroid.injected.signing.store.file="$(pwd)/app/release-keystore.jks" \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+          APK_OUT="../release-assets/my-whale-${TAG_NAME}-android.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK_OUT"
+          rm -f app/release-keystore.jks
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -n1 || true)
+          if [ -n "$APKSIGNER" ]; then
+            CERT_INFO=$("$APKSIGNER" verify --print-certs "$APK_OUT")
+            echo "$CERT_INFO"
+          fi
+          APK_SHA256=$(sha256sum "$APK_OUT" | awk '{print $1}')
+          printf "%s  my-whale-%s-android.apk\n" "$APK_SHA256" "$TAG_NAME" > "../release-assets/my-whale-${TAG_NAME}-android.apk.sha256"
+          {
+            echo "tag=$TAG_NAME"
+            echo "versionName=$RAW_VER"
+            echo "versionCode=$VER_CODE"
+            echo "commit=$GITHUB_SHA"
+            echo "buildTimeUtc=$BUILD_TIME_UTC"
+            echo "apkSha256=$APK_SHA256"
+          } > "../release-assets/BUILD_INFO-${TAG_NAME}.txt"
 
       - name: Upload Android APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: release-assets/*.apk
+          path: release-assets/*
 
   desktop:
     name: Build Desktop (${{ matrix.os }})
@@ -143,6 +161,11 @@ jobs:
         with:
           path: all-artifacts
           merge-multiple: true
+
+      - name: Generate SHA256SUMS
+        run: |
+          cd all-artifacts
+          sha256sum *.apk *.exe *.msi *.dmg > SHA256SUMS.txt || sha256sum * > SHA256SUMS.txt
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2

@@ -19,12 +19,15 @@ import {
   setOpenExternal,
 } from '../services/links.js'
 import { flushPendingExtracts } from '../services/memory/extract.js'
-import { useSettings } from '../services/settings.js'
+import { setNativeSecureStorage } from '../services/secureStorage.js'
+import { hydrateNativeApiKey, useSettings } from '../services/settings.js'
 import {
   registerInAppUpdater,
   retryPendingInstall,
+  setNativeAppInfo,
   useUpdateStore,
   type InAppUpdateOutcome,
+  type NativeAppInfo,
 } from '../services/update.js'
 
 const onReturnFromExternal = async () => {
@@ -47,8 +50,13 @@ type TauriInternals = {
 }
 
 type AppUpdaterNativePlugin = {
-  downloadAndInstall: (options: { urls: string[] }) => Promise<{ status: InAppUpdateOutcome }>
+  downloadAndInstall: (options: {
+    tag?: string
+    expectedSha256?: string
+    urls: string[]
+  }) => Promise<{ status: InAppUpdateOutcome }>
   installPending: () => Promise<{ status: InAppUpdateOutcome }>
+  getAppInfo?: () => Promise<NativeAppInfo>
   openDeepSeekApp?: () => Promise<{ launched: boolean }>
   addListener: (
     eventName: 'downloadProgress',
@@ -57,6 +65,14 @@ type AppUpdaterNativePlugin = {
 }
 
 const AppUpdater = registerPlugin<AppUpdaterNativePlugin>('AppUpdater')
+
+type SecureStorageNativePlugin = {
+  getSecret: (options: { key: string }) => Promise<{ value: string | null; backend?: string }>
+  setSecret: (options: { key: string; value: string | null }) => Promise<void>
+  status?: () => Promise<{ available: boolean; backend?: string }>
+}
+
+const SecureStorage = registerPlugin<SecureStorageNativePlugin>('SecureStorage')
 
 type CacheBackendNativePlugin = {
   start: (options?: { port?: number }) => Promise<{ running: boolean; url?: string }>
@@ -124,6 +140,20 @@ export const setupNative = () => {
   }
 
   if (Capacitor.getPlatform() === 'android') {
+    setNativeSecureStorage({
+      getSecret: (key) => SecureStorage.getSecret({ key }),
+      setSecret: (key, value) => SecureStorage.setSecret({ key, value }),
+      status: () =>
+        SecureStorage.status ? SecureStorage.status() : Promise.resolve({ available: true }),
+    })
+    void hydrateNativeApiKey()
+    void AppUpdater.getAppInfo?.()
+      .then((info) => {
+        if (info?.versionName) {
+          setNativeAppInfo(info)
+        }
+      })
+      .catch(() => {})
     setNativeCacheController({
       start: (port) => CacheBackend.start({ port }),
       stop: async () => {
@@ -135,12 +165,16 @@ export const setupNative = () => {
       void startNativeOrProbeCacheBackend()
     }
     registerInAppUpdater({
-      downloadAndInstall: async ({ assets }, onProgress) => {
+      downloadAndInstall: async ({ tag, assets }, onProgress) => {
         const handle = await AppUpdater.addListener('downloadProgress', (payload) => {
           onProgress(payload.progress >= 0 ? payload.progress : null)
         })
         try {
-          const res = await AppUpdater.downloadAndInstall({ urls: assets.androidUrls })
+          const res = await AppUpdater.downloadAndInstall({
+            tag,
+            ...(assets.androidSha256 ? { expectedSha256: assets.androidSha256 } : {}),
+            urls: assets.androidUrls,
+          })
           return res.status
         } finally {
           await handle.remove()

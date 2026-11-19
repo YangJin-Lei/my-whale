@@ -2,6 +2,10 @@ package com.mywhale.app;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.Signature;
+import android.content.pm.SigningInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
@@ -14,15 +18,21 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.BufferedInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.zip.ZipFile;
 
 @CapacitorPlugin(name = "AppUpdater")
 public class AppUpdaterPlugin extends Plugin {
@@ -31,7 +41,7 @@ public class AppUpdaterPlugin extends Plugin {
         "https://github.com/YangJin-Lei/my-whale/releases/download/";
     private static final String APK_MIME = "application/vnd.android.package-archive";
     private static final int MAX_REDIRECTS = 6;
-    private static final long MIN_VALID_APK_BYTES = 500_000L;
+    private static final long MIN_VALID_APK_BYTES = 1_000_000L;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final AtomicBoolean downloading = new AtomicBoolean(false);
@@ -45,6 +55,9 @@ public class AppUpdaterPlugin extends Plugin {
         if (!url.startsWith("https://") || url.contains("?") || url.contains(" ")) {
             return false;
         }
+        if (url.endsWith("-android-debug.apk")) {
+            return false;
+        }
         if (url.startsWith(ALLOWED_PREFIX)) {
             return url.endsWith(".apk");
         }
@@ -54,6 +67,216 @@ public class AppUpdaterPlugin extends Plugin {
             && url.endsWith(".apk");
     }
 
+    private static String sanitizeTag(String tag) {
+        if (tag == null || tag.trim().isEmpty()) {
+            return "latest";
+        }
+        return tag.trim().replaceAll("[^a-zA-Z0-9._-]", "_");
+    }
+
+    private File getUpdatesDir() {
+        File dir = new File(getContext().getCacheDir(), "updates");
+        if (!dir.exists()) {
+            //noinspection ResultOfMethodCallIgnored
+            dir.mkdirs();
+        }
+        return dir;
+    }
+
+    private void cleanupOldApkFiles(File keepFile) {
+        File legacy = new File(getContext().getCacheDir(), "my-whale-update.apk");
+        if (legacy.exists()) {
+            //noinspection ResultOfMethodCallIgnored
+            legacy.delete();
+        }
+        File[] files = getUpdatesDir().listFiles();
+        if (files == null) {
+            return;
+        }
+        for (File f : files) {
+            if (keepFile == null || !f.getAbsolutePath().equals(keepFile.getAbsolutePath())) {
+                //noinspection ResultOfMethodCallIgnored
+                f.delete();
+            }
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private long getLongVersionCode(PackageInfo info) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return info.getLongVersionCode();
+        }
+        return info.versionCode;
+    }
+
+    @SuppressWarnings("deprecation")
+    private Set<String> getSigningCertSha256Set(PackageInfo info) {
+        Set<String> certs = new HashSet<>();
+        if (info == null) {
+            return certs;
+        }
+        Signature[] signatures = null;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            SigningInfo signingInfo = info.signingInfo;
+            if (signingInfo != null) {
+                signatures = signingInfo.hasMultipleSigners()
+                    ? signingInfo.getApkContentsSigners()
+                    : signingInfo.getSigningCertificateHistory();
+            }
+        } else {
+            signatures = info.signatures;
+        }
+        if (signatures != null) {
+            for (Signature sig : signatures) {
+                try {
+                    MessageDigest md = MessageDigest.getInstance("SHA-256");
+                    byte[] digest = md.digest(sig.toByteArray());
+                    certs.add(toHex(digest));
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        return certs;
+    }
+
+    @SuppressWarnings("deprecation")
+    private PackageInfo getInstalledPackageInfo(Context context) throws PackageManager.NameNotFoundException {
+        PackageManager pm = context.getPackageManager();
+        int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+            ? PackageManager.GET_SIGNING_CERTIFICATES
+            : PackageManager.GET_SIGNATURES;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return pm.getPackageInfo(
+                context.getPackageName(),
+                PackageManager.PackageInfoFlags.of(flags)
+            );
+        }
+        return pm.getPackageInfo(context.getPackageName(), flags);
+    }
+
+    @SuppressWarnings("deprecation")
+    private PackageInfo getArchivePackageInfo(Context context, String apkPath) {
+        PackageManager pm = context.getPackageManager();
+        int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+            ? PackageManager.GET_SIGNING_CERTIFICATES
+            : PackageManager.GET_SIGNATURES;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return pm.getPackageArchiveInfo(
+                apkPath,
+                PackageManager.PackageInfoFlags.of(flags)
+            );
+        }
+        return pm.getPackageArchiveInfo(apkPath, flags);
+    }
+
+    private static String toHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder(bytes.length * 2);
+        for (byte b : bytes) {
+            sb.append(String.format(Locale.US, "%02x", b));
+        }
+        return sb.toString();
+    }
+
+    private static String computeFileSha256(File file) throws Exception {
+        MessageDigest md = MessageDigest.getInstance("SHA-256");
+        try (InputStream in = new BufferedInputStream(new FileInputStream(file))) {
+            byte[] buf = new byte[16 * 1024];
+            int n;
+            while ((n = in.read(buf)) != -1) {
+                md.update(buf, 0, n);
+            }
+        }
+        return toHex(md.digest());
+    }
+
+    private void verifyApkBeforeInstall(File apkFile, String expectedSha256) throws Exception {
+        if (apkFile == null || !apkFile.exists() || apkFile.length() < MIN_VALID_APK_BYTES) {
+            throw new IllegalStateException("APK_INCOMPLETE: 安装包大小异常");
+        }
+
+        if (expectedSha256 != null && !expectedSha256.trim().isEmpty()) {
+            String actualHash = computeFileSha256(apkFile);
+            if (!actualHash.equalsIgnoreCase(expectedSha256.trim())) {
+                throw new IllegalStateException("APK_HASH_MISMATCH: 安装包 SHA-256 校验失败，可能已被篡改或损坏");
+            }
+        }
+
+        try (ZipFile zip = new ZipFile(apkFile)) {
+            if (zip.getEntry("AndroidManifest.xml") == null) {
+                throw new IllegalStateException("APK_PARSE_FAILED: 安装包缺少 AndroidManifest.xml");
+            }
+        } catch (IllegalStateException err) {
+            throw err;
+        } catch (Exception err) {
+            throw new IllegalStateException("APK_PARSE_FAILED: 安装包 ZIP 结构损坏");
+        }
+
+        Context context = getContext();
+        PackageInfo archiveInfo = getArchivePackageInfo(context, apkFile.getAbsolutePath());
+        if (archiveInfo == null) {
+            throw new IllegalStateException("APK_PARSE_FAILED: 系统无法解析此安装包");
+        }
+        if (!context.getPackageName().equals(archiveInfo.packageName)) {
+            throw new IllegalStateException("PACKAGE_MISMATCH: 安装包包名不匹配 (" + archiveInfo.packageName + ")");
+        }
+
+        PackageInfo installedInfo = getInstalledPackageInfo(context);
+        long installedCode = getLongVersionCode(installedInfo);
+        long archiveCode = getLongVersionCode(archiveInfo);
+        if (archiveCode == installedCode) {
+            throw new IllegalStateException(
+                "SAME_VERSION: 下载包与当前已安装版本一致 (" + archiveInfo.versionName + " / code " + archiveCode + ")"
+            );
+        }
+        if (archiveCode < installedCode) {
+            throw new IllegalStateException(
+                "DOWNGRADE_BLOCKED: 下载包版本 (" + archiveInfo.versionName + ") 低于当前版本 (" + installedInfo.versionName + ")"
+            );
+        }
+
+        Set<String> installedCerts = getSigningCertSha256Set(installedInfo);
+        Set<String> archiveCerts = getSigningCertSha256Set(archiveInfo);
+        if (installedCerts.isEmpty() || archiveCerts.isEmpty()) {
+            throw new IllegalStateException("SIGNATURE_UNREADABLE: 无法读取安装包签名证书");
+        }
+        boolean matches = false;
+        for (String cert : archiveCerts) {
+            if (installedCerts.contains(cert)) {
+                matches = true;
+                break;
+            }
+        }
+        if (!matches) {
+            String curShort = installedCerts.iterator().next().substring(0, 8);
+            String newShort = archiveCerts.iterator().next().substring(0, 8);
+            throw new IllegalStateException(
+                "SIGNATURE_MISMATCH: 安装包签名不一致（当前=" + curShort + ", 新包=" + newShort + "），请先导出完整加密备份后再卸载重装正式版"
+            );
+        }
+    }
+
+    @PluginMethod
+    public void getAppInfo(PluginCall call) {
+        try {
+            Context context = getContext();
+            PackageInfo info = getInstalledPackageInfo(context);
+            Set<String> certs = getSigningCertSha256Set(info);
+            String currentCert = certs.isEmpty() ? "" : certs.iterator().next();
+            JSObject ret = new JSObject();
+            ret.put("packageName", info.packageName);
+            ret.put("versionCode", getLongVersionCode(info));
+            ret.put("versionName", info.versionName != null ? info.versionName : "");
+            ret.put("signingCertSha256", currentCert);
+            ret.put("expectedReleaseCertSha256", BuildConfig.RELEASE_CERT_SHA256);
+            ret.put("isFormalReleaseCert", BuildConfig.RELEASE_CERT_SHA256.equalsIgnoreCase(currentCert));
+            ret.put("gitCommitSha", BuildConfig.GIT_COMMIT_SHA);
+            ret.put("buildTimeUtc", BuildConfig.BUILD_TIME_UTC);
+            call.resolve(ret);
+        } catch (Exception err) {
+            call.reject("Failed to inspect app info: " + err.getMessage());
+        }
+    }
+
     @PluginMethod
     public void downloadAndInstall(PluginCall call) {
         if (!downloading.compareAndSet(false, true)) {
@@ -61,6 +284,8 @@ public class AppUpdaterPlugin extends Plugin {
             return;
         }
 
+        String tag = call.getString("tag", "latest");
+        String expectedSha256 = call.getString("expectedSha256", "");
         JSArray urlArray = call.getArray("urls");
         List<String> candidates = new ArrayList<>();
         if (urlArray != null) {
@@ -83,17 +308,19 @@ public class AppUpdaterPlugin extends Plugin {
         }
 
         executor.execute(() -> {
+            String safeTag = sanitizeTag(tag);
+            File updatesDir = getUpdatesDir();
+            File outFile = new File(updatesDir, "my-whale-" + safeTag + ".apk");
+            File tmpFile = new File(updatesDir, "my-whale-" + safeTag + ".apk.part");
             try {
-                File outFile = new File(getContext().getCacheDir(), "my-whale-update.apk");
-                File tmpFile = new File(getContext().getCacheDir(), "my-whale-update.apk.part");
+                cleanupOldApkFiles(null);
+                pendingApkFile = null;
                 Exception lastError = null;
 
                 for (String candidate : candidates) {
                     try {
                         downloadFileFollowingRedirects(candidate, tmpFile);
-                        if (tmpFile.length() < MIN_VALID_APK_BYTES) {
-                            throw new IllegalStateException("Downloaded APK is smaller than expected");
-                        }
+                        verifyApkBeforeInstall(tmpFile, expectedSha256);
                         if (outFile.exists()) {
                             //noinspection ResultOfMethodCallIgnored
                             outFile.delete();
@@ -113,6 +340,13 @@ public class AppUpdaterPlugin extends Plugin {
                             //noinspection ResultOfMethodCallIgnored
                             tmpFile.delete();
                         }
+                        String msg = err.getMessage() != null ? err.getMessage() : "";
+                        if (msg.startsWith("SIGNATURE_MISMATCH:")
+                            || msg.startsWith("SAME_VERSION:")
+                            || msg.startsWith("DOWNGRADE_BLOCKED:")
+                            || msg.startsWith("PACKAGE_MISMATCH:")) {
+                            break;
+                        }
                     }
                 }
 
@@ -128,11 +362,12 @@ public class AppUpdaterPlugin extends Plugin {
     @PluginMethod
     public void installPending(PluginCall call) {
         File file = pendingApkFile;
-        if (file == null || !file.exists() || file.length() < MIN_VALID_APK_BYTES) {
+        if (file == null || !file.exists()) {
             call.reject("No downloaded APK available");
             return;
         }
         try {
+            verifyApkBeforeInstall(file, "");
             String status = launchApkInstaller(file);
             JSObject result = new JSObject();
             result.put("status", status);
@@ -170,8 +405,8 @@ public class AppUpdaterPlugin extends Plugin {
                 URL parsed = new URL(currentUrl);
                 conn = (HttpURLConnection) parsed.openConnection();
                 conn.setInstanceFollowRedirects(false);
-                conn.setConnectTimeout(8_000);
-                conn.setReadTimeout(25_000);
+                conn.setConnectTimeout(10_000);
+                conn.setReadTimeout(35_000);
                 conn.setRequestProperty("User-Agent", "my-whale-android-updater");
 
                 int code = conn.getResponseCode();
@@ -192,6 +427,14 @@ public class AppUpdaterPlugin extends Plugin {
 
                 if (code != HttpURLConnection.HTTP_OK) {
                     throw new IllegalStateException("HTTP " + code);
+                }
+
+                String contentType = conn.getContentType();
+                if (contentType != null) {
+                    String lowerCt = contentType.toLowerCase(Locale.US);
+                    if (lowerCt.startsWith("text/") || lowerCt.contains("application/json")) {
+                        throw new IllegalStateException("Mirror returned unexpected content-type: " + contentType);
+                    }
                 }
 
                 long totalBytes = conn.getContentLengthLong();
@@ -216,6 +459,15 @@ public class AppUpdaterPlugin extends Plugin {
                         }
                     }
                     out.flush();
+                }
+
+                if (totalBytes > 0 && receivedBytes != totalBytes) {
+                    throw new IllegalStateException(
+                        "APK_INCOMPLETE: 下载未完成 (" + receivedBytes + "/" + totalBytes + " bytes)"
+                    );
+                }
+                if (receivedBytes < MIN_VALID_APK_BYTES) {
+                    throw new IllegalStateException("APK_INCOMPLETE: 下载文件过小 (" + receivedBytes + " bytes)");
                 }
 
                 emitProgress(100, receivedBytes, totalBytes > 0 ? totalBytes : receivedBytes);

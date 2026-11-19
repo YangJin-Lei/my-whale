@@ -1,4 +1,10 @@
 import { create } from 'zustand'
+import {
+  API_KEY_SECRET_ID,
+  hasNativeSecureStorage,
+  loadSecureSecret,
+  saveSecureSecret,
+} from './secureStorage.js'
 import type { TtsVoice } from './api/speech.js'
 import { normalizeLocation, type UserLocation } from './location.js'
 
@@ -286,8 +292,142 @@ export const setChatBgImage = (chatBgImage: string) => {
 }
 
 export const setApiKey = (apiKey: string | null) => {
-  write(KEYS.apiKey, apiKey)
-  useSettings.setState({ apiKey })
+  const cleaned = apiKey ? apiKey.trim() || null : null
+  if (hasNativeSecureStorage()) {
+    write(KEYS.apiKey, null)
+    void saveSecureSecret(API_KEY_SECRET_ID, cleaned)
+  } else {
+    write(KEYS.apiKey, cleaned)
+  }
+  useSettings.setState({ apiKey: cleaned })
+}
+
+/**
+ * 原生端初始化时调用：
+ * 1) 优先从 Android Keystore 解密读取 API Key，并彻底清除旧版 localStorage 明文；
+ * 2) 若 Keystore 尚无记录但旧版 localStorage 存在明文 Key，自动无缝迁入 Keystore 后删除明文。
+ */
+export const hydrateNativeApiKey = async (): Promise<void> => {
+  if (!hasNativeSecureStorage()) {
+    return
+  }
+  const secureKey = await loadSecureSecret(API_KEY_SECRET_ID)
+  const legacyKey = read(KEYS.apiKey)?.trim() || null
+  if (secureKey) {
+    if (legacyKey) {
+      write(KEYS.apiKey, null)
+    }
+    useSettings.setState({ apiKey: secureKey })
+    return
+  }
+  if (legacyKey) {
+    await saveSecureSecret(API_KEY_SECRET_ID, legacyKey)
+    write(KEYS.apiKey, null)
+    useSettings.setState({ apiKey: legacyKey })
+  }
+}
+
+export type SettingsSnapshot = Omit<Settings, 'apiKey'>
+
+export const exportSettingsSnapshot = (): SettingsSnapshot => {
+  const state = useSettings.getState()
+  return Object.fromEntries(
+    Object.entries(state).filter(([key]) => key !== 'apiKey')
+  ) as SettingsSnapshot
+}
+
+export const applySettingsSnapshot = (raw: Partial<SettingsSnapshot>) => {
+  if (raw.locale === 'zh-CN' || raw.locale === 'en-US') {
+    setLocale(raw.locale)
+  }
+  if (raw.location === null || raw.location) {
+    setLocation(raw.location)
+  }
+  if (
+    raw.themePreference === 'light' ||
+    raw.themePreference === 'dark' ||
+    raw.themePreference === 'system'
+  ) {
+    setThemePreference(raw.themePreference)
+  }
+  if (typeof raw.voiceEnabled === 'boolean') {
+    setVoiceEnabled(raw.voiceEnabled)
+  }
+  if (typeof raw.voiceAutoPlay === 'boolean') {
+    setVoiceAutoPlay(raw.voiceAutoPlay)
+  }
+  if (raw.ttsVoice === 'stella' || raw.ttsVoice === 'tide') {
+    setTtsVoice(raw.ttsVoice)
+  }
+  if (typeof raw.fontFollowSystem === 'boolean') {
+    setFontFollowSystem(raw.fontFollowSystem)
+  }
+  if (typeof raw.fontScale === 'number') {
+    setFontScale(raw.fontScale)
+  }
+  if (typeof raw.chatBgImage === 'string' && raw.chatBgImage) {
+    setChatBgImage(raw.chatBgImage)
+  } else if (
+    raw.chatBgPreset === 'none' ||
+    raw.chatBgPreset === 'ocean' ||
+    raw.chatBgPreset === 'warm' ||
+    raw.chatBgPreset === 'aurora' ||
+    raw.chatBgPreset === 'mint'
+  ) {
+    setChatBgPreset(raw.chatBgPreset)
+  }
+  if (typeof raw.thinking === 'boolean') {
+    setThinking(raw.thinking)
+  }
+  if (typeof raw.search === 'boolean') {
+    setSearch(raw.search)
+  }
+  if (typeof raw.siderCollapsed === 'boolean') {
+    setSiderCollapsed(raw.siderCollapsed)
+  }
+  if (typeof raw.profile === 'string') {
+    setProfile(raw.profile)
+  }
+  if (typeof raw.memoryEnabled === 'boolean') {
+    setMemoryEnabled(raw.memoryEnabled)
+  }
+  if (typeof raw.memoryAuto === 'boolean') {
+    setMemoryAuto(raw.memoryAuto)
+  }
+  if (typeof raw.memoryNoticeShown === 'boolean') {
+    setMemoryNoticeShown(raw.memoryNoticeShown)
+  }
+  if (typeof raw.defaultPersonaId === 'string') {
+    setDefaultPersonaId(raw.defaultPersonaId)
+  }
+  if (typeof raw.petEnabled === 'boolean') {
+    setPetEnabled(raw.petEnabled)
+  }
+  if (typeof raw.activePetId === 'string') {
+    setActivePetId(raw.activePetId)
+  }
+  if (typeof raw.updateAccelerate === 'boolean') {
+    setUpdateAccelerate(raw.updateAccelerate)
+  }
+  if (typeof raw.updateMirror === 'string') {
+    setUpdateMirror(raw.updateMirror)
+  }
+  if (typeof raw.cacheModeEnabled === 'boolean') {
+    setCacheModeEnabled(raw.cacheModeEnabled)
+  }
+  if (typeof raw.cacheBackendUrl === 'string') {
+    setCacheBackendUrl(raw.cacheBackendUrl)
+  }
+  if (typeof raw.compactionAuto === 'boolean') {
+    setCompactionAuto(raw.compactionAuto)
+  }
+  if (
+    raw.compactionLevel === 'light' ||
+    raw.compactionLevel === 'medium' ||
+    raw.compactionLevel === 'heavy'
+  ) {
+    setCompactionLevel(raw.compactionLevel)
+  }
 }
 
 export const setThinking = (thinking: boolean) => {
