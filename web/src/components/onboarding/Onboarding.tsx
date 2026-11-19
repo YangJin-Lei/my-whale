@@ -361,7 +361,7 @@ const OnboardingContent = () => {
               accept={
                 Capacitor.isNativePlatform()
                   ? '*/*'
-                  : '.zip,application/zip,application/x-zip-compressed'
+                  : '.zip,.json,application/zip,application/x-zip-compressed,application/json'
               }
               hidden
               onChange={(event) => {

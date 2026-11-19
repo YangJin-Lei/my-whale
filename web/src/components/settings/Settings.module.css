@@ -417,7 +417,7 @@
   }
 
   .content {
-    padding-top: 24px;
+    padding-top: 12px;
     padding-left: 0;
     padding-bottom: var(--safe-bottom, 0px);
   }
@@ -528,4 +528,172 @@
     overflow-wrap: anywhere;
     max-width: 100%;
   }
+}
+
+.mobileSectionList {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+  overflow-y: auto;
+}
+
+.mobileSectionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 16px;
+  border-radius: 14px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-layer1, rgba(128, 134, 146, 0.06));
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.mobileSectionLeft {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mobileSectionArrow {
+  font-size: 20px;
+  line-height: 1;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.mobileSubHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0 6px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  flex-shrink: 0;
+}
+
+.mobileBackBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 0 10px 0 4px;
+  border: none;
+  background: none;
+  color: var(--dsw-alias-brand-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.mobileSubTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.cellCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.inlineSwitch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.fontPreviewWrap {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer1, rgba(128, 134, 146, 0.06));
+}
+
+.fontPreviewBubble {
+  padding: 8px 14px;
+  border-radius: 14px;
+  background: var(--dsw-specific-user-message-bg, rgba(77, 107, 254, 0.12));
+  color: var(--dsw-alias-label-primary);
+  line-height: 1.5;
+}
+
+.fontSliderMeta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.fontEdgeSmall {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fontStopLabel {
+  font-size: 12.5px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.fontEdgeLarge {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.fontSlider {
+  width: 100%;
+  accent-color: var(--dsw-alias-brand-primary);
+  cursor: pointer;
+}
+
+.bgActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bgActionBtn {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12.5px;
+}
+
+.bgPresetList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.bgPresetChip {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.bgPresetChipActive {
+  border-color: var(--dsw-alias-brand-primary);
+  background: rgba(77, 107, 254, 0.12);
+  color: var(--dsw-alias-brand-text);
+  font-weight: 500;
 }

@@ -7,14 +7,23 @@ export type Locale = 'zh-CN' | 'en-US'
 /** 主题偏好；默认跟随系统 */
 export type ThemePreference = 'light' | 'dark' | 'system'
 
-/** 本机设置，存 localStorage：API Key、语言、主题、位置、朗读音色、深度思考与智能搜索开关、侧边栏收起状态、关于我、记忆开关、默认人设 */
+export type ChatBgPreset = 'none' | 'ocean' | 'warm' | 'aurora' | 'mint' | 'custom'
+
+export const FONT_SCALE_STEPS = [0.9, 0.95, 1, 1.08, 1.16, 1.25] as const
+
+/** 本机设置，存 localStorage：API Key、语言、主题、位置、朗读音色、字体、背景等 */
 type Settings = {
   apiKey: string | null
   locale: Locale
   themePreference: ThemePreference
   location: UserLocation | null
   voiceEnabled: boolean
+  voiceAutoPlay: boolean
   ttsVoice: TtsVoice
+  fontFollowSystem: boolean
+  fontScale: number
+  chatBgPreset: ChatBgPreset
+  chatBgImage: string
   thinking: boolean
   search: boolean
   siderCollapsed: boolean
@@ -35,7 +44,12 @@ const KEYS = {
   location: 'chat-demo:location',
   themePreference: 'chat-demo:theme-preference',
   voiceEnabled: 'chat-demo:voice-enabled',
+  voiceAutoPlay: 'chat-demo:voice-auto-play',
   ttsVoice: 'chat-demo:tts-voice',
+  fontFollowSystem: 'chat-demo:font-follow-system',
+  fontScale: 'chat-demo:font-scale',
+  chatBgPreset: 'chat-demo:chat-bg-preset',
+  chatBgImage: 'chat-demo:chat-bg-image',
   thinking: 'chat-demo:thinking',
   search: 'chat-demo:search',
   siderCollapsed: 'chat-demo:sider-collapsed',
@@ -107,13 +121,37 @@ const initialThemePreference = (): ThemePreference => {
 /** 未保存过时使用服务端默认音色 stella（海星） */
 const initialTtsVoice = (): TtsVoice => (read(KEYS.ttsVoice) === 'tide' ? 'tide' : 'stella')
 
+const initialFontScale = (): number => {
+  const n = Number(read(KEYS.fontScale))
+  return FONT_SCALE_STEPS.includes(n as (typeof FONT_SCALE_STEPS)[number]) ? n : 1
+}
+
+const initialChatBgPreset = (): ChatBgPreset => {
+  const saved = read(KEYS.chatBgPreset)
+  if (
+    saved === 'ocean' ||
+    saved === 'warm' ||
+    saved === 'aurora' ||
+    saved === 'mint' ||
+    saved === 'custom'
+  ) {
+    return saved
+  }
+  return 'none'
+}
+
 export const useSettings = create<Settings>(() => ({
   apiKey: read(KEYS.apiKey),
   locale: initialLocale(),
   location: initialLocation(),
   themePreference: initialThemePreference(),
   voiceEnabled: read(KEYS.voiceEnabled) === 'true',
+  voiceAutoPlay: read(KEYS.voiceAutoPlay) === 'true',
   ttsVoice: initialTtsVoice(),
+  fontFollowSystem: read(KEYS.fontFollowSystem) !== 'false',
+  fontScale: initialFontScale(),
+  chatBgPreset: initialChatBgPreset(),
+  chatBgImage: read(KEYS.chatBgImage) ?? '',
   thinking: read(KEYS.thinking) === 'true',
   search: read(KEYS.search) === 'true',
   siderCollapsed: read(KEYS.siderCollapsed) === 'true',
@@ -152,9 +190,87 @@ export const setVoiceEnabled = (voiceEnabled: boolean) => {
   useSettings.setState({ voiceEnabled })
 }
 
+export const setVoiceAutoPlay = (voiceAutoPlay: boolean) => {
+  write(KEYS.voiceAutoPlay, String(voiceAutoPlay))
+  useSettings.setState({ voiceAutoPlay })
+}
+
 export const setTtsVoice = (ttsVoice: TtsVoice) => {
   write(KEYS.ttsVoice, ttsVoice)
   useSettings.setState({ ttsVoice })
+}
+
+export const applyFontScale = (scale: number) => {
+  if (typeof document === 'undefined') {
+    return
+  }
+  document.documentElement.style.setProperty('--ds-font-scale', String(scale))
+  const body = document.body
+  body.style.setProperty('--ds-font-size-m', `${Math.round(14 * scale)}px`)
+  body.style.setProperty(
+    '--dsw-font-markdown-base',
+    `${Math.round(16 * scale)}px/${Math.round(28 * scale)}px var(--dsw-font-family)`
+  )
+  body.style.setProperty(
+    '--dsw-font-markdown-base-strong',
+    `600 ${Math.round(16 * scale)}px/${Math.round(28 * scale)}px var(--dsw-font-family)`
+  )
+  body.style.setProperty(
+    '--dsw-font-markdown-h1',
+    `700 ${Math.round(24 * scale)}px/${Math.round(34 * scale)}px var(--dsw-font-family)`
+  )
+  body.style.setProperty(
+    '--dsw-font-markdown-h2',
+    `700 ${Math.round(22 * scale)}px/${Math.round(32 * scale)}px var(--dsw-font-family)`
+  )
+  body.style.setProperty(
+    '--dsw-font-markdown-h3',
+    `700 ${Math.round(20 * scale)}px/${Math.round(30 * scale)}px var(--dsw-font-family)`
+  )
+  body.style.setProperty(
+    '--dsw-font-markdown-h4',
+    `600 ${Math.round(16 * scale)}px/${Math.round(28 * scale)}px var(--dsw-font-family)`
+  )
+  body.style.setProperty(
+    '--dsw-font-markdown-small',
+    `${Math.round(14 * scale)}px/${Math.round(24 * scale)}px var(--dsw-font-family)`
+  )
+}
+
+export const setupFontScale = () => {
+  const sync = () => {
+    const { fontFollowSystem, fontScale } = useSettings.getState()
+    applyFontScale(fontFollowSystem ? 1 : fontScale)
+  }
+  sync()
+  useSettings.subscribe(sync)
+}
+
+export const setFontFollowSystem = (fontFollowSystem: boolean) => {
+  write(KEYS.fontFollowSystem, String(fontFollowSystem))
+  useSettings.setState({ fontFollowSystem })
+}
+
+export const setFontScale = (fontScale: number) => {
+  write(KEYS.fontScale, String(fontScale))
+  useSettings.setState({ fontFollowSystem: false, fontScale })
+  write(KEYS.fontFollowSystem, 'false')
+}
+
+export const setChatBgPreset = (chatBgPreset: ChatBgPreset) => {
+  write(KEYS.chatBgPreset, chatBgPreset)
+  useSettings.setState({ chatBgPreset })
+}
+
+export const setChatBgImage = (chatBgImage: string) => {
+  write(KEYS.chatBgImage, chatBgImage || null)
+  if (chatBgImage) {
+    write(KEYS.chatBgPreset, 'custom')
+    useSettings.setState({ chatBgPreset: 'custom', chatBgImage })
+  } else {
+    write(KEYS.chatBgPreset, 'none')
+    useSettings.setState({ chatBgPreset: 'none', chatBgImage: '' })
+  }
 }
 
 export const setApiKey = (apiKey: string | null) => {

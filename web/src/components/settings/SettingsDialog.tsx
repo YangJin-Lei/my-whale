@@ -23,7 +23,7 @@ import { exportBlobFile } from '../../services/fileExport.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { useChatStore } from '../../services/chat/store.js'
 import { regionCodes, getRegionName, provinces } from '../../services/location.js'
-import { openExternal } from '../../services/links.js'
+import { openDeepSeekDataExport, openExternal } from '../../services/links.js'
 import {
   checkForUpdates,
   CURRENT_VERSION,
@@ -31,18 +31,25 @@ import {
   useUpdateStore,
 } from '../../services/update.js'
 import {
+  FONT_SCALE_STEPS,
   isChineseBrowser,
+  setChatBgImage,
+  setChatBgPreset,
+  setFontFollowSystem,
+  setFontScale,
   setLocale,
   setLocation,
   setThemePreference,
   setTtsVoice,
   setUpdateAccelerate,
   setUpdateMirror,
+  setVoiceAutoPlay,
   setVoiceEnabled,
   useSettings,
+  type ChatBgPreset,
   type ThemePreference,
 } from '../../services/settings.js'
-import { stopReadAloud } from '../../services/speech/readAloud.js'
+import { stopReadAloud, unlockReadAloudAudio } from '../../services/speech/readAloud.js'
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
 import { Button } from '../base/Button.js'
 import { Modal } from '../base/Modal.js'
@@ -93,12 +100,17 @@ const SettingsContent = () => {
   const isMobile = useIsMobile()
   // 打开时按调用方指定的分组选中，之后在弹窗内切换
   const [section, setSection] = useState(() => useSettingsDialog.getState().section)
+  // 移动端从常规入口打开时先显示竖屏分类列表，确保「数据管理」等入口直观可见
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(
+    () => useSettingsDialog.getState().section === 'general'
+  )
   // 切换分组不丢失正在输入的 API Key 与导入状态
   const apiKeyEditor = useApiKeyEditor()
   const historyImport = useHistoryImport()
   const historyDelete = useHistoryDelete()
   const replacingHistory = useChatStore((state) => state.importingHistory)
   const historyBusy = historyImport.busy || historyDelete.busy || replacingHistory
+  const activeSectionItem = sections.find((item) => item.value === section) ?? sections[0]
   return (
     <>
       <Modal
@@ -112,62 +124,106 @@ const SettingsContent = () => {
           }
         }}
       >
-        <div role="tablist" className={styles.navigation}>
-          {sections.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              role="tab"
-              aria-selected={section === item.value}
-              className={clsx(styles.navItem, section === item.value && styles.navItemActive)}
-              onClick={() => setSection(item.value)}
-            >
-              {item.icon}
-              {t(item.label)}
-            </button>
-          ))}
-        </div>
-        <div role="tabpanel" className={styles.content}>
-          {section === 'general' ? (
-            <>
-              <ThemeSetting />
-              <LocaleSetting />
-              <VoiceModeSetting />
-              <LocationSetting />
-              <UpdateSetting />
-              <UpdateAccelerateSetting />
-              <AppNotice />
-            </>
-          ) : section === 'pet' ? (
-            <PetSettings />
-          ) : section === 'persona' ? (
-            <PersonaSettings />
-          ) : section === 'memory' ? (
-            <MemorySettings />
+        {isMobile ? (
+          mobileMenuOpen ? (
+            <div role="tablist" className={styles.mobileSectionList}>
+              {sections.map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={section === item.value}
+                  className={styles.mobileSectionRow}
+                  onClick={() => {
+                    setSection(item.value)
+                    setMobileMenuOpen(false)
+                  }}
+                >
+                  <span className={styles.mobileSectionLeft}>
+                    {item.icon}
+                    <span>{t(item.label)}</span>
+                  </span>
+                  <span className={styles.mobileSectionArrow} aria-hidden>
+                    ›
+                  </span>
+                </button>
+              ))}
+            </div>
           ) : (
-            <>
-              <ApiKeyField editor={apiKeyEditor} />
-              <ImportHistory historyImport={historyImport} disabled={historyBusy} />
-              <ExportHistory disabled={historyBusy} />
-              <SettingCell
-                label={t('deleteAllSessions')}
-                status={null}
-                action={
-                  <Button
-                    variant="dangerOutlined"
-                    size="m"
-                    className={styles.cellButton}
-                    disabled={historyBusy}
-                    onClick={historyDelete.open}
-                  >
-                    {t('delete')}
-                  </Button>
-                }
-              />
-              {isMobile ? <ApiKeyConfirm editor={apiKeyEditor} /> : null}
-            </>
-          )}
-        </div>
+            <div className={styles.mobileSubHeader}>
+              <button
+                type="button"
+                className={styles.mobileBackBtn}
+                onClick={() => setMobileMenuOpen(true)}
+              >
+                ‹ {t('settings')}
+              </button>
+              <span className={styles.mobileSubTitle}>{t(activeSectionItem.label)}</span>
+            </div>
+          )
+        ) : (
+          <div role="tablist" className={styles.navigation}>
+            {sections.map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                role="tab"
+                aria-selected={section === item.value}
+                className={clsx(styles.navItem, section === item.value && styles.navItemActive)}
+                onClick={() => setSection(item.value)}
+              >
+                {item.icon}
+                {t(item.label)}
+              </button>
+            ))}
+          </div>
+        )}
+        {!isMobile || !mobileMenuOpen ? (
+          <div role="tabpanel" className={styles.content}>
+            {section === 'general' ? (
+              <>
+                <ThemeSetting />
+                <FontSizeSetting />
+                <ChatBackgroundSetting />
+                <LocaleSetting />
+                <VoiceModeSetting />
+                <LocationSetting />
+                <UpdateSetting />
+                <UpdateAccelerateSetting />
+                <AppNotice />
+              </>
+            ) : section === 'pet' ? (
+              <PetSettings />
+            ) : section === 'persona' ? (
+              <PersonaSettings />
+            ) : section === 'memory' ? (
+              <MemorySettings />
+            ) : (
+              <>
+                <ApiKeyField editor={apiKeyEditor} />
+                <DeepSeekExportSetting />
+                <ImportHistory historyImport={historyImport} disabled={historyBusy} />
+                <ExportHistory disabled={historyBusy} />
+                <SettingCell
+                  label={t('deleteAllSessions')}
+                  status={null}
+                  action={
+                    <Button
+                      variant="dangerOutlined"
+                      size="m"
+                      className={styles.cellButton}
+                      disabled={historyBusy}
+                      onClick={historyDelete.open}
+                    >
+                      {t('delete')}
+                    </Button>
+                  }
+                />
+                {isMobile ? <ApiKeyConfirm editor={apiKeyEditor} /> : null}
+              </>
+            )}
+          </div>
+        ) : null}
       </Modal>
       {historyImport.file ? <ImportConfirm historyImport={historyImport} /> : null}
       {historyDelete.opened ? <DeleteAllConfirm historyDelete={historyDelete} /> : null}
@@ -343,24 +399,6 @@ const UpdateSetting = () => {
   const downloadStatus = useUpdateStore((state) => state.downloadStatus)
   const downloadProgress = useUpdateStore((state) => state.downloadProgress)
 
-  const description =
-    status === 'available' && latestVersion
-      ? downloadStatus === 'downloading'
-        ? t('settingsUpdatingProgressDesc', {
-            version: latestVersion,
-            progress: downloadProgress !== null ? `${downloadProgress}%` : '...',
-          })
-        : downloadStatus === 'needs_permission'
-          ? t('settingsUpdateNeedsPermDesc')
-          : downloadStatus === 'error'
-            ? t('settingsUpdateDownloadErrorDesc')
-            : t('settingsUpdateAvailableDesc', { version: latestVersion })
-      : status === 'latest'
-        ? t('settingsUpdateLatestDesc', { version: CURRENT_VERSION })
-        : status === 'error'
-          ? t('settingsUpdateFailedDesc')
-          : t('settingsVersionDesc', { version: CURRENT_VERSION })
-
   const actionLabel =
     downloadStatus === 'downloading'
       ? downloadProgress !== null
@@ -373,14 +411,15 @@ const UpdateSetting = () => {
           : downloadStatus === 'error'
             ? t('settingsRetryDownload')
             : hasInAppUpdater
-              ? t('settingsUpdateNow')
+              ? latestVersion
+                ? `${t('settingsUpdateNow')} v${latestVersion}`
+                : t('settingsUpdateNow')
               : t('settingsGoUpdate')
 
   return (
     <SettingCell
       label={`${t('settingsVersionLabel')} v${CURRENT_VERSION}`}
-      description={description}
-      status={null}
+      status={status === 'error' ? { key: 'settingsUpdateFailedDesc', error: true } : null}
       action={
         status === 'available' ? (
           hasInAppUpdater ? (
@@ -468,6 +507,7 @@ const AppNotice = () => {
         <li>{t('settingsNoticeItem2')}</li>
         <li>{t('settingsNoticeItem3')}</li>
         <li>{t('settingsNoticeItem4')}</li>
+        <li>{t('settingsNoticeItem5')}</li>
       </ul>
     </div>
   )
@@ -476,11 +516,11 @@ const AppNotice = () => {
 const VoiceModeSetting = () => {
   const t = useTranslate()
   const voiceEnabled = useSettings((state) => state.voiceEnabled)
+  const voiceAutoPlay = useSettings((state) => state.voiceAutoPlay)
   return (
     <>
       <SettingCell
         label={t('settingsVoiceMode')}
-        description={t('settingsVoiceModeDesc')}
         status={null}
         action={
           <input
@@ -497,8 +537,232 @@ const VoiceModeSetting = () => {
           />
         }
       />
-      {voiceEnabled ? <TtsVoiceSetting /> : null}
+      {voiceEnabled ? (
+        <>
+          <SettingCell
+            label={t('settingsVoiceAutoPlay')}
+            status={null}
+            action={
+              <input
+                type="checkbox"
+                aria-label={t('settingsVoiceAutoPlay')}
+                checked={voiceAutoPlay}
+                onChange={(event) => {
+                  const next = event.target.checked
+                  if (next) {
+                    unlockReadAloudAudio()
+                  } else {
+                    stopReadAloud()
+                  }
+                  setVoiceAutoPlay(next)
+                }}
+              />
+            }
+          />
+          <TtsVoiceSetting />
+        </>
+      ) : null}
     </>
+  )
+}
+
+/** 字体大小调节：支持跟随系统与 6 档滑块实时预览 */
+const FontSizeSetting = () => {
+  const t = useTranslate()
+  const fontFollowSystem = useSettings((state) => state.fontFollowSystem)
+  const fontScale = useSettings((state) => state.fontScale)
+  const effectiveScale = fontFollowSystem ? 1 : fontScale
+  const matchedIdx = FONT_SCALE_STEPS.findIndex((step) => step === fontScale)
+  const sliderIndex = matchedIdx >= 0 ? matchedIdx : 2
+  const stopLabel =
+    effectiveScale === 1
+      ? t('settingsFontStandard')
+      : effectiveScale < 1
+        ? `${t('settingsFontSmall')} (${Math.round(effectiveScale * 100)}%)`
+        : `${t('settingsFontLarge')} (${Math.round(effectiveScale * 100)}%)`
+
+  return (
+    <div className={styles.cellCard}>
+      <div className={styles.row}>
+        <span className={styles.label}>{t('settingsFontSize')}</span>
+        <label className={styles.inlineSwitch}>
+          <span>{t('settingsFontFollowSystem')}</span>
+          <input
+            type="checkbox"
+            aria-label={t('settingsFontFollowSystem')}
+            checked={fontFollowSystem}
+            onChange={(event) => setFontFollowSystem(event.target.checked)}
+          />
+        </label>
+      </div>
+      <div className={styles.fontPreviewWrap}>
+        <div
+          className={styles.fontPreviewBubble}
+          style={{ fontSize: `${Math.round(16 * effectiveScale)}px` }}
+        >
+          {t('settingsFontPreview')}
+        </div>
+      </div>
+      <div className={styles.fontSliderMeta}>
+        <span className={styles.fontEdgeSmall}>A</span>
+        <span className={styles.fontStopLabel}>{stopLabel}</span>
+        <span className={styles.fontEdgeLarge}>A</span>
+      </div>
+      <input
+        type="range"
+        aria-label={t('settingsFontSize')}
+        className={styles.fontSlider}
+        min={0}
+        max={FONT_SCALE_STEPS.length - 1}
+        step={1}
+        value={sliderIndex}
+        onChange={(event) => {
+          const idx = Number(event.target.value)
+          const next = FONT_SCALE_STEPS[idx] ?? 1
+          setFontScale(next)
+        }}
+      />
+    </div>
+  )
+}
+
+const bgPresets: { value: ChatBgPreset; label: TranslationKey }[] = [
+  { value: 'none', label: 'settingsChatBgNone' },
+  { value: 'ocean', label: 'settingsChatBgOcean' },
+  { value: 'warm', label: 'settingsChatBgWarm' },
+  { value: 'aurora', label: 'settingsChatBgAurora' },
+  { value: 'mint', label: 'settingsChatBgMint' },
+]
+
+const compressImageToDataUrl = async (file: File): Promise<string> => {
+  const objectUrl = URL.createObjectURL(file)
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image()
+      el.onload = () => resolve(el)
+      el.onerror = () => reject(new Error('Image decode failed'))
+      el.src = objectUrl
+    })
+    const maxSide = 1280
+    const scale = Math.min(1, maxSide / Math.max(img.width || 1, img.height || 1))
+    const width = Math.max(1, Math.round(img.width * scale))
+    const height = Math.max(1, Math.round(img.height * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      throw new Error('Canvas unavailable')
+    }
+    ctx.drawImage(img, 0, 0, width, height)
+    return canvas.toDataURL('image/jpeg', 0.78)
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
+}
+
+/** 聊天背景：内置渐变预设 + 本地上传自定义图片 */
+const ChatBackgroundSetting = () => {
+  const t = useTranslate()
+  const chatBgPreset = useSettings((state) => state.chatBgPreset)
+  const chatBgImage = useSettings((state) => state.chatBgImage)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const handleUploadBg = async (file: File) => {
+    try {
+      const dataUrl = await compressImageToDataUrl(file)
+      setChatBgImage(dataUrl)
+    } catch {
+      showToast({ key: 'settingsChatBgInvalid', type: 'error' })
+    }
+  }
+
+  return (
+    <div className={styles.cellCard}>
+      <div className={styles.row}>
+        <span className={styles.label}>{t('settingsChatBg')}</span>
+        <div className={styles.bgActions}>
+          <Button
+            variant="outlined"
+            size="s"
+            className={styles.bgActionBtn}
+            onClick={() => fileRef.current?.click()}
+          >
+            {t('settingsChatBgUpload')}
+          </Button>
+          {chatBgPreset !== 'none' || chatBgImage ? (
+            <Button
+              variant="outlined"
+              size="s"
+              className={styles.bgActionBtn}
+              onClick={() => setChatBgImage('')}
+            >
+              {t('settingsChatBgClear')}
+            </Button>
+          ) : null}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              event.target.value = ''
+              if (file) {
+                void handleUploadBg(file)
+              }
+            }}
+          />
+        </div>
+      </div>
+      <div className={styles.bgPresetList}>
+        {bgPresets.map((item) => (
+          <button
+            key={item.value}
+            type="button"
+            className={clsx(
+              styles.bgPresetChip,
+              chatBgPreset === item.value && styles.bgPresetChipActive
+            )}
+            onClick={() => setChatBgPreset(item.value)}
+          >
+            {t(item.label)}
+          </button>
+        ))}
+        {chatBgImage ? (
+          <button
+            type="button"
+            className={clsx(
+              styles.bgPresetChip,
+              chatBgPreset === 'custom' && styles.bgPresetChipActive
+            )}
+            onClick={() => setChatBgPreset('custom')}
+          >
+            {t('settingsChatBgCustom')}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+const DeepSeekExportSetting = () => {
+  const t = useTranslate()
+  return (
+    <SettingCell
+      label={t('settingsDeepSeekExport')}
+      status={null}
+      action={
+        <Button
+          variant="outlined"
+          size="m"
+          className={styles.cellButton}
+          onClick={() => void openDeepSeekDataExport()}
+        >
+          {t('settingsOpenDeepSeek')}
+        </Button>
+      }
+    />
   )
 }
 
@@ -618,13 +882,11 @@ const errorStatus = (key: TranslationKey, error: unknown): Status => ({
 
 const SettingCell = ({
   label,
-  description,
   status,
   action,
   className,
 }: {
   label: string
-  description?: string
   status: Status
   action: ReactNode
   className?: string
@@ -634,11 +896,9 @@ const SettingCell = ({
     <div className={clsx(styles.cell, styles.row, className)}>
       <div className={styles.text}>
         <div className={styles.label}>{label}</div>
-        {status || description ? (
-          <div className={clsx(styles.description, status?.error && styles.error)}>
-            {status
-              ? t(status.key, status.reason ? { message: t(status.reason) } : status.params)
-              : description}
+        {status ? (
+          <div className={clsx(styles.description, status.error && styles.error)}>
+            {t(status.key, status.reason ? { message: t(status.reason) } : status.params)}
           </div>
         ) : null}
       </div>
@@ -694,7 +954,6 @@ const ImportHistory = ({
   return (
     <SettingCell
       label={t('historyImport')}
-      description={t('historyImportDescription')}
       status={historyImport.status}
       action={
         <>
@@ -714,7 +973,7 @@ const ImportHistory = ({
             accept={
               Capacitor.isNativePlatform()
                 ? '*/*'
-                : '.zip,application/zip,application/x-zip-compressed'
+                : '.zip,.json,application/zip,application/x-zip-compressed,application/json'
             }
             hidden
             onChange={(event) => {
@@ -754,7 +1013,6 @@ const ExportHistory = ({ disabled }: { disabled: boolean }) => {
   return (
     <SettingCell
       label={t('exportAllLabel')}
-      description={t('historyExportDescription')}
       status={status}
       action={
         <Button

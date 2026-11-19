@@ -31,7 +31,7 @@ export const PersonaSettings = () => {
   return (
     <div className={styles.settingsWrap}>
       <div className={styles.settingsHeader}>
-        <span className={styles.privacyTip}>{t('personaPrivacyTip')}</span>
+        <div />
         <Button variant="primary" size="s" onClick={() => setEditing(null)}>
           + {t('personaNew')}
         </Button>

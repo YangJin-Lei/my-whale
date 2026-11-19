@@ -7,8 +7,13 @@ import { closeSettings, useSettingsDialog } from '../components/settings/setting
 import { closeMobileSider, useMobileSider } from '../components/sider/mobileSiderState.js'
 import { refreshBalance } from '../services/balance.js'
 import { newChat, useChatStore } from '../services/chat/store.js'
-import { extractApiKey, setClipboardReader } from '../services/clipboard.js'
-import { setOpenExternal } from '../services/links.js'
+import { extractApiKey, setClipboardReader, setClipboardWriter } from '../services/clipboard.js'
+import {
+  DEEPSEEK_CHAT_URL,
+  openExternal,
+  setOpenDeepSeek,
+  setOpenExternal,
+} from '../services/links.js'
 import { flushPendingExtracts } from '../services/memory/extract.js'
 import { useSettings } from '../services/settings.js'
 import {
@@ -40,6 +45,7 @@ type TauriInternals = {
 type AppUpdaterNativePlugin = {
   downloadAndInstall: (options: { urls: string[] }) => Promise<{ status: InAppUpdateOutcome }>
   installPending: () => Promise<{ status: InAppUpdateOutcome }>
+  openDeepSeekApp?: () => Promise<{ launched: boolean }>
   addListener: (
     eventName: 'downloadProgress',
     listener: (payload: { progress: number; received: number; total: number }) => void
@@ -110,6 +116,12 @@ export const setupNative = () => {
         return res.status
       },
     })
+    setOpenDeepSeek(async () => {
+      const res = await AppUpdater.openDeepSeekApp?.().catch(() => ({ launched: false }))
+      if (!res?.launched) {
+        openExternal(DEEPSEEK_CHAT_URL)
+      }
+    })
   }
 
   setOpenExternal((url) => {
@@ -122,6 +134,7 @@ export const setupNative = () => {
       .then((res) => res.value ?? null)
       .catch(() => null)
   )
+  setClipboardWriter((string) => Clipboard.write({ string }))
 
   void Browser.addListener('browserFinished', () => void onReturnFromExternal())
   void App.addListener('resume', () => void onReturnFromExternal())

@@ -487,6 +487,16 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+.costNoticeBox {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.08);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-secondary);
+}
+
 @media not all and (min-width: 768px) {
   .drawer {
     position: fixed;

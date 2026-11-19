@@ -1,9 +1,11 @@
 import clsx from 'clsx'
 import { useEffect, useRef, useState } from 'react'
 import { ensureApiKey } from '../../components/settings/settingsDialogState.js'
+import { showToast } from '../../components/base/toastState.js'
 import { useTranslate } from '../../i18n/index.js'
 import { streamMessage, uploadFile } from '../../services/api/client.js'
 import type { MessageParam } from '../../services/api/types.js'
+import { writeClipboardText } from '../../services/clipboard.js'
 import { useSettings } from '../../services/settings.js'
 import { resolveCurrentOpponent } from '../opponents.js'
 import { updateGameFeedback, useGameStore } from '../store.js'
@@ -92,6 +94,7 @@ export const DrawGuessBoard = ({
   const [brushWidth, setBrushWidth] = useState<number>(5)
   const [eraser, setEraser] = useState(false)
   const [showAiCode, setShowAiCode] = useState(false)
+  const [pickingIdiom, setPickingIdiom] = useState(false)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const undoFramesRef = useRef<ImageData[]>([])
@@ -247,8 +250,8 @@ export const DrawGuessBoard = ({
 
     const sys =
       locale === 'zh-CN'
-        ? `你是「${opponent.name}」（${opponent.systemPrompt}），现在玩你画我猜并且轮到你【画图出题】。\n请自选一个常见四字成语作为谜底，并用纯静态 HTML+SVG 画出来（禁止在 HTML 文字里直接写出谜底汉字，也不加 script 标签）。\n严格输出 JSON：{"answer":"四字成语","hint":"简短类别提示，如：四字成语/动物相关","html":"<div style='width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#fff;'>...<svg viewBox='0 0 260 180'>...</svg></div>","speech":"我画好了，猜猜这是什么成语？"}`
-        : `You are ${opponent.name}. Pick a well-known idiom/word and draw it using safe static HTML+SVG (no answer text inside HTML, no <script>). Output ONLY JSON: {"answer":"...","hint":"...","html":"...","speech":"..."}`
+        ? `你是「${opponent.name}」（${opponent.systemPrompt}），现在玩你画我猜并且轮到你【画图出题】。\n请自由构思任意一个适合用画面表现的成语或俗语（不必局限于常见那几个，尽量有新意、好分辨），并用纯静态 HTML+SVG 画出来。\n要求：简单一些的，不需要复杂动效，不可以出现任何提示（绝不要在 HTML/SVG 中写汉字、拼音、字母提示），只需要描述这个词语的画面就好了，只画，不加 script 标签。\n严格输出 JSON：{"answer":"成语","hint":"简短类别提示","html":"<div style='width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#fff;'>...<svg viewBox='0 0 260 180'>...</svg></div>","speech":"我画好了，猜猜这是什么成语？"}`
+        : `You are ${opponent.name}. Freely invent ANY vivid, drawable idiom or phrase (do not repeat cliché ones) and draw it cleanly with simple static HTML+SVG (no complex animation, no text/letter hints inside HTML, no <script>, just illustrate the concept). Output ONLY JSON: {"answer":"...","hint":"...","html":"...","speech":"..."}`
 
     const { text, thought } = await streamSingleJsonCall(
       apiKey,
@@ -481,6 +484,59 @@ export const DrawGuessBoard = ({
     setAnswerInput(candidate)
   }
 
+  /** 让 AI 自由构思一个未局限在固定词表里的适合绘画成语 */
+  const askAiForIdiom = async () => {
+    if (pickingIdiom || aiThinking || !ensureApiKey()) {
+      return
+    }
+    const apiKey = useSettings.getState().apiKey ?? ''
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    setPickingIdiom(true)
+    try {
+      const sys =
+        locale === 'zh-CN'
+          ? '请自由构思一个适合你画我猜、画面具象且有新意的四字成语或常见词语（不要只局限于画蛇添足、守株待兔那几个固定词），严格只返回 JSON：{"idiom":"词语"}。'
+          : 'Invent a vivid, concrete idiom or phrase ideal for Pictionary (do not stick to clichés). Return ONLY JSON: {"idiom":"..."}.'
+      const { text } = await streamSingleJsonCall(
+        apiKey,
+        sys,
+        [
+          {
+            role: 'user',
+            content: locale === 'zh-CN' ? '帮我想一个新词' : 'Give me one fresh phrase',
+          },
+        ],
+        controller.signal
+      )
+      const parsed = JSON.parse(stripJsonFences(text)) as { idiom?: string }
+      const next = (parsed.idiom ?? '').trim()
+      if (next) {
+        setAnswerInput(next)
+      } else {
+        pickRandomIdiom()
+      }
+    } catch {
+      if (!controller.signal.aborted) {
+        pickRandomIdiom()
+      }
+    } finally {
+      setPickingIdiom(false)
+    }
+  }
+
+  /** 一键复制给 AI 生成画图 HTML 的提示词，空输入时保留 [user_input] 占位 */
+  const copyDrawingPrompt = async () => {
+    const target = answerInput.trim() || '[user_input]'
+    const prompt =
+      locale === 'zh-CN'
+        ? `请用纯静态 HTML + SVG 画一幅图表达：${target}。要求：简单一些的，不需要复杂动效，不可以出现任何提示，只需要描述这个词语就好了，只画。不要加 <script> 或多余解释。`
+        : `Draw "${target}" using simple static HTML + SVG: keep it simple, no complex animations, no text hints or labels at all, just visually depict the word only (no <script> or extra text).`
+    await writeClipboardText(prompt)
+    showToast({ key: 'copied' })
+  }
+
   return (
     <div className={styles.wrap}>
       <div className={styles.scoreBar}>
@@ -610,8 +666,23 @@ export const DrawGuessBoard = ({
             </button>
             <button
               type="button"
+              className={styles.toolBtn}
+              disabled={aiThinking || pickingIdiom}
+              onClick={() => void askAiForIdiom()}
+            >
+              {pickingIdiom ? '…' : t('drawGuessAiIdiom')}
+            </button>
+            <button
+              type="button"
+              className={styles.toolBtn}
+              onClick={() => void copyDrawingPrompt()}
+            >
+              {t('drawGuessCopyPrompt')}
+            </button>
+            <button
+              type="button"
               className={styles.primaryBtn}
-              disabled={aiThinking || !answerInput.trim()}
+              disabled={aiThinking || pickingIdiom || !answerInput.trim()}
               onClick={() => void submitDrawingToAi()}
             >
               {aiThinking

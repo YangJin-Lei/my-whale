@@ -1,15 +1,18 @@
+import './polyfills.js'
 import { Capacitor } from '@capacitor/core'
 import { createRoot } from 'react-dom/client'
 import { App } from './app/App.js'
 import { setupTheme } from './app/theme.js'
 import { setupNative } from './platform/native.js'
 import { ensureKatex } from './services/markdown/katex.js'
+import { setupFontScale } from './services/settings.js'
 import './app/theme.css'
 import './app/global.css'
 
 setupNative()
 ensureKatex()
 setupTheme()
+setupFontScale()
 
 if (
   'serviceWorker' in navigator &&

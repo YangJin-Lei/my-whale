@@ -166,7 +166,6 @@ export const MemorySettings = () => {
       <div className={styles.toggleRow}>
         <div>
           <div className={styles.label}>{t('memoryEnabledLabel')}</div>
-          <div className={styles.desc}>{t('memoryEnabledDesc')}</div>
         </div>
         <input
           type="checkbox"
@@ -178,7 +177,6 @@ export const MemorySettings = () => {
       <div className={styles.toggleRow}>
         <div>
           <div className={styles.label}>{t('memoryAutoLabel')}</div>
-          <div className={styles.desc}>{t('memoryAutoDesc')}</div>
         </div>
         <input
           type="checkbox"
@@ -187,8 +185,6 @@ export const MemorySettings = () => {
           onChange={(event) => setMemoryAuto(event.target.checked)}
         />
       </div>
-
-      <div className={styles.privacy}>{t('personaPrivacyTip')}</div>
 
       <div className={styles.section}>
         <div className={styles.fieldHeader}>

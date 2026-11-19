@@ -459,6 +459,8 @@ export const GameDrawer = () => {
               <span className={styles.gameCardDesc}>{t('gameMahjongSubtitle')}</span>
             </div>
           </div>
+
+          <div className={styles.costNoticeBox}>{t('gameCostNotice')}</div>
         </div>
       )}
     </aside>

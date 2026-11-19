@@ -30,6 +30,7 @@ import {
   type SessionPersona,
 } from '../persona/types.js'
 import { setSearch, setThinking, useSettings } from '../settings.js'
+import { autoPlayReadAloud } from '../speech/readAloud.js'
 import { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
 import * as db from './db.js'
 import {
@@ -1597,6 +1598,20 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
     persist(sessionId)
     debouncedRefreshBalance()
     if (reply.status === 'done') {
+      const { voiceEnabled, voiceAutoPlay } = useSettings.getState()
+      if (voiceEnabled && voiceAutoPlay) {
+        const spokenText = reply.blocks
+          .filter(
+            (b): b is { type: 'text'; text: string; isTemplate?: boolean } =>
+              b.type === 'text' && !b.isTemplate
+          )
+          .map((b) => b.text)
+          .join('')
+          .trim()
+        if (spokenText) {
+          autoPlayReadAloud(reply.id, spokenText)
+        }
+      }
       const latest = getSession(sessionId)
       if (latest) {
         scheduleExtract({

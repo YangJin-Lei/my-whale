@@ -142,6 +142,25 @@ public class AppUpdaterPlugin extends Plugin {
         }
     }
 
+    @PluginMethod
+    public void openDeepSeekApp(PluginCall call) {
+        try {
+            Intent launch = getContext().getPackageManager().getLaunchIntentForPackage("com.deepseek.chat");
+            if (launch != null) {
+                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(launch);
+                JSObject res = new JSObject();
+                res.put("launched", true);
+                call.resolve(res);
+                return;
+            }
+        } catch (Exception ignored) {
+        }
+        JSObject res = new JSObject();
+        res.put("launched", false);
+        call.resolve(res);
+    }
+
     private void downloadFileFollowingRedirects(String initialUrl, File targetFile) throws Exception {
         String currentUrl = initialUrl;
         HttpURLConnection conn = null;

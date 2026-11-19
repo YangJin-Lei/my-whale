@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, type CSSProperties } from 'react'
 import { useTranslate } from '../i18n/index.js'
-import { useSettings } from '../services/settings.js'
+import { useSettings, type ChatBgPreset } from '../services/settings.js'
 import { useIsMobile, useMobileViewport, usePreventPageScroll } from './viewport.js'
 import {
   bindChatPersistence,
@@ -33,10 +33,40 @@ import { closeMobileSider } from '../components/sider/mobileSiderState.js'
 import { MobileSider, Sider } from '../components/sider/Sider.js'
 import styles from './App.module.css'
 
+const PRESET_BG_STYLES: Record<Exclude<ChatBgPreset, 'none' | 'custom'>, string> = {
+  ocean:
+    'radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.16), transparent 55%), radial-gradient(circle at 80% 75%, rgba(77, 107, 254, 0.16), transparent 60%)',
+  warm: 'linear-gradient(145deg, rgba(251, 191, 36, 0.14) 0%, rgba(244, 114, 182, 0.10) 100%)',
+  aurora:
+    'radial-gradient(circle at 75% 20%, rgba(52, 211, 153, 0.16), transparent 55%), radial-gradient(circle at 25% 80%, rgba(167, 139, 250, 0.16), transparent 55%)',
+  mint: 'linear-gradient(160deg, rgba(16, 185, 129, 0.13) 0%, rgba(59, 130, 246, 0.08) 100%)',
+}
+
+const resolveChatBgStyle = (preset: ChatBgPreset, image: string): CSSProperties | null => {
+  if (preset === 'none') {
+    return null
+  }
+  if (preset === 'custom') {
+    if (!image) {
+      return null
+    }
+    return {
+      backgroundImage: `url(${image})`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      opacity: 0.24,
+    }
+  }
+  return { backgroundImage: PRESET_BG_STYLES[preset] }
+}
+
 export const App = () => {
   const t = useTranslate()
   const isMobile = useIsMobile()
   const locale = useSettings((state) => state.locale)
+  const chatBgPreset = useSettings((state) => state.chatBgPreset)
+  const chatBgImage = useSettings((state) => state.chatBgImage)
+  const chatBgStyle = resolveChatBgStyle(chatBgPreset, chatBgImage)
   // 移动端侧边栏以独立抽屉管理开合状态
   const siderCollapsed = useSettings((state) => state.siderCollapsed) && !isMobile
   const ready = useChatStore((state) => state.ready)
@@ -107,6 +137,9 @@ export const App = () => {
             </div>
           ) : null}
           <div className={styles.content}>
+            {chatBgStyle ? (
+              <div className={styles.chatBgLayer} style={chatBgStyle} aria-hidden="true" />
+            ) : null}
             {siderCollapsed ? <CollapsedSider /> : null}
             {!ready || (activeId !== null && !session) ? (
               <div className={styles.loadingView}>
