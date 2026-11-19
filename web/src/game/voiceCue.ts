@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { synthesize, TTS_SAMPLE_RATE } from '../services/api/speech.js'
+import { synthesize, TTS_SAMPLE_RATE, type TtsVoice } from '../services/api/speech.js'
 import { useSettings } from '../services/settings.js'
 import { stopReadAloud } from '../services/speech/readAloud.js'
 
@@ -78,7 +78,7 @@ const sanitizeSpeechText = (raw: string): string =>
  * 朗读棋局中 AI 角色的简短点评台词。
  * 与聊天气泡朗读互斥，避免双声音叠放。
  */
-export const speakGameLine = (rawText: string) => {
+export const speakGameLine = (rawText: string, voiceOverride?: TtsVoice) => {
   const text = sanitizeSpeechText(rawText)
   if (!text) {
     return
@@ -87,6 +87,7 @@ export const speakGameLine = (rawText: string) => {
   if (!apiKey) {
     return
   }
+  const voice = voiceOverride ?? ttsVoice
 
   stopReadAloud()
   stopGameVoice()
@@ -101,7 +102,7 @@ export const speakGameLine = (rawText: string) => {
     let rest = new Uint8Array(0)
     try {
       const context = ensureUnlockedContext()
-      const stream = await synthesize(apiKey, text, ttsVoice, controller.signal)
+      const stream = await synthesize(apiKey, text, voice, controller.signal)
       const reader = stream.getReader()
       controller.signal.addEventListener('abort', () => void reader.cancel().catch(() => {}))
 

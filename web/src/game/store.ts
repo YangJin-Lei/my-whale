@@ -1,11 +1,12 @@
 import { create } from 'zustand'
-import { classifyApiError } from '../services/api/errors.js'
-import { type Locale, useSettings } from '../services/settings.js'
 import { ensureApiKey } from '../components/settings/settingsDialogState.js'
+import { classifyApiError } from '../services/api/errors.js'
+import type { TtsVoice } from '../services/api/speech.js'
+import { type Locale, useSettings } from '../services/settings.js'
 import { requestAiMoveFromLlm } from './llmPlayer.js'
 import { resolveCurrentOpponent } from './opponents.js'
 import { findRegisteredGame, type RegisteredGame } from './registry.js'
-import type { GameId } from './types.js'
+import type { GameId, GameOpponent } from './types.js'
 import { speakGameLine, stopGameVoice, unlockGameAudio } from './voiceCue.js'
 
 type GameStoreState = {
@@ -18,13 +19,29 @@ type GameStoreState = {
   bubbleText: string
   thoughtText: string
   lastSpeechText: string
+  lastVoice?: TtsVoice
+  turnSecondsLeft: number | null
   errorText: string | null
   moveEpoch: number
 }
 
 let turnController: AbortController | null = null
+let turnTimerId: number | null = null
+let chainTimerId: number | null = null
+
+const clearTurnTimers = () => {
+  if (turnTimerId !== null) {
+    window.clearInterval(turnTimerId)
+    turnTimerId = null
+  }
+  if (chainTimerId !== null) {
+    window.clearTimeout(chainTimerId)
+    chainTimerId = null
+  }
+}
 
 const abortPendingAiTurn = () => {
+  clearTurnTimers()
   if (turnController) {
     turnController.abort()
     turnController = null
@@ -49,6 +66,8 @@ export const useGameStore = create<GameStoreState>(() => ({
   bubbleText: '',
   thoughtText: '',
   lastSpeechText: '',
+  lastVoice: undefined,
+  turnSecondsLeft: null,
   errorText: null,
   moveEpoch: 0,
 }))
@@ -74,6 +93,17 @@ const formatApiFailure = (error: unknown, locale: Locale): string => {
   return locale === 'zh-CN' ? '请求失败，请点击重试' : 'Request failed. Please retry.'
 }
 
+const resolveActiveOpponent = (
+  plugin: RegisteredGame,
+  state: unknown,
+  locale: Locale
+): GameOpponent => {
+  const fallback = resolveCurrentOpponent(locale)
+  return plugin.resolveActiveOpponent
+    ? plugin.resolveActiveOpponent(state, fallback, locale)
+    : fallback
+}
+
 const getResultBubble = (plugin: RegisteredGame, state: unknown, locale: Locale): string | null => {
   const status = plugin.getStatus(state)
   if (status === 'player_win') {
@@ -86,6 +116,80 @@ const getResultBubble = (plugin: RegisteredGame, state: unknown, locale: Locale)
     return locale === 'zh-CN' ? '棋逢对手，难分伯仲。' : 'A hard-fought draw!'
   }
   return null
+}
+
+const startTurnCountdown = (plugin: RegisteredGame, expectedEpoch: number) => {
+  if (turnTimerId !== null) {
+    window.clearInterval(turnTimerId)
+    turnTimerId = null
+  }
+  const limit = plugin.turnTimeoutSec
+  if (!limit || limit <= 0) {
+    useGameStore.setState({ turnSecondsLeft: null })
+    return
+  }
+
+  useGameStore.setState({ turnSecondsLeft: limit })
+  turnTimerId = window.setInterval(() => {
+    const store = useGameStore.getState()
+    if (
+      store.moveEpoch !== expectedEpoch ||
+      !store.drawerOpen ||
+      store.activeGameId !== plugin.id ||
+      !store.gameState ||
+      plugin.getStatus(store.gameState) !== 'playing'
+    ) {
+      clearTurnTimers()
+      return
+    }
+    const nextSec = (store.turnSecondsLeft ?? limit) - 1
+    if (nextSec > 0) {
+      useGameStore.setState({ turnSecondsLeft: nextSec })
+      return
+    }
+
+    clearTurnTimers()
+    const currentTurn = plugin.getTurn(store.gameState)
+    const locale = useSettings.getState().locale
+    const opponent = resolveActiveOpponent(plugin, store.gameState, locale)
+    const timeoutOutcome = plugin.handleTimeout?.(store.gameState, currentTurn, locale)
+    if (!timeoutOutcome) {
+      return
+    }
+
+    if (turnController) {
+      turnController.abort()
+      turnController = null
+    }
+
+    const bumpedEpoch = expectedEpoch + 1
+    const resultLine = getResultBubble(plugin, timeoutOutcome.nextState, locale)
+    const speech = resultLine || timeoutOutcome.speech || ''
+    useGameStore.setState({
+      gameState: timeoutOutcome.nextState,
+      aiThinking: false,
+      turnSecondsLeft: null,
+      errorText: null,
+      bubbleText: speech || store.bubbleText,
+      lastSpeechText: speech || store.lastSpeechText,
+      lastVoice: opponent.preferredVoice,
+      moveEpoch: bumpedEpoch,
+    })
+    if (speech && useGameStore.getState().gameVoiceOn) {
+      speakGameLine(speech, opponent.preferredVoice)
+    }
+
+    if (plugin.getStatus(timeoutOutcome.nextState) === 'playing') {
+      const nextSide = plugin.getTurn(timeoutOutcome.nextState)
+      if (nextSide === 'ai') {
+        chainTimerId = window.setTimeout(() => {
+          void triggerAiTurn(plugin, bumpedEpoch)
+        }, 420)
+      } else {
+        startTurnCountdown(plugin, bumpedEpoch)
+      }
+    }
+  }, 1000)
 }
 
 const triggerAiTurn = async (plugin: RegisteredGame, expectedEpoch: number) => {
@@ -105,7 +209,10 @@ const triggerAiTurn = async (plugin: RegisteredGame, expectedEpoch: number) => {
 
   const { apiKey, locale } = useSettings.getState()
   const { gameState, thinkingMode } = useGameStore.getState()
-  const opponent = resolveCurrentOpponent(locale)
+  if (!gameState) {
+    return
+  }
+  const opponent = resolveActiveOpponent(plugin, gameState, locale)
 
   useGameStore.setState({
     aiThinking: true,
@@ -113,8 +220,12 @@ const triggerAiTurn = async (plugin: RegisteredGame, expectedEpoch: number) => {
     bubbleText: locale === 'zh-CN' ? '正在思考这一步…' : 'Thinking through my move…',
     thoughtText: '',
   })
+  startTurnCountdown(plugin, expectedEpoch)
 
   try {
+    const requestTimeoutMs = plugin.turnTimeoutSec
+      ? Math.max(12_000, (plugin.turnTimeoutSec - 2) * 1000)
+      : undefined
     const decision = await requestAiMoveFromLlm({
       plugin,
       state: gameState,
@@ -123,10 +234,17 @@ const triggerAiTurn = async (plugin: RegisteredGame, expectedEpoch: number) => {
       thinking: thinkingMode,
       locale,
       signal: controller.signal,
+      requestTimeoutMs,
       onThinkingUpdate: (snippet) => {
         const current = useGameStore.getState()
         if (current.moveEpoch === expectedEpoch && current.aiThinking) {
           useGameStore.setState({ thoughtText: snippet })
+        }
+      },
+      onStateUpdate: (nextState) => {
+        const current = useGameStore.getState()
+        if (current.moveEpoch === expectedEpoch && current.aiThinking) {
+          useGameStore.setState({ gameState: nextState })
         }
       },
     })
@@ -135,32 +253,78 @@ const triggerAiTurn = async (plugin: RegisteredGame, expectedEpoch: number) => {
       return
     }
 
+    clearTurnTimers()
     const latest = useGameStore.getState()
-    const applied = plugin.applyAiMove(latest.gameState, decision.move)
+    const applied = plugin.applyAiMove(latest.gameState, decision.move, decision.speech, locale)
     const resultBubble = getResultBubble(plugin, applied.nextState, locale)
     const spokenLine = resultBubble || decision.speech
     const combinedThought = decision.thinkingTrace
       ? `${decision.thoughtSummary}\n\n${decision.thinkingTrace}`
       : decision.thoughtSummary
 
+    const nextEpoch = expectedEpoch + 1
     useGameStore.setState({
       gameState: applied.nextState,
       aiThinking: false,
       bubbleText: spokenLine,
       thoughtText: combinedThought,
       lastSpeechText: spokenLine,
+      lastVoice: opponent.preferredVoice,
+      turnSecondsLeft: null,
       errorText: null,
+      moveEpoch: nextEpoch,
     })
 
     if (useGameStore.getState().gameVoiceOn) {
-      speakGameLine(spokenLine)
+      speakGameLine(spokenLine, opponent.preferredVoice)
+    }
+
+    if (plugin.getStatus(applied.nextState) === 'playing') {
+      const nextTurn = plugin.getTurn(applied.nextState)
+      if (nextTurn === 'ai') {
+        chainTimerId = window.setTimeout(() => {
+          void triggerAiTurn(plugin, nextEpoch)
+        }, 450)
+      } else {
+        startTurnCountdown(plugin, nextEpoch)
+      }
     }
   } catch (error) {
     if (controller.signal.aborted || useGameStore.getState().moveEpoch !== expectedEpoch) {
       return
     }
+    clearTurnTimers()
+    const current = useGameStore.getState()
+    if (error instanceof DOMException && error.name === 'AbortError' && current.gameState) {
+      const timeoutOutcome = plugin.handleTimeout?.(current.gameState, 'ai', locale)
+      if (timeoutOutcome) {
+        const nextEpoch = expectedEpoch + 1
+        const speech = timeoutOutcome.speech ?? ''
+        useGameStore.setState({
+          gameState: timeoutOutcome.nextState,
+          aiThinking: false,
+          bubbleText: speech || current.bubbleText,
+          lastSpeechText: speech || current.lastSpeechText,
+          turnSecondsLeft: null,
+          errorText: null,
+          moveEpoch: nextEpoch,
+        })
+        if (plugin.getStatus(timeoutOutcome.nextState) === 'playing') {
+          if (plugin.getTurn(timeoutOutcome.nextState) === 'ai') {
+            chainTimerId = window.setTimeout(() => {
+              void triggerAiTurn(plugin, nextEpoch)
+            }, 420)
+          } else {
+            startTurnCountdown(plugin, nextEpoch)
+          }
+        }
+        return
+      }
+    }
+
     useGameStore.setState({
       aiThinking: false,
+      turnSecondsLeft: null,
       errorText: formatApiFailure(error, locale),
       bubbleText:
         locale === 'zh-CN' ? '刚刚思绪断了一下，点重试让我继续。' : 'Lost focus—tap retry.',
@@ -182,6 +346,7 @@ export const closeGameDrawer = () => {
   useGameStore.setState((prev) => ({
     drawerOpen: false,
     aiThinking: false,
+    turnSecondsLeft: null,
     moveEpoch: prev.moveEpoch + 1,
   }))
 }
@@ -197,6 +362,8 @@ export const backToGamePicker = () => {
     bubbleText: '',
     thoughtText: '',
     lastSpeechText: '',
+    lastVoice: undefined,
+    turnSecondsLeft: null,
     moveEpoch: prev.moveEpoch + 1,
   }))
 }
@@ -211,8 +378,9 @@ export const startGame = (gameId: GameId) => {
   const locale = useSettings.getState().locale
   const opponent = resolveCurrentOpponent(locale)
   const initialState = plugin.createInitialState()
+  const nextEpoch = useGameStore.getState().moveEpoch + 1
 
-  useGameStore.setState((prev) => ({
+  useGameStore.setState({
     drawerOpen: true,
     activeGameId: plugin.id,
     gameState: initialState,
@@ -221,8 +389,16 @@ export const startGame = (gameId: GameId) => {
     bubbleText: opponent.greeting,
     thoughtText: '',
     lastSpeechText: opponent.greeting,
-    moveEpoch: prev.moveEpoch + 1,
-  }))
+    lastVoice: opponent.preferredVoice,
+    turnSecondsLeft: plugin.turnTimeoutSec ?? null,
+    moveEpoch: nextEpoch,
+  })
+
+  if (plugin.getTurn(initialState) === 'ai') {
+    void triggerAiTurn(plugin, nextEpoch)
+  } else {
+    startTurnCountdown(plugin, nextEpoch)
+  }
 }
 
 export const restartCurrentGame = () => {
@@ -242,14 +418,16 @@ export const undoGameRound = () => {
   stopGameVoice()
   const locale = useSettings.getState().locale
   const nextState = plugin.undoRound(gameState)
-  useGameStore.setState((prev) => ({
+  const nextEpoch = useGameStore.getState().moveEpoch + 1
+  useGameStore.setState({
     gameState: nextState,
     aiThinking: false,
     errorText: null,
     bubbleText: locale === 'zh-CN' ? '好，让你悔这一步，重新走吧。' : 'Alright, undo accepted.',
     thoughtText: '',
-    moveEpoch: prev.moveEpoch + 1,
-  }))
+    moveEpoch: nextEpoch,
+  })
+  startTurnCountdown(plugin, nextEpoch)
 }
 
 export const toggleGameThinkingMode = () => {
@@ -267,10 +445,10 @@ export const toggleGameVoice = () => {
 
 export const replayOpponentSpeech = () => {
   unlockGameAudio()
-  const { lastSpeechText, bubbleText } = useGameStore.getState()
+  const { lastSpeechText, bubbleText, lastVoice } = useGameStore.getState()
   const text = lastSpeechText || bubbleText
   if (text) {
-    speakGameLine(text)
+    speakGameLine(text, lastVoice)
   }
 }
 
@@ -288,8 +466,10 @@ export const submitPlayerGameMove = (move: unknown) => {
     return
   }
 
+  clearTurnTimers()
   const nextEpoch = state.moveEpoch + 1
   const status = plugin.getStatus(result.nextState)
+  const opponent = resolveActiveOpponent(plugin, result.nextState, locale)
 
   if (status !== 'playing') {
     const endBubble =
@@ -301,10 +481,12 @@ export const submitPlayerGameMove = (move: unknown) => {
       errorText: null,
       bubbleText: endBubble,
       lastSpeechText: endBubble,
+      lastVoice: opponent.preferredVoice,
+      turnSecondsLeft: null,
       moveEpoch: nextEpoch,
     })
     if (state.gameVoiceOn) {
-      speakGameLine(endBubble)
+      speakGameLine(endBubble, opponent.preferredVoice)
     }
     return
   }
@@ -312,9 +494,15 @@ export const submitPlayerGameMove = (move: unknown) => {
   useGameStore.setState({
     gameState: result.nextState,
     errorText: null,
+    turnSecondsLeft: plugin.turnTimeoutSec ?? null,
     moveEpoch: nextEpoch,
   })
-  void triggerAiTurn(plugin, nextEpoch)
+
+  if (plugin.getTurn(result.nextState) === 'ai') {
+    void triggerAiTurn(plugin, nextEpoch)
+  } else {
+    startTurnCountdown(plugin, nextEpoch)
+  }
 }
 
 export const retryAiTurn = () => {

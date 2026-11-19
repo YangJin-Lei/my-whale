@@ -3,8 +3,8 @@ import { streamMessage } from '../services/api/client.js'
 import type { MessageParam } from '../services/api/types.js'
 import type { AiTurnDecision, GameOpponent, GamePlugin } from './types.js'
 
-const MAX_ATTEMPTS = 3
-const REQUEST_TIMEOUT_MS = 65_000
+const MAX_ATTEMPTS = 4
+const DEFAULT_TIMEOUT_MS = 65_000
 
 type RawDecisionJson = {
   move?: unknown
@@ -60,6 +60,7 @@ const callDeepSeekTurn = async ({
   messages,
   thinking,
   signal,
+  timeoutMs,
   locale,
   onThinkingUpdate,
 }: {
@@ -68,13 +69,14 @@ const callDeepSeekTurn = async ({
   messages: MessageParam[]
   thinking: boolean
   signal: AbortSignal
+  timeoutMs: number
   locale: Locale
   onThinkingUpdate?: (snippet: string) => void
 }): Promise<{ rawText: string; rawThinking: string }> => {
   const controller = new AbortController()
   const onAbort = () => controller.abort()
   signal.addEventListener('abort', onAbort, { once: true })
-  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
 
   let rawText = ''
   let rawThinking = ''
@@ -117,10 +119,9 @@ const callDeepSeekTurn = async ({
 }
 
 /**
- * 由 DeepSeek 大模型决定每一步 AI 着法：
- * - 代码仅作为裁判校验规则；
- * - 若模型给出非法着法或格式错误，携带裁判拒绝原因最多要求模型重走 2 次；
- * - 连续 3 次失败后才安全回退到合法着法，保证棋局永不死锁。
+ * 由 DeepSeek 大模型决定每一步 AI 决策：
+ * - 代码仅作为规则裁判，支持中间控制指令（如斗地主 5 次限额算牌）；
+ * - 非法着法携带裁判拒绝原因重试，耗尽后安全兜底。
  */
 export const requestAiMoveFromLlm = async <TState, TMove>({
   plugin,
@@ -130,7 +131,9 @@ export const requestAiMoveFromLlm = async <TState, TMove>({
   thinking,
   locale,
   signal,
+  requestTimeoutMs = DEFAULT_TIMEOUT_MS,
   onThinkingUpdate,
+  onStateUpdate,
 }: {
   plugin: GamePlugin<TState, TMove>
   state: TState
@@ -139,17 +142,22 @@ export const requestAiMoveFromLlm = async <TState, TMove>({
   thinking: boolean
   locale: Locale
   signal: AbortSignal
+  requestTimeoutMs?: number
   onThinkingUpdate?: (snippet: string) => void
+  onStateUpdate?: (nextState: TState) => void
 }): Promise<AiTurnDecision<TMove>> => {
-  const promptPayload = plugin.buildAiPrompt(state, opponent, locale)
+  let currentState = state
+  const promptPayload = plugin.buildAiPrompt(currentState, opponent, locale)
   const history: MessageParam[] = [{ role: 'user', content: promptPayload.userPrompt }]
 
   let latestThinkingTrace = ''
+  const deadline = Date.now() + requestTimeoutMs
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     if (signal.aborted) {
       throw new DOMException('Aborted', 'AbortError')
     }
+    const remainingMs = Math.max(4_000, deadline - Date.now())
 
     const { rawText, rawThinking } = await callDeepSeekTurn({
       apiKey,
@@ -157,6 +165,7 @@ export const requestAiMoveFromLlm = async <TState, TMove>({
       messages: history,
       thinking,
       signal,
+      timeoutMs: remainingMs,
       locale,
       onThinkingUpdate,
     })
@@ -175,7 +184,22 @@ export const requestAiMoveFromLlm = async <TState, TMove>({
       continue
     }
 
-    const validation = plugin.parseAndValidateAiMove(state, parsed.move, locale)
+    if (plugin.processAiControlAction) {
+      const ctrl = plugin.processAiControlAction(
+        currentState,
+        parsed as Record<string, unknown>,
+        locale
+      )
+      if (ctrl.handled) {
+        currentState = ctrl.nextState
+        onStateUpdate?.(currentState)
+        history.push({ role: 'assistant', content: [{ type: 'text', text: rawText }] })
+        history.push({ role: 'user', content: ctrl.refereeMessage })
+        continue
+      }
+    }
+
+    const validation = plugin.parseAndValidateAiMove(currentState, parsed.move, locale)
     if (validation.valid) {
       const defaultThought =
         locale === 'zh-CN'
@@ -183,7 +207,10 @@ export const requestAiMoveFromLlm = async <TState, TMove>({
           : 'Selected after weighing attack and defense.'
       const defaultSpeech = locale === 'zh-CN' ? '轮到你了，请。' : 'Your move.'
       const thoughtSummary = cleanBubbleText(parsed.thoughtSummary, defaultThought)
-      const speech = cleanBubbleText(parsed.speech, defaultSpeech)
+      const baseSpeech = cleanBubbleText(parsed.speech, defaultSpeech)
+      const speech = plugin.formatMoveSpeech
+        ? plugin.formatMoveSpeech(currentState, validation.move, baseSpeech, locale)
+        : baseSpeech
       return {
         move: validation.move,
         thoughtSummary,
@@ -207,18 +234,21 @@ export const requestAiMoveFromLlm = async <TState, TMove>({
     history.push({ role: 'user', content: rejectionPrompt })
   }
 
-  const fallback = plugin.pickFallbackMove(state)
+  const fallback = plugin.pickFallbackMove(currentState)
   if (fallback === null) {
     throw new Error(locale === 'zh-CN' ? '当前棋局已无合法着法' : 'No legal moves available')
   }
   const fallbackNote =
     locale === 'zh-CN'
-      ? '刚刚推演走神了，先随手走一着稳住局面。'
-      : 'Lost my train of thought there—making a safe legal move.'
+      ? '刚刚思绪走神了，先随手打一手稳住局面。'
+      : 'Lost focus there—making a safe legal move.'
+  const speech = plugin.formatMoveSpeech
+    ? plugin.formatMoveSpeech(currentState, fallback, fallbackNote, locale)
+    : fallbackNote
   return {
     move: fallback,
     thoughtSummary: fallbackNote,
-    speech: fallbackNote,
+    speech,
     usedFallback: true,
   }
 }

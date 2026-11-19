@@ -10,7 +10,7 @@ import {
 import { useVoiceInput } from '../components/chatInput/useVoiceInput.js'
 import { useTranslate } from '../i18n/index.js'
 import { useSettings } from '../services/settings.js'
-import { findPetById } from './catalog.js'
+import { findPetById, usePetCatalog } from './catalog.js'
 import { PetSprite } from './PetSprite.js'
 import styles from './PetOverlay.module.css'
 import {
@@ -66,6 +66,7 @@ export const PetOverlay = () => {
   const locale = useSettings((state) => state.locale)
   const petEnabled = useSettings((state) => state.petEnabled)
   const activePetId = useSettings((state) => state.activePetId)
+  usePetCatalog()
   const pet = findPetById(activePetId)
   const petTitle = pet.name[locale]
 
@@ -279,7 +280,13 @@ export const PetOverlay = () => {
           setPetMood(panelOpen ? 'wait' : 'idle')
         }}
       >
-        <PetSprite spriteUrl={pet.spriteUrl} mood={mood} width={petWidth} />
+        <PetSprite
+          spriteUrl={pet.spriteUrl}
+          mood={mood}
+          width={petWidth}
+          cols={pet.cols}
+          rows={pet.rows}
+        />
       </button>
     </div>
   )

@@ -10,6 +10,7 @@ import {
   IconThinkOutline14,
 } from '../components/base/icons.js'
 import { useTranslate } from '../i18n/index.js'
+import { usePetCatalog } from '../pet/catalog.js'
 import { PetSprite, type PetMood } from '../pet/PetSprite.js'
 import { useSettings } from '../services/settings.js'
 import styles from './GameDrawer.module.css'
@@ -48,6 +49,7 @@ export const GameDrawer = () => {
   const t = useTranslate()
   const locale = useSettings((state) => state.locale)
   useSettings((state) => state.activePetId)
+  usePetCatalog()
   const drawerOpen = useGameStore((state) => state.drawerOpen)
   const activeGameId = useGameStore((state) => state.activeGameId)
   const gameState = useGameStore((state) => state.gameState)
@@ -57,6 +59,7 @@ export const GameDrawer = () => {
   const bubbleText = useGameStore((state) => state.bubbleText)
   const thoughtText = useGameStore((state) => state.thoughtText)
   const errorText = useGameStore((state) => state.errorText)
+  const turnSecondsLeft = useGameStore((state) => state.turnSecondsLeft)
   const voiceStatus = useGameVoice((state) => state.status)
 
   const [thoughtExpanded, setThoughtExpanded] = useState(false)
@@ -119,7 +122,15 @@ export const GameDrawer = () => {
 
   const renderOpponentAvatar = () => {
     if (opponent.petSpriteUrl) {
-      return <PetSprite spriteUrl={opponent.petSpriteUrl} mood={resolvePetMood()} width={38} />
+      return (
+        <PetSprite
+          spriteUrl={opponent.petSpriteUrl}
+          mood={resolvePetMood()}
+          width={38}
+          cols={opponent.petCols}
+          rows={opponent.petRows}
+        />
+      )
     }
     const isDataImage = Boolean(opponent.avatar && opponent.avatar.startsWith('data:image/'))
     if (isDataImage) {
@@ -183,52 +194,67 @@ export const GameDrawer = () => {
           </div>
 
           <div className={styles.body}>
-            <div className={styles.opponentStage}>
-              <div
-                className={clsx(
-                  styles.avatarBox,
-                  (aiThinking || voiceStatus === 'playing') && styles.avatarThinking
-                )}
-              >
-                {renderOpponentAvatar()}
-              </div>
-              <div className={styles.opponentMeta}>
-                <div className={styles.opponentTop}>
-                  <span className={styles.opponentName}>{opponent.name}</span>
-                  <span className={styles.opponentBadge}>{opponentStatusLabel}</span>
+            {!plugin.hideGenericOpponentHeader ? (
+              <div className={styles.opponentStage}>
+                <div
+                  className={clsx(
+                    styles.avatarBox,
+                    (aiThinking || voiceStatus === 'playing') && styles.avatarThinking
+                  )}
+                >
+                  {renderOpponentAvatar()}
                 </div>
-                <div className={styles.bubbleRow}>
-                  <div className={styles.speechBubble}>{bubbleText || opponent.greeting}</div>
-                  <button
-                    type="button"
-                    className={styles.speakReplay}
-                    aria-label={t('gameReplayVoice')}
-                    title={t('gameReplayVoice')}
-                    onClick={replayOpponentSpeech}
-                  >
-                    <IconPlayMediaOutline16 />
-                  </button>
-                </div>
-                {thoughtText ? (
-                  <div className={styles.thoughtWrap}>
+                <div className={styles.opponentMeta}>
+                  <div className={styles.opponentTop}>
+                    <span className={styles.opponentName}>{opponent.name}</span>
+                    <span className={styles.opponentBadge}>{opponentStatusLabel}</span>
+                  </div>
+                  <div className={styles.bubbleRow}>
+                    <div className={styles.speechBubble}>{bubbleText || opponent.greeting}</div>
                     <button
                       type="button"
-                      className={styles.thoughtToggle}
-                      onClick={() => setThoughtExpanded((prev) => !prev)}
+                      className={styles.speakReplay}
+                      aria-label={t('gameReplayVoice')}
+                      title={t('gameReplayVoice')}
+                      onClick={replayOpponentSpeech}
                     >
-                      <span>
-                        {thoughtExpanded
-                          ? `▾ ${t('gameHideThought')}`
-                          : `▸ ${t('gameViewThought')}`}
-                      </span>
+                      <IconPlayMediaOutline16 />
                     </button>
-                    {thoughtExpanded ? (
-                      <div className={styles.thoughtPanel}>{thoughtText}</div>
-                    ) : null}
                   </div>
-                ) : null}
+                  {thoughtText ? (
+                    <div className={styles.thoughtWrap}>
+                      <button
+                        type="button"
+                        className={styles.thoughtToggle}
+                        onClick={() => setThoughtExpanded((prev) => !prev)}
+                      >
+                        <span>
+                          {thoughtExpanded
+                            ? `▾ ${t('gameHideThought')}`
+                            : `▸ ${t('gameViewThought')}`}
+                        </span>
+                      </button>
+                      {thoughtExpanded ? (
+                        <div className={styles.thoughtPanel}>{thoughtText}</div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
               </div>
-            </div>
+            ) : thoughtText ? (
+              <div className={styles.thoughtWrap}>
+                <button
+                  type="button"
+                  className={styles.thoughtToggle}
+                  onClick={() => setThoughtExpanded((prev) => !prev)}
+                >
+                  <span>
+                    {thoughtExpanded ? `▾ ${t('gameHideThought')}` : `▸ ${t('gameViewThought')}`}
+                  </span>
+                </button>
+                {thoughtExpanded ? <div className={styles.thoughtPanel}>{thoughtText}</div> : null}
+              </div>
+            ) : null}
 
             {statusNote ? (
               <div className={styles.noticeBar} role="status">
@@ -250,6 +276,8 @@ export const GameDrawer = () => {
             <plugin.BoardComponent
               state={gameState}
               disabled={aiThinking || status !== 'playing' || turn !== 'player'}
+              turnSecondsLeft={turnSecondsLeft}
+              aiThinking={aiThinking}
               onPlayerMove={submitPlayerGameMove}
             />
 
@@ -399,6 +427,15 @@ export const GameDrawer = () => {
                 <span className={styles.gameCardDesc}>{item.subtitle[locale]}</span>
               </button>
             ))}
+            <div className={clsx(styles.gameCard, styles.gameCardUpcoming)} aria-disabled="true">
+              <div className={styles.gameCardTop}>
+                <span className={styles.gameCardName}>{t('gameMahjongTitle')}</span>
+                <span className={clsx(styles.gameCardBadge, styles.gameCardBadgeMuted)}>
+                  {t('gameMahjongBadge')}
+                </span>
+              </div>
+              <span className={styles.gameCardDesc}>{t('gameMahjongSubtitle')}</span>
+            </div>
           </div>
         </div>
       )}

@@ -139,6 +139,10 @@ export const resolveCurrentOpponent = (locale: Locale): GameOpponent => {
       id: `pet:${activePet.id}`,
       name: petName,
       petSpriteUrl: activePet.spriteUrl,
+      petCols: activePet.cols,
+      petRows: activePet.rows,
+      preferredVoice: activePet.voicePack?.preferredVoice,
+      voicePack: activePet.voicePack,
       tagline: locale === 'zh-CN' ? '桌宠' : 'Pet',
       systemPrompt: activePet.promptHint[locale],
       greeting:

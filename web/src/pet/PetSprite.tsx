@@ -11,8 +11,8 @@ export type PetMood =
   | 'think'
   | 'wait'
 
-const SPRITE_COLS = 8
-const SPRITE_ROWS = 9
+const DEFAULT_COLS = 8
+const DEFAULT_ROWS = 9
 
 const ANIMATIONS: Record<PetMood, { row: number; frames: number; fps: number }> = {
   idle: { row: 0, frames: 6, fps: 5 },
@@ -27,39 +27,69 @@ const ANIMATIONS: Record<PetMood, { row: number; frames: number; fps: number }> 
 }
 
 /**
- * 通用 8×9 精灵图桌宠渲染器（兼容奶蛙与 Chiikawa 全系列）。
+ * 通用桌宠渲染器：
+ * - 默认按 8×9 精灵网格（单格 192×208）逐帧播放，兼容经典/Chiikawa/宠物自选库与本地上传包；
+ * - 若用户上传的是单张静图（cols=1, rows=1），自动居中缩放展示。
  */
 export const PetSprite = ({
   spriteUrl,
   mood,
   width = 76,
+  cols = DEFAULT_COLS,
+  rows = DEFAULT_ROWS,
   animate = true,
   className,
 }: {
   spriteUrl: string
   mood: PetMood
   width?: number
+  cols?: number
+  rows?: number
   animate?: boolean
   className?: string
 }) => {
+  const safeCols = Math.max(1, cols)
+  const safeRows = Math.max(1, rows)
+  const isSheet = safeCols > 1 || safeRows > 1
   const anim = ANIMATIONS[mood]
+  const rowIndex = Math.min(safeRows - 1, anim.row)
+  const frameCount = Math.min(safeCols, anim.frames)
   const [frame, setFrame] = useState(0)
 
   useEffect(() => {
     setFrame(0)
-    if (!animate) {
+    if (!animate || !isSheet || frameCount <= 1) {
       return
     }
     const intervalMs = Math.max(80, Math.round(1000 / anim.fps))
     const timer = window.setInterval(() => {
-      setFrame((prev) => (prev + 1) % anim.frames)
+      setFrame((prev) => (prev + 1) % frameCount)
     }, intervalMs)
     return () => window.clearInterval(timer)
-  }, [anim.fps, anim.frames, animate, mood, spriteUrl])
+  }, [anim.fps, animate, frameCount, isSheet, mood, spriteUrl])
 
   const height = Math.round((width * 208) / 192)
-  const posX = (frame / (SPRITE_COLS - 1)) * 100
-  const posY = (anim.row / (SPRITE_ROWS - 1)) * 100
+
+  if (!isSheet) {
+    return (
+      <div
+        className={className}
+        aria-hidden="true"
+        style={{
+          width: `${width}px`,
+          height: `${height}px`,
+          backgroundImage: `url(${spriteUrl})`,
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: 'contain',
+          backgroundPosition: 'center',
+          borderRadius: '10px',
+        }}
+      />
+    )
+  }
+
+  const posX = safeCols > 1 ? (frame / (safeCols - 1)) * 100 : 0
+  const posY = safeRows > 1 ? (rowIndex / (safeRows - 1)) * 100 : 0
 
   return (
     <div
@@ -70,7 +100,7 @@ export const PetSprite = ({
         height: `${height}px`,
         backgroundImage: `url(${spriteUrl})`,
         backgroundRepeat: 'no-repeat',
-        backgroundSize: `${SPRITE_COLS * 100}% ${SPRITE_ROWS * 100}%`,
+        backgroundSize: `${safeCols * 100}% ${safeRows * 100}%`,
         backgroundPosition: `${posX}% ${posY}%`,
       }}
     />
