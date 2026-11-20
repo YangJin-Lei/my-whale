@@ -13,8 +13,9 @@ import {
 import { useTranslate } from '../i18n/index.js'
 import { usePetCatalog } from '../pet/catalog.js'
 import { PetSprite, type PetMood } from '../pet/PetSprite.js'
-import { useSettings } from '../services/settings.js'
+import { setGameCacheEnabled, useSettings } from '../services/settings.js'
 import styles from './GameDrawer.module.css'
+import { useGameHistory } from './history.js'
 import {
   ACTIVE_PERSONA_OPPONENT_ID,
   CUSTOM_OPPONENT_ID,
@@ -29,8 +30,10 @@ import { findRegisteredGame, GAME_REGISTRY } from './registry.js'
 import {
   backToGamePicker,
   closeGameDrawer,
+  removeGameRecord,
   replayOpponentSpeech,
   restartCurrentGame,
+  resumeGameRecord,
   retryAiTurn,
   startGame,
   submitPlayerGameMove,
@@ -51,8 +54,10 @@ export const GameDrawer = () => {
   const t = useTranslate()
   const isMobile = useIsMobile()
   const locale = useSettings((state) => state.locale)
+  const gameCacheEnabled = useSettings((state) => state.gameCacheEnabled)
   useSettings((state) => state.activePetId)
   usePetCatalog()
+  const historyRecords = useGameHistory((state) => state.records)
   const drawerOpen = useGameStore((state) => state.drawerOpen)
   const expanded = useGameStore((state) => state.expanded)
   const activeGameId = useGameStore((state) => state.activeGameId)
@@ -208,6 +213,13 @@ export const GameDrawer = () => {
             </button>
             <button type="button" className={styles.pillBtn} onClick={restartCurrentGame}>
               {t('gameRestart')}
+            </button>
+            <button
+              type="button"
+              className={clsx(styles.pillBtn, gameCacheEnabled && styles.pillBtnActive)}
+              onClick={() => setGameCacheEnabled(!gameCacheEnabled)}
+            >
+              {t('gameCachePill')}
             </button>
             <button
               type="button"
@@ -459,6 +471,46 @@ export const GameDrawer = () => {
               <span className={styles.gameCardDesc}>{t('gameMahjongSubtitle')}</span>
             </div>
           </div>
+
+          {historyRecords.length > 0 ? (
+            <>
+              <div className={styles.pickerSectionTitle}>{t('gameHistoryTitle')}</div>
+              <div className={styles.historyList}>
+                {historyRecords.slice(0, 8).map((rec) => {
+                  const recPlugin = findRegisteredGame(rec.gameId)
+                  const recTitle = recPlugin ? recPlugin.name[locale] : rec.gameId
+                  return (
+                    <div key={rec.id} className={styles.historyItem}>
+                      <div className={styles.historyMeta}>
+                        <div className={styles.historyTitle}>
+                          {recTitle}
+                          {rec.opponentName ? ` · ${rec.opponentName}` : ''}
+                        </div>
+                        <div className={styles.historyScore}>{rec.scoreLabel}</div>
+                      </div>
+                      <div className={styles.historyActions}>
+                        <button
+                          type="button"
+                          className={clsx(styles.pillBtn, styles.pillBtnActive)}
+                          onClick={() => resumeGameRecord(rec.id)}
+                        >
+                          {rec.status === 'playing' ? t('gameResume') : t('gameReview')}
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.historyDeleteBtn}
+                          aria-label={t('delete')}
+                          onClick={() => removeGameRecord(rec.id)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          ) : null}
 
           <div className={styles.costNoticeBox}>{t('gameCostNotice')}</div>
         </div>

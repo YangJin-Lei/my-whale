@@ -5,6 +5,14 @@ import {
   resolveEffectiveOrigin,
 } from '../cacheBackend.js'
 import { useSettings } from '../settings.js'
+import {
+  buildCustomAnthropicPayload,
+  createCustomOpenAiMessage,
+  CustomApiRequestError,
+  normalizeCustomEndpoint,
+  streamCustomOpenAiMessage,
+  verifyCustomApiEndpoint,
+} from './openaiCompat.js'
 import { readMessageEvent } from './parseEvent.js'
 import { readServerSentEvents } from './sse.js'
 import type {
@@ -198,6 +206,50 @@ export const createMessage = async (
   body: CreateMessageRequest,
   signal?: AbortSignal
 ): Promise<string> => {
+  const settings = useSettings.getState()
+  if (settings.apiProvider === 'custom') {
+    const customUrl = settings.customApiUrl.trim()
+    const customKey = settings.customApiKey?.trim() || apiKey
+    const customModel = settings.customApiModel.trim() || body.model
+    if (!customUrl || !customKey) {
+      throw new ApiError('http', 'Missing custom API URL or API Key', 401)
+    }
+    try {
+      if (settings.customApiProtocol === 'openai') {
+        return await createCustomOpenAiMessage(
+          { url: customUrl, apiKey: customKey, model: customModel },
+          body,
+          signal
+        )
+      }
+      const endpoint = normalizeCustomEndpoint(customUrl, 'anthropic')
+      const response = await request(endpoint, {
+        method: 'POST',
+        headers: {
+          'x-api-key': customKey,
+          Authorization: `Bearer ${customKey}`,
+          'anthropic-version': '2023-06-01',
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(buildCustomAnthropicPayload(body, customModel, false)),
+        signal,
+      })
+      const data = (await response.json()) as {
+        content?: Array<{ type?: string; text?: string }>
+      }
+      return (data.content ?? [])
+        .filter((block) => block.type === 'text' && typeof block.text === 'string')
+        .map((block) => block.text ?? '')
+        .join('')
+    } catch (error) {
+      if (error instanceof CustomApiRequestError) {
+        throw new ApiError(error.kind, error.message, error.status)
+      }
+      throw error
+    }
+  }
+
   const response = await request(`${getAnthropicBaseUrl()}/messages`, {
     method: 'POST',
     headers: {
@@ -217,6 +269,20 @@ export const createMessage = async (
     .join('')
 }
 
+export const verifyCustomApi = async (
+  config: { url: string; apiKey: string; model: string; protocol: 'openai' | 'anthropic' },
+  signal?: AbortSignal
+): Promise<void> => {
+  try {
+    await verifyCustomApiEndpoint(config, signal)
+  } catch (error) {
+    if (error instanceof CustomApiRequestError) {
+      throw new ApiError(error.kind, error.message, error.status)
+    }
+    throw error
+  }
+}
+
 /**
  * POST /anthropic/v1/messages（stream: true），逐个产出流式事件，收到 message_stop 时结束。
  * ping、保活注释与无法解析的内容不产出；中止请求时抛出 signal 的 AbortError。
@@ -227,6 +293,73 @@ export async function* streamMessage(
   signal: AbortSignal,
   sessionId?: string
 ): AsyncGenerator<MessageStreamEvent> {
+  const settings = useSettings.getState()
+  if (settings.apiProvider === 'custom') {
+    const customUrl = settings.customApiUrl.trim()
+    const customKey = settings.customApiKey?.trim() || apiKey
+    const customModel = settings.customApiModel.trim() || body.model
+    if (!customUrl || !customKey) {
+      throw new ApiError('http', 'Missing custom API URL or API Key', 401)
+    }
+    if (settings.customApiProtocol === 'openai') {
+      try {
+        yield* streamCustomOpenAiMessage(
+          { url: customUrl, apiKey: customKey, model: customModel },
+          body,
+          signal
+        )
+        return
+      } catch (error) {
+        if (error instanceof CustomApiRequestError) {
+          throw new ApiError(error.kind, error.message, error.status)
+        }
+        throw error
+      }
+    }
+    const endpoint = normalizeCustomEndpoint(customUrl, 'anthropic')
+    const response = await request(endpoint, {
+      method: 'POST',
+      headers: {
+        'x-api-key': customKey,
+        Authorization: `Bearer ${customKey}`,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      },
+      body: JSON.stringify(buildCustomAnthropicPayload(body, customModel, true)),
+      signal,
+    })
+    const contentType = response.headers.get('Content-Type') ?? ''
+    if (!response.body || !contentType.includes('text/event-stream')) {
+      throw await readErrorResponse(response, 'protocol', '')
+    }
+    for await (const { event: eventName, data } of readServerSentEvents(response.body, signal)) {
+      let payload: unknown
+      try {
+        payload = JSON.parse(data)
+      } catch {
+        if (eventName !== 'error') {
+          continue
+        }
+      }
+      if (isErrorBody(payload)) {
+        throw new ApiError('stream', payload.error.message)
+      }
+      if (eventName === 'error') {
+        throw new ApiError('stream', data)
+      }
+      const event = readMessageEvent(payload)
+      if (!event) {
+        continue
+      }
+      yield event
+      if (event.type === 'message_stop') {
+        return
+      }
+    }
+    throw new ApiError('interrupted', '')
+  }
+
   const response = await request(`${getAnthropicBaseUrl()}/messages`, {
     method: 'POST',
     headers: {

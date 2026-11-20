@@ -4,7 +4,7 @@ import { streamMessage } from '../services/api/client.js'
 import type { MessageParam } from '../services/api/types.js'
 import { useChatStore } from '../services/chat/store.js'
 import { findPersona, usePersonaStore } from '../services/persona/store.js'
-import { useSettings } from '../services/settings.js'
+import { getActiveApiKey, useSettings } from '../services/settings.js'
 import { findPetById } from './catalog.js'
 import type { NaiwaMood } from './NaiwaSprite.js'
 
@@ -119,7 +119,8 @@ export const sendPetQuery = async (rawText: string): Promise<void> => {
   const controller = new AbortController()
   activeController = controller
   const prevTurns = usePetStore.getState().turns.slice(-6)
-  const { apiKey, locale } = useSettings.getState()
+  const { locale } = useSettings.getState()
+  const apiKey = getActiveApiKey()
 
   usePetStore.setState({
     panelOpen: true,
@@ -144,7 +145,7 @@ export const sendPetQuery = async (rawText: string): Promise<void> => {
 
   try {
     const events = streamMessage(
-      apiKey ?? '',
+      apiKey,
       {
         model: 'deepseek-flash',
         system: resolvePetSystemPrompt(),

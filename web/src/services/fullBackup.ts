@@ -6,6 +6,7 @@ import {
   type CustomPetRecord,
 } from '../pet/customPets.js'
 import { getGameOpponentSnapshot, restoreGameOpponentSnapshot } from '../game/opponents.js'
+import { getGameHistorySnapshot, restoreGameHistorySnapshot } from '../game/history.js'
 import { formatDate } from '../utils/format.js'
 import * as db from './chat/db.js'
 import {
@@ -26,6 +27,7 @@ import {
   applySettingsSnapshot,
   exportSettingsSnapshot,
   setApiKey,
+  setCustomApiConfig,
   useSettings,
   type SettingsSnapshot,
 } from './settings.js'
@@ -149,14 +151,22 @@ const deriveAesKey = async (
   )
 }
 
-const encryptSecrets = async (apiKey: string, password: string): Promise<Blob> => {
+type EncryptedSecretsPayload = {
+  apiKey: string | null
+  customApiKey?: string | null
+}
+
+const encryptSecrets = async (
+  secrets: EncryptedSecretsPayload,
+  password: string
+): Promise<Blob> => {
   const subtle = getSubtle()
   const salt = new Uint8Array(new ArrayBuffer(16))
   const iv = new Uint8Array(new ArrayBuffer(12))
   globalThis.crypto.getRandomValues(salt)
   globalThis.crypto.getRandomValues(iv)
   const key = await deriveAesKey(password, salt, PBKDF2_ITERATIONS, 'encrypt')
-  const plainBytes = new TextEncoder().encode(JSON.stringify({ apiKey }))
+  const plainBytes = new TextEncoder().encode(JSON.stringify(secrets))
   const cipherBuf = await subtle.encrypt({ name: 'AES-GCM', iv }, key, plainBytes)
   const cipherBytes = new Uint8Array(cipherBuf)
   const out = new Uint8Array(MAGIC_BYTES.length + salt.length + iv.length + cipherBytes.length)
@@ -171,7 +181,7 @@ const decryptSecrets = async (
   blob: Blob,
   password: string,
   iterations: number
-): Promise<{ apiKey: string | null }> => {
+): Promise<EncryptedSecretsPayload> => {
   const buf = new Uint8Array(await blob.arrayBuffer())
   const minLen = MAGIC_BYTES.length + 16 + 12 + 16
   if (buf.length < minLen || !MAGIC_BYTES.every((b, i) => buf[i] === b)) {
@@ -184,10 +194,17 @@ const decryptSecrets = async (
   try {
     const key = await deriveAesKey(password, salt, iterations, 'decrypt')
     const plainBuf = await subtle.decrypt({ name: 'AES-GCM', iv }, key, cipherBytes)
-    const parsed = JSON.parse(new TextDecoder().decode(plainBuf)) as { apiKey?: unknown }
+    const parsed = JSON.parse(new TextDecoder().decode(plainBuf)) as {
+      apiKey?: unknown
+      customApiKey?: unknown
+    }
     return {
       apiKey:
         typeof parsed.apiKey === 'string' && parsed.apiKey.trim() ? parsed.apiKey.trim() : null,
+      customApiKey:
+        typeof parsed.customApiKey === 'string' && parsed.customApiKey.trim()
+          ? parsed.customApiKey.trim()
+          : null,
     }
   } catch {
     throw new FullBackupError('wrongPassword')
@@ -308,8 +325,10 @@ export const exportFullBackup = async (options?: {
   const personas = usePersonaStore.getState().personas.filter((p) => !p.builtin)
   const memories = useMemoryStore.getState().memories
   const customPets = useCustomPetsStore.getState().items
-  const apiKey = useSettings.getState().apiKey?.trim() ?? ''
-  const hasSecrets = Boolean(password && apiKey)
+  const settingsState = useSettings.getState()
+  const apiKey = settingsState.apiKey?.trim() ?? ''
+  const customApiKey = settingsState.customApiKey?.trim() ?? ''
+  const hasSecrets = Boolean(password && (apiKey || customApiKey))
 
   const attachmentsMeta: AttachmentMetaEntry[] = []
   const attachmentEntries: { name: string; blob: Blob }[] = []
@@ -358,6 +377,7 @@ export const exportFullBackup = async (options?: {
   const settingsPayload = {
     settings: exportSettingsSnapshot(),
     gameOpponent: getGameOpponentSnapshot(),
+    gameHistory: getGameHistorySnapshot(),
     petPosition: readPetPosition(),
   }
 
@@ -375,7 +395,13 @@ export const exportFullBackup = async (options?: {
   if (hasSecrets) {
     entries.push({
       name: SECRETS_ENTRY,
-      blob: await encryptSecrets(apiKey, password),
+      blob: await encryptSecrets(
+        {
+          apiKey: apiKey || null,
+          customApiKey: customApiKey || null,
+        },
+        password
+      ),
     })
   }
 
@@ -472,6 +498,7 @@ export const restoreFullBackup = async (
   type SettingsBundle = {
     settings?: Partial<SettingsSnapshot>
     gameOpponent?: unknown
+    gameHistory?: unknown
     petPosition?: unknown
   }
   let manifest: FullBackupManifestV1 | null = null
@@ -541,6 +568,7 @@ export const restoreFullBackup = async (
   }
 
   let recoveredApiKey: string | null = null
+  let recoveredCustomApiKey: string | null = null
   if (secretsBlob && !options.skipSecrets) {
     options.onProgress?.({ phase: 'decrypting', current: 1, total: 3 })
     const pw = options.password?.trim() ?? ''
@@ -549,6 +577,7 @@ export const restoreFullBackup = async (
     }
     const decrypted = await decryptSecrets(secretsBlob, pw, manifest.encryption.iterations)
     recoveredApiKey = decrypted.apiKey
+    recoveredCustomApiKey = decrypted.customApiKey ?? null
   }
 
   options.onProgress?.({ phase: 'committing', current: 2, total: 3 })
@@ -580,6 +609,9 @@ export const restoreFullBackup = async (
     if (settingsData.gameOpponent) {
       restoreGameOpponentSnapshot(settingsData.gameOpponent)
     }
+    if (settingsData.gameHistory) {
+      restoreGameHistorySnapshot(settingsData.gameHistory)
+    }
     if (settingsData.petPosition) {
       writePetPosition(settingsData.petPosition)
     }
@@ -588,11 +620,20 @@ export const restoreFullBackup = async (
   if (recoveredApiKey) {
     setApiKey(recoveredApiKey)
   }
+  if (recoveredCustomApiKey) {
+    const cur = useSettings.getState()
+    setCustomApiConfig({
+      url: cur.customApiUrl,
+      apiKey: recoveredCustomApiKey,
+      model: cur.customApiModel,
+      protocol: cur.customApiProtocol,
+    })
+  }
 
   options.onProgress?.({ phase: 'committing', current: 3, total: 3 })
   return {
     sessionsCount,
     attachmentsCount: storedFiles.length,
-    restoredApiKey: Boolean(recoveredApiKey),
+    restoredApiKey: Boolean(recoveredApiKey || recoveredCustomApiKey),
   }
 }

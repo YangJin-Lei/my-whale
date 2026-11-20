@@ -4,7 +4,7 @@ import { ensureApiKey } from '../../components/settings/settingsDialogState.js'
 import { findPetById, usePetCatalog } from '../../pet/catalog.js'
 import { PetSprite } from '../../pet/PetSprite.js'
 import { streamMessage } from '../../services/api/client.js'
-import { useSettings } from '../../services/settings.js'
+import { getActiveApiKey, useSettings } from '../../services/settings.js'
 import { updateGameFeedback, useGameStore } from '../store.js'
 import type { BoardComponentProps } from '../types.js'
 import {
@@ -72,7 +72,7 @@ export const WerewolfBoard = ({
       if (!ensureApiKey()) {
         throw new Error(locale === 'zh-CN' ? '请先配置 API Key' : 'Configure API Key')
       }
-      const apiKey = useSettings.getState().apiKey ?? ''
+      const apiKey = getActiveApiKey()
       const pet = findPetById(stateRef.current.seats[seatIndex]?.petId)
       const petName = pet.name[locale]
 
@@ -101,7 +101,8 @@ export const WerewolfBoard = ({
           thinking: { type: thinkingMode ? 'enabled' : 'disabled' },
           safety_check: { level: 'high' },
         },
-        controller.signal
+        controller.signal,
+        'mywhale-game-werewolf'
       )
 
       for await (const ev of events) {

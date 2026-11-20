@@ -4,9 +4,10 @@ import { ensureApiKey } from '../../components/settings/settingsDialogState.js'
 import { showToast } from '../../components/base/toastState.js'
 import { useTranslate } from '../../i18n/index.js'
 import { streamMessage, uploadFile } from '../../services/api/client.js'
-import type { MessageParam } from '../../services/api/types.js'
+import type { FileBlockParam, MessageParam, TextBlockParam } from '../../services/api/types.js'
 import { writeClipboardText } from '../../services/clipboard.js'
-import { useSettings } from '../../services/settings.js'
+import { getActiveApiKey, useSettings } from '../../services/settings.js'
+import { pickCachedDrawGuessPuzzle, saveCachedDrawGuessPuzzle } from '../history.js'
 import { resolveCurrentOpponent } from '../opponents.js'
 import { updateGameFeedback, useGameStore } from '../store.js'
 import type { BoardComponentProps } from '../types.js'
@@ -46,6 +47,68 @@ const stripJsonFences = (raw: string): string => {
   const a = clean.indexOf('{')
   const b = clean.lastIndexOf('}')
   return a !== -1 && b > a ? clean.slice(a, b + 1) : clean
+}
+
+const extractLooseStringField = (raw: string, key: string): string | undefined => {
+  const re = new RegExp(`"${key}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`)
+  const match = re.exec(raw)
+  if (!match?.[1]) {
+    return undefined
+  }
+  try {
+    return JSON.parse(`"${match[1]}"`) as string
+  } catch {
+    return match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"')
+  }
+}
+
+const extractLooseHtmlSnippet = (raw: string): string | undefined => {
+  const htmlField = extractLooseStringField(raw, 'html')
+  if (htmlField?.trim()) {
+    return htmlField
+  }
+  const divMatch = /<div[\s\S]*<\/div>/i.exec(raw)
+  if (divMatch?.[0]) {
+    return divMatch[0]
+  }
+  const svgMatch = /<svg[\s\S]*<\/svg>/i.exec(raw)
+  return svgMatch?.[0]
+}
+
+const parseDrawGuessJson = <T extends Record<string, unknown>>(raw: string): Partial<T> => {
+  const stripped = stripJsonFences(raw)
+  try {
+    const parsed = JSON.parse(stripped) as unknown
+    if (typeof parsed === 'object' && parsed !== null) {
+      return parsed as Partial<T>
+    }
+  } catch {
+    // HTML 属性引号或大括号未转义时回退宽松提取
+  }
+  const loose: Record<string, unknown> = {}
+  for (const key of ['answer', 'hint', 'speech', 'guess', 'thoughtSummary', 'idiom']) {
+    const val = extractLooseStringField(raw, key)
+    if (val !== undefined) {
+      loose[key] = val
+    }
+  }
+  const html = extractLooseHtmlSnippet(raw)
+  if (html) {
+    loose.html = html
+  }
+  if (Object.keys(loose).length === 0) {
+    throw new Error('Failed to parse AI response JSON')
+  }
+  return loose as Partial<T>
+}
+
+const fileToBase64 = async (file: File): Promise<string> => {
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return window.btoa(binary)
 }
 
 const canvasToPngFile = (canvas: HTMLCanvasElement): Promise<File> =>
@@ -210,46 +273,108 @@ export const DrawGuessBoard = ({
     }
   }
 
+  const STREAM_TIMEOUT_MS = 45_000
+
+  useEffect(() => () => abortRef.current?.abort(), [])
+
   const streamSingleJsonCall = async (
     apiKey: string,
     systemPrompt: string,
     messages: MessageParam[],
     signal: AbortSignal
   ): Promise<{ text: string; thought: string }> => {
+    const localController = new AbortController()
+    let timedOut = false
+    const onParentAbort = () => localController.abort()
+    signal.addEventListener('abort', onParentAbort, { once: true })
+    const timer = window.setTimeout(() => {
+      timedOut = true
+      localController.abort()
+    }, STREAM_TIMEOUT_MS)
+
     let text = ''
     let thought = ''
-    const events = streamMessage(
-      apiKey,
-      {
-        model: 'deepseek-flash',
-        system: systemPrompt,
-        messages,
-        thinking: { type: thinkingMode ? 'enabled' : 'disabled' },
-        safety_check: { level: 'high' },
-      },
-      signal
-    )
-    for await (const ev of events) {
-      if (ev.type !== 'content_block_delta') {
-        continue
+    try {
+      const events = streamMessage(
+        apiKey,
+        {
+          model: 'deepseek-flash',
+          system: systemPrompt,
+          messages,
+          thinking: { type: thinkingMode ? 'enabled' : 'disabled' },
+          safety_check: { level: 'high' },
+        },
+        localController.signal,
+        'mywhale-game-draw_guess'
+      )
+      for await (const ev of events) {
+        if (ev.type !== 'content_block_delta') {
+          continue
+        }
+        if (ev.delta.type === 'text_delta') {
+          text += ev.delta.text
+        } else if (ev.delta.type === 'thinking_delta') {
+          thought += ev.delta.thinking
+          updateGameFeedback({ thoughtText: thought.trim() })
+        }
       }
-      if (ev.delta.type === 'text_delta') {
-        text += ev.delta.text
-      } else if (ev.delta.type === 'thinking_delta') {
-        thought += ev.delta.thinking
-        updateGameFeedback({ thoughtText: thought.trim() })
+      return { text, thought }
+    } catch (error) {
+      if (timedOut) {
+        throw new Error(locale === 'zh-CN' ? 'AI 出题超时，请点击重试' : 'Request timed out')
       }
+      throw error
+    } finally {
+      window.clearTimeout(timer)
+      signal.removeEventListener('abort', onParentAbort)
     }
-    return { text, thought }
   }
 
-  /** AI 作为画方：生成一道隐藏答案 + 纯 HTML/SVG 画面 */
+  /** AI 作为画方：生成一道隐藏答案 + 纯 HTML/SVG 画面（支持前缀缓存 + 本地题库缓存省流） */
   const generateAiHtmlDrawing = async (
     baseState: DrawGuessState,
     apiKey: string,
-    signal: AbortSignal
+    controller: AbortController
   ) => {
+    const { signal } = controller
+    const gameCacheEnabled = useSettings.getState().gameCacheEnabled
     const opponent = resolveCurrentOpponent(locale)
+
+    const applyPuzzleResult = (
+      answer: string,
+      hint: string,
+      html: string,
+      speech: string,
+      thoughtText: string
+    ) => {
+      if (!usedIdiomsRef.current.includes(answer)) {
+        usedIdiomsRef.current.push(answer)
+      }
+      if (abortRef.current === controller) {
+        updateGameFeedback({
+          aiThinking: false,
+          errorText: null,
+          bubbleText: speech,
+          thoughtText,
+          speechToSpeak: speech,
+        })
+      }
+      onPlayerMove({
+        ...baseState,
+        aiPuzzle: { answer, hint, html },
+      })
+    }
+
+    if (gameCacheEnabled && baseState.round >= 2 && baseState.round % 2 === 0) {
+      const cached = pickCachedDrawGuessPuzzle(usedIdiomsRef.current)
+      if (cached) {
+        const speech =
+          locale === 'zh-CN' ? '画好啦，你来猜猜看！（省流缓存题）' : 'Puzzle ready (cached)!'
+        applyPuzzleResult(cached.answer, cached.hint, cached.html, speech, '')
+        return
+      }
+    }
+
     updateGameFeedback({
       aiThinking: true,
       bubbleText:
@@ -262,57 +387,90 @@ export const DrawGuessBoard = ({
     const avoidSample = Array.from(
       new Set([...usedIdiomsRef.current, ...IDIOM_PRESETS.slice(0, 14)])
     ).slice(-24)
+    // 保持 systemPrompt 固定以最大化命中前缀缓存，把轮次随机方向与避开词放到 user 消息中
     const sys =
       locale === 'zh-CN'
-        ? `你是「${opponent.name}」（${opponent.systemPrompt}），现在玩你画我猜并且轮到你【画图出题】。\n请自己独立构思一个【必须为真正的四字汉语成语】（不得使用俗语、歇后语、现代网络词，且不能只从常见固定题库里挑），本次可优先考虑「${theme}」方向且具体好画的成语；务必避开这些已用或常见词：${avoidSample.join('、')}。\n画图要求：用纯静态 HTML+SVG 绘制，简单一些的，不需要复杂动效，不可以出现任何提示（绝不要在画面中出现任何文字、字母或答案），只需要直观描述这个成语的画面就好了，只画，代码里面不要出现任何注释，不加 script 标签。\n严格输出 JSON：{"answer":"四字成语","hint":"简短类别提示","html":"<div style='width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#fff;'>...<svg viewBox='0 0 260 180'>...</svg></div>","speech":"我画好了，猜猜这是什么成语？"}`
-        : `You are ${opponent.name}. Invent an authentic 4-character Chinese idiom (成语, NOT a slang phrase or modern word, and NOT only from cliché preset lists; prefer theme "${theme}" and avoid: ${avoidSample.join(', ')}), then draw it using simple static HTML+SVG (no complex animation, no text/letter hints, no code comments, no <script>). Output ONLY JSON: {"answer":"四字成语","hint":"...","html":"...","speech":"..."}`
+        ? `你是「${opponent.name}」（${opponent.systemPrompt}），现在玩你画我猜并且轮到你【画图出题】。\n请独立构思一个【真正的四字汉语成语】（不得使用俗语、歇后语、现代网络词）。\n画图要求：用纯静态 HTML+SVG 绘制，简单一些，不需要复杂动效，画面中不要出现任何文字、字母或答案提示，不要写注释，不加 script 标签。\n严格输出 JSON：{"answer":"四字成语","hint":"简短类别提示","html":"<div style='width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#fff;'>...<svg viewBox='0 0 260 180'>...</svg></div>","speech":"我画好了，猜猜这是什么成语？"}`
+        : `You are ${opponent.name} playing Draw & Guess. Invent an authentic 4-character Chinese idiom (成语, NOT slang or modern phrases), then draw it using simple static HTML+SVG (no complex animation, no text/letter hints, no comments, no <script>). Output ONLY JSON: {"answer":"四字成语","hint":"...","html":"...","speech":"..."}`
 
-    const { text, thought } = await streamSingleJsonCall(
-      apiKey,
-      sys,
-      [
-        {
-          role: 'user',
-          content:
-            locale === 'zh-CN'
-              ? `请以「${theme}」相关风格新出一条四字成语并画图。`
-              : `Create and draw one fresh 4-character Chinese idiom around "${theme}".`,
-        },
-      ],
-      signal
-    )
+    try {
+      const { text, thought } = await streamSingleJsonCall(
+        apiKey,
+        sys,
+        [
+          {
+            role: 'user',
+            content:
+              locale === 'zh-CN'
+                ? `请以「${theme}」方向新出一条四字成语并画图。务必避开以下词：${avoidSample.join('、')}。`
+                : `Create and draw one fresh 4-character Chinese idiom around "${theme}". Avoid: ${avoidSample.join(', ')}.`,
+          },
+        ],
+        signal
+      )
 
-    const parsed = JSON.parse(stripJsonFences(text)) as {
-      answer?: string
-      hint?: string
-      html?: string
-      speech?: string
+      if (signal.aborted) {
+        return
+      }
+
+      const parsed = parseDrawGuessJson<{
+        answer?: string
+        hint?: string
+        html?: string
+        speech?: string
+      }>(text)
+      const rawAnswer = typeof parsed.answer === 'string' ? parsed.answer.trim() : ''
+      const unusedPreset =
+        IDIOM_PRESETS.find((item) => !usedIdiomsRef.current.includes(item)) ?? IDIOM_PRESETS[0]
+      const answer = isFourCharIdiom(rawAnswer) ? rawAnswer : unusedPreset
+      const cleanNoComments = (
+        typeof parsed.html === 'string' && parsed.html.trim() ? parsed.html : DEFAULT_HTML_TEMPLATE
+      ).replace(/<!--[\s\S]*?-->/g, '')
+      const html = sanitizeDrawingHtml(cleanNoComments)
+      const hint =
+        typeof parsed.hint === 'string' && parsed.hint.trim()
+          ? parsed.hint.trim()
+          : locale === 'zh-CN'
+            ? '四字成语'
+            : 'Idiom'
+      const speech =
+        typeof parsed.speech === 'string' && parsed.speech.trim()
+          ? parsed.speech.trim()
+          : locale === 'zh-CN'
+            ? '画好啦，你来猜猜看！'
+            : 'Done drawing—your guess!'
+
+      if (gameCacheEnabled && html !== DEFAULT_HTML_TEMPLATE) {
+        saveCachedDrawGuessPuzzle({ answer, hint, html })
+      }
+      applyPuzzleResult(answer, hint, html, speech, thought.trim())
+    } catch (error) {
+      if (signal.aborted) {
+        if (abortRef.current === controller) {
+          updateGameFeedback({ aiThinking: false })
+        }
+        return
+      }
+      if (gameCacheEnabled) {
+        const cached = pickCachedDrawGuessPuzzle(usedIdiomsRef.current)
+        if (cached) {
+          const speech =
+            locale === 'zh-CN' ? '网络抖动，先用本地缓存画作继续吧！' : 'Loaded cached puzzle!'
+          applyPuzzleResult(cached.answer, cached.hint, cached.html, speech, '')
+          return
+        }
+      }
+      if (abortRef.current === controller) {
+        updateGameFeedback({
+          aiThinking: false,
+          errorText: error instanceof Error ? error.message : t('retry'),
+        })
+      }
+    } finally {
+      if (abortRef.current === controller) {
+        updateGameFeedback({ aiThinking: false })
+      }
     }
-    const rawAnswer = (parsed.answer ?? '').trim()
-    const unusedPreset =
-      IDIOM_PRESETS.find((item) => !usedIdiomsRef.current.includes(item)) ?? IDIOM_PRESETS[0]
-    const answer = isFourCharIdiom(rawAnswer) ? rawAnswer : unusedPreset
-    if (!usedIdiomsRef.current.includes(answer)) {
-      usedIdiomsRef.current.push(answer)
-    }
-    const cleanNoComments = (parsed.html || DEFAULT_HTML_TEMPLATE).replace(/<!--[\s\S]*?-->/g, '')
-    const html = sanitizeDrawingHtml(cleanNoComments)
-    const hint = (parsed.hint ?? (locale === 'zh-CN' ? '四字成语' : 'Idiom')).trim()
-    const speech = (
-      parsed.speech || (locale === 'zh-CN' ? '画好啦，你来猜猜看！' : 'Done drawing—your guess!')
-    ).trim()
-
-    updateGameFeedback({
-      aiThinking: false,
-      bubbleText: speech,
-      thoughtText: thought.trim(),
-      speechToSpeak: speech,
-    })
-
-    onPlayerMove({
-      ...baseState,
-      aiPuzzle: { answer, hint, html },
-    })
   }
 
   /** 用户画好并输入标准答案 -> 上传图片让 DeepSeek 识图猜测 */
@@ -329,7 +487,7 @@ export const DrawGuessBoard = ({
       return
     }
 
-    const apiKey = useSettings.getState().apiKey ?? ''
+    const apiKey = getActiveApiKey()
     const opponent = resolveCurrentOpponent(locale)
     abortRef.current?.abort()
     const controller = new AbortController()
@@ -342,6 +500,7 @@ export const DrawGuessBoard = ({
       thoughtText: '',
     })
 
+    let handedOffToAiDraw = false
     try {
       let imageFile: File | null = null
       if (mode === 'canvas' && canvasRef.current) {
@@ -350,14 +509,19 @@ export const DrawGuessBoard = ({
         imageFile = await renderHtmlToPngFile(htmlInput)
       }
 
-      const contentBlocks: Array<
-        | { type: 'image'; source: { type: 'file'; file_id: string } }
-        | { type: 'text'; text: string }
-      > = []
+      const contentBlocks: Array<FileBlockParam | TextBlockParam> = []
 
       if (imageFile) {
-        const uploaded = await uploadFile(apiKey, imageFile, null, controller.signal)
-        contentBlocks.push({ type: 'image', source: { type: 'file', file_id: uploaded.id } })
+        if (useSettings.getState().apiProvider === 'custom') {
+          const base64 = await fileToBase64(imageFile)
+          contentBlocks.push({
+            type: 'image',
+            source: { type: 'base64', media_type: 'image/png', data: base64 },
+          })
+        } else {
+          const uploaded = await uploadFile(apiKey, imageFile, null, controller.signal)
+          contentBlocks.push({ type: 'image', source: { type: 'file', file_id: uploaded.id } })
+        }
       }
 
       const promptText =
@@ -389,12 +553,14 @@ export const DrawGuessBoard = ({
         controller.signal
       )
 
-      const parsed = JSON.parse(stripJsonFences(text)) as {
+      const parsed = parseDrawGuessJson<{
         guess?: string
         thoughtSummary?: string
         speech?: string
-      }
-      const guess = (parsed.guess ?? '').trim()
+      }>(text)
+      const guess = typeof parsed.guess === 'string' ? parsed.guess.trim() : ''
+      const thoughtSummary = typeof parsed.thoughtSummary === 'string' ? parsed.thoughtSummary : ''
+      const speechText = typeof parsed.speech === 'string' ? parsed.speech : ''
       const correct = isGuessMatch(guess, answer)
 
       const resultLine = correct
@@ -407,12 +573,15 @@ export const DrawGuessBoard = ({
 
       updateGameFeedback({
         aiThinking: false,
-        bubbleText: parsed.speech || resultLine,
-        thoughtText: [parsed.thoughtSummary, thought].filter(Boolean).join('\n\n'),
-        speechToSpeak: parsed.speech || resultLine,
+        bubbleText: speechText || resultLine,
+        thoughtText: [thoughtSummary, thought].filter(Boolean).join('\n\n'),
+        speechToSpeak: speechText || resultLine,
       })
 
       setAnswerInput('')
+      if (!usedIdiomsRef.current.includes(answer)) {
+        usedIdiomsRef.current.push(answer)
+      }
       const nextBase: DrawGuessState = {
         round: state.round + 1,
         drawer: correct ? 'ai' : 'player',
@@ -431,7 +600,8 @@ export const DrawGuessBoard = ({
 
       // 若 AI 猜对赢下此局，由胜方（AI）出下一道 HTML 题
       if (correct) {
-        await generateAiHtmlDrawing(nextBase, apiKey, controller.signal)
+        handedOffToAiDraw = true
+        await generateAiHtmlDrawing(nextBase, apiKey, controller)
       }
     } catch (error) {
       if (controller.signal.aborted) {
@@ -441,7 +611,22 @@ export const DrawGuessBoard = ({
         aiThinking: false,
         errorText: error instanceof Error ? error.message : t('retry'),
       })
+    } finally {
+      if (!handedOffToAiDraw && abortRef.current === controller) {
+        updateGameFeedback({ aiThinking: false })
+      }
     }
+  }
+
+  const retryAiPuzzle = () => {
+    if (aiThinking || !ensureApiKey()) {
+      return
+    }
+    const apiKey = getActiveApiKey()
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    void generateAiHtmlDrawing(state, apiKey, controller)
   }
 
   /** 用户提交对 AI 所画 HTML 的猜测 */
@@ -488,13 +673,11 @@ export const DrawGuessBoard = ({
     onPlayerMove(nextBase)
 
     if (!correct && ensureApiKey()) {
-      const apiKey = useSettings.getState().apiKey ?? ''
+      const apiKey = getActiveApiKey()
       abortRef.current?.abort()
       const controller = new AbortController()
       abortRef.current = controller
-      void generateAiHtmlDrawing(nextBase, apiKey, controller.signal).catch(() => {
-        updateGameFeedback({ aiThinking: false })
-      })
+      void generateAiHtmlDrawing(nextBase, apiKey, controller)
     }
   }
 
@@ -518,7 +701,7 @@ export const DrawGuessBoard = ({
     if (pickingIdiom || aiThinking || !ensureApiKey()) {
       return
     }
-    const apiKey = useSettings.getState().apiKey ?? ''
+    const apiKey = getActiveApiKey()
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
@@ -530,8 +713,8 @@ export const DrawGuessBoard = ({
       ).slice(-24)
       const sys =
         locale === 'zh-CN'
-          ? `请自由构思一个【必须是真正的四字汉语成语】（不得返回普通词语、短语或俗语），优先选「${theme}」相关且适合用画面表现的成语，不能只从常见固定题库挑选，并避开：${avoid.join('、')}。严格只返回 JSON：{"idiom":"四字成语"}。`
-          : `Invent ONE genuine 4-character Chinese idiom (成语 only, never a generic phrase) around "${theme}" suitable for Pictionary, avoiding: ${avoid.join(', ')}. Return ONLY JSON: {"idiom":"四字成语"}.`
+          ? '请自由构思一个【必须是真正的四字汉语成语】（不得返回普通词语、短语或俗语），适合用画面表现，严格只返回 JSON：{"idiom":"四字成语"}。'
+          : 'Invent ONE genuine 4-character Chinese idiom (成语 only, never a generic phrase) suitable for Pictionary. Return ONLY JSON: {"idiom":"四字成语"}.'
       const { text } = await streamSingleJsonCall(
         apiKey,
         sys,
@@ -540,14 +723,14 @@ export const DrawGuessBoard = ({
             role: 'user',
             content:
               locale === 'zh-CN'
-                ? `帮我新想一个「${theme}」相关的四字成语`
-                : `One fresh 4-char Chinese idiom (${theme})`,
+                ? `帮我新想一个「${theme}」相关的四字成语，避开：${avoid.join('、')}`
+                : `One fresh 4-char Chinese idiom (${theme}), avoiding: ${avoid.join(', ')}`,
           },
         ],
         controller.signal
       )
-      const parsed = JSON.parse(stripJsonFences(text)) as { idiom?: string }
-      const next = (parsed.idiom ?? '').trim()
+      const parsed = parseDrawGuessJson<{ idiom?: string }>(text)
+      const next = typeof parsed.idiom === 'string' ? parsed.idiom.trim() : ''
       if (isFourCharIdiom(next)) {
         if (!usedIdiomsRef.current.includes(next)) {
           usedIdiomsRef.current.push(next)
@@ -807,13 +990,35 @@ export const DrawGuessBoard = ({
             </>
           ) : (
             <div className={styles.loadingPuzzle}>
-              {aiThinking
-                ? locale === 'zh-CN'
-                  ? 'AI 正在编写 HTML 绘图中…'
-                  : 'AI is coding HTML drawing…'
-                : locale === 'zh-CN'
-                  ? '准备生成新画面…'
-                  : 'Preparing puzzle…'}
+              <div>
+                {aiThinking
+                  ? locale === 'zh-CN'
+                    ? 'AI 正在编写 HTML 绘图中…'
+                    : 'AI is coding HTML drawing…'
+                  : locale === 'zh-CN'
+                    ? '等待生成画面，可点下方重试'
+                    : 'Waiting for puzzle…'}
+              </div>
+              {!aiThinking ? (
+                <div className={styles.loadingActions}>
+                  <button type="button" className={styles.primaryBtn} onClick={retryAiPuzzle}>
+                    {locale === 'zh-CN' ? '重新出题' : 'Retry'}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.toolBtn}
+                    onClick={() =>
+                      onPlayerMove({
+                        ...state,
+                        drawer: 'player',
+                        aiPuzzle: null,
+                      })
+                    }
+                  >
+                    {locale === 'zh-CN' ? '换我来画' : 'My Turn'}
+                  </button>
+                </div>
+              ) : null}
             </div>
           )}
         </div>

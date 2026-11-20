@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { createMessage } from '../api/client.js'
-import { useSettings } from '../settings.js'
+import { getActiveApiKey } from '../settings.js'
 import { getContextRounds, getReplyText } from './reply.js'
 import type {
   AssistantMessage,
@@ -664,7 +664,7 @@ export const runCompactionPass = async ({
     }
   }
 
-  const apiKey = useSettings.getState().apiKey?.trim() ?? ''
+  const apiKey = getActiveApiKey()
   const batches = groupBatches(olderRounds, preset.batchTokens)
   let nextSegments = existing?.segments ?? []
   let nextRecords = existing?.records ?? []

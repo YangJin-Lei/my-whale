@@ -8,6 +8,7 @@ let nativeSecureStorage: NativeSecureStorage | null = null
 let activeBackendName = 'browser-localstorage'
 
 export const API_KEY_SECRET_ID = 'api-key'
+export const CUSTOM_API_KEY_SECRET_ID = 'custom-api-key'
 
 export const setNativeSecureStorage = (adapter: NativeSecureStorage) => {
   nativeSecureStorage = adapter

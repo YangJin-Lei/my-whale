@@ -12,7 +12,7 @@ import {
   IconThinkOutline14,
 } from '../base/icons.js'
 import { openCompactionModal } from '../../services/chat/compaction.js'
-import { setSearch, setThinking, useSettings } from '../../services/settings.js'
+import { getActiveApiKey, setSearch, setThinking, useSettings } from '../../services/settings.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { sendMessage, stopReply, useChatStore } from '../../services/chat/store.js'
 import {
@@ -131,7 +131,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     if (normalized.length === 0 || useChatStore.getState().importingHistory || !ensureApiKey()) {
       return
     }
-    const error = addDraftFiles(sessionId, normalized, useSettings.getState().apiKey ?? '')
+    const error = addDraftFiles(sessionId, normalized, getActiveApiKey())
     if (error) {
       showToast(error)
     }
@@ -139,7 +139,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const retryFile = useCallback(
     (id: string) => {
       if (!useChatStore.getState().importingHistory && ensureApiKey()) {
-        retryDraftAttachment(sessionId, id, useSettings.getState().apiKey ?? '')
+        retryDraftAttachment(sessionId, id, getActiveApiKey())
       }
     },
     [sessionId]

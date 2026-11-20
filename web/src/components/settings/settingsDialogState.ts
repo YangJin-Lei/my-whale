@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { flushPendingExtracts } from '../../services/memory/extract.js'
-import { useSettings } from '../../services/settings.js'
+import { hasConfiguredActiveApi, useSettings } from '../../services/settings.js'
 import { openOnboarding } from '../onboarding/onboardingState.js'
 
 /** 设置弹窗的分组：通用设置 / 桌宠 / 人设 / 记忆 / 数据管理 */
@@ -19,10 +19,14 @@ export const openSettings = (section: SettingsSection) => {
 
 export const closeSettings = () => useSettingsDialog.setState({ open: false })
 
-/** 没有 API Key 时打开首次引导页，返回是否已有 Key */
+/** 没有配置当前启用的接口密钥时，自定义模式跳转到数据设置，官方模式打开首次引导页 */
 export const ensureApiKey = () => {
-  if (useSettings.getState().apiKey) {
+  if (hasConfiguredActiveApi()) {
     return true
+  }
+  if (useSettings.getState().apiProvider === 'custom') {
+    openSettings('data')
+    return false
   }
   openOnboarding()
   return false

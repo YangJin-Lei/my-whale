@@ -20,7 +20,7 @@ import {
 } from '../services/links.js'
 import { flushPendingExtracts } from '../services/memory/extract.js'
 import { setNativeSecureStorage } from '../services/secureStorage.js'
-import { hydrateNativeApiKey, useSettings } from '../services/settings.js'
+import { hasConfiguredActiveApi, hydrateNativeApiKey, useSettings } from '../services/settings.js'
 import {
   registerInAppUpdater,
   retryPendingInstall,
@@ -35,7 +35,7 @@ const onReturnFromExternal = async () => {
     void retryPendingInstall()
   }
   void refreshBalance()
-  if (useSettings.getState().apiKey) {
+  if (hasConfiguredActiveApi()) {
     return
   }
   const { value } = await Clipboard.read().catch(() => ({ value: '' }))

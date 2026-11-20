@@ -41,7 +41,7 @@ import {
   type Persona,
   type SessionPersona,
 } from '../persona/types.js'
-import { setSearch, setThinking, useSettings } from '../settings.js'
+import { getActiveApiKey, setSearch, setThinking, useSettings } from '../settings.js'
 import { autoPlayReadAloud } from '../speech/readAloud.js'
 import { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
 import * as db from './db.js'
@@ -1044,7 +1044,7 @@ const prepareFiles = async (sessionId: string, request: Request, signal: AbortSi
   // 服务端判定 file_id 失效时会清掉会话里的 serverId，先用最新消息替换请求快照，
   // 否则快照里仍是旧 id，补传会直接复用它。
   request = refreshRequest(sessionId, request)
-  const apiKey = useSettings.getState().apiKey ?? ''
+  const apiKey = getActiveApiKey()
   const serverIds = new Map<string, string>()
   // 停止生成立即生效；上传本身不取消（输入框与其他消息可能共用同一任务），完成后照常写回 serverId
   const aborted = new Promise<never>((_, reject) => {
@@ -1743,7 +1743,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         )
         const systemPrompt = resolveSessionSystemPrompt(sessionId, prepared.question.content)
         const events = streamMessage(
-          useSettings.getState().apiKey ?? '',
+          getActiveApiKey(),
           {
             model: initial.model ?? MODEL,
             system: systemPrompt,

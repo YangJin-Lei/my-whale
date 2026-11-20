@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import {
   API_KEY_SECRET_ID,
+  CUSTOM_API_KEY_SECRET_ID,
   hasNativeSecureStorage,
   loadSecureSecret,
   saveSecureSecret,
@@ -14,12 +15,19 @@ export type Locale = 'zh-CN' | 'en-US'
 export type ThemePreference = 'light' | 'dark' | 'system'
 
 export type ChatBgPreset = 'none' | 'ocean' | 'warm' | 'aurora' | 'mint' | 'custom'
+export type ApiProvider = 'official' | 'custom'
+export type CustomApiProtocol = 'openai' | 'anthropic'
 
 export const FONT_SCALE_STEPS = [0.9, 0.95, 1, 1.08, 1.16, 1.25] as const
 
-/** 本机设置，存 localStorage：API Key、语言、主题、位置、朗读音色、字体、背景等 */
+/** 本机设置，存 localStorage：API Key、自定义 API、语言、主题、位置、朗读音色、字体、背景等 */
 type Settings = {
   apiKey: string | null
+  apiProvider: ApiProvider
+  customApiUrl: string
+  customApiKey: string | null
+  customApiModel: string
+  customApiProtocol: CustomApiProtocol
   locale: Locale
   themePreference: ThemePreference
   location: UserLocation | null
@@ -46,10 +54,16 @@ type Settings = {
   compactionEnabled: boolean
   compactionAuto: boolean
   compactionLevel: 'light' | 'medium' | 'heavy'
+  gameCacheEnabled: boolean
 }
 
 const KEYS = {
   apiKey: 'chat-demo:api-key',
+  apiProvider: 'chat-demo:api-provider',
+  customApiUrl: 'chat-demo:custom-api-url',
+  customApiKey: 'chat-demo:custom-api-key',
+  customApiModel: 'chat-demo:custom-api-model',
+  customApiProtocol: 'chat-demo:custom-api-protocol',
   locale: 'chat-demo:locale',
   location: 'chat-demo:location',
   themePreference: 'chat-demo:theme-preference',
@@ -76,6 +90,7 @@ const KEYS = {
   compactionEnabled: 'chat-demo:compaction-enabled',
   compactionAuto: 'chat-demo:compaction-auto',
   compactionLevel: 'chat-demo:compaction-level',
+  gameCacheEnabled: 'chat-demo:game-cache-enabled',
 } as const
 
 const read = (key: string) => {
@@ -154,8 +169,19 @@ const initialChatBgPreset = (): ChatBgPreset => {
   return 'none'
 }
 
+const initialApiProvider = (): ApiProvider =>
+  read(KEYS.apiProvider) === 'custom' ? 'custom' : 'official'
+
+const initialCustomApiProtocol = (): CustomApiProtocol =>
+  read(KEYS.customApiProtocol) === 'anthropic' ? 'anthropic' : 'openai'
+
 export const useSettings = create<Settings>(() => ({
   apiKey: read(KEYS.apiKey),
+  apiProvider: initialApiProvider(),
+  customApiUrl: read(KEYS.customApiUrl) ?? '',
+  customApiKey: read(KEYS.customApiKey),
+  customApiModel: read(KEYS.customApiModel) ?? '',
+  customApiProtocol: initialCustomApiProtocol(),
   locale: initialLocale(),
   location: initialLocation(),
   themePreference: initialThemePreference(),
@@ -187,6 +213,7 @@ export const useSettings = create<Settings>(() => ({
   compactionEnabled: read(KEYS.compactionEnabled) === 'true',
   compactionAuto: read(KEYS.compactionAuto) === 'true',
   compactionLevel: (read(KEYS.compactionLevel) as 'light' | 'medium' | 'heavy' | null) || 'light',
+  gameCacheEnabled: read(KEYS.gameCacheEnabled) !== 'false',
 }))
 
 export const setLocale = (locale: Locale) => {
@@ -304,11 +331,75 @@ export const setApiKey = (apiKey: string | null) => {
   useSettings.setState({ apiKey: cleaned })
 }
 
+export const setApiProvider = (apiProvider: ApiProvider) => {
+  write(KEYS.apiProvider, apiProvider)
+  useSettings.setState({ apiProvider })
+}
+
+export const setCustomApiConfig = (config: {
+  url: string
+  apiKey?: string | null
+  model: string
+  protocol: CustomApiProtocol
+}) => {
+  const cleanedUrl = config.url.trim().replace(/\/+$/, '')
+  const cleanedModel = config.model.trim()
+  write(KEYS.customApiUrl, cleanedUrl || null)
+  write(KEYS.customApiModel, cleanedModel || null)
+  write(KEYS.customApiProtocol, config.protocol)
+
+  const patch: Partial<Settings> = {
+    customApiUrl: cleanedUrl,
+    customApiModel: cleanedModel,
+    customApiProtocol: config.protocol,
+  }
+  if (config.apiKey !== undefined) {
+    const cleanedKey = config.apiKey ? config.apiKey.trim() || null : null
+    if (hasNativeSecureStorage()) {
+      write(KEYS.customApiKey, null)
+      void saveSecureSecret(CUSTOM_API_KEY_SECRET_ID, cleanedKey)
+    } else {
+      write(KEYS.customApiKey, cleanedKey)
+    }
+    patch.customApiKey = cleanedKey
+  }
+  useSettings.setState(patch)
+}
+
+export const isCustomApiConfigured = (state: Settings = useSettings.getState()): boolean =>
+  Boolean(state.customApiUrl.trim() && state.customApiKey?.trim() && state.customApiModel.trim())
+
+export const hasConfiguredActiveApi = (state: Settings = useSettings.getState()): boolean =>
+  state.apiProvider === 'custom' ? isCustomApiConfigured(state) : Boolean(state.apiKey?.trim())
+
+export const getActiveApiKey = (state: Settings = useSettings.getState()): string =>
+  state.apiProvider === 'custom' ? (state.customApiKey?.trim() ?? '') : (state.apiKey?.trim() ?? '')
+
 let apiKeyHydrationTask: Promise<void> | null = null
+
+const hydrateSingleSecret = async (
+  secretId: string,
+  storageKey: string
+): Promise<string | null> => {
+  const secureKey = await loadSecureSecret(secretId)
+  const legacyKey = read(storageKey)?.trim() || null
+  if (secureKey) {
+    if (legacyKey) {
+      write(storageKey, null)
+    }
+    return secureKey
+  }
+  if (legacyKey) {
+    await saveSecureSecret(secretId, legacyKey)
+    write(storageKey, null)
+    return legacyKey
+  }
+  return null
+}
 
 /**
  * 原生端初始化时调用：
- * 1) 优先从 Android Keystore 解密读取 API Key，并彻底清除旧版 localStorage 明文；
+ * 1) 优先从 Android Keystore 解密读取官方/自定义 API Key，并彻底清除旧版 localStorage 明文；
  * 2) 若 Keystore 尚无记录但旧版 localStorage 存在明文 Key，自动无缝迁入 Keystore 后删除明文。
  */
 export const hydrateNativeApiKey = (): Promise<void> => {
@@ -319,19 +410,19 @@ export const hydrateNativeApiKey = (): Promise<void> => {
     return apiKeyHydrationTask
   }
   apiKeyHydrationTask = (async () => {
-    const secureKey = await loadSecureSecret(API_KEY_SECRET_ID)
-    const legacyKey = read(KEYS.apiKey)?.trim() || null
-    if (secureKey) {
-      if (legacyKey) {
-        write(KEYS.apiKey, null)
-      }
-      useSettings.setState({ apiKey: secureKey })
-      return
+    const [officialKey, customKey] = await Promise.all([
+      hydrateSingleSecret(API_KEY_SECRET_ID, KEYS.apiKey),
+      hydrateSingleSecret(CUSTOM_API_KEY_SECRET_ID, KEYS.customApiKey),
+    ])
+    const patch: Partial<Settings> = {}
+    if (officialKey) {
+      patch.apiKey = officialKey
     }
-    if (legacyKey) {
-      await saveSecureSecret(API_KEY_SECRET_ID, legacyKey)
-      write(KEYS.apiKey, null)
-      useSettings.setState({ apiKey: legacyKey })
+    if (customKey) {
+      patch.customApiKey = customKey
+    }
+    if (Object.keys(patch).length > 0) {
+      useSettings.setState(patch)
     }
   })()
   return apiKeyHydrationTask
@@ -340,12 +431,12 @@ export const hydrateNativeApiKey = (): Promise<void> => {
 export const waitForApiKeyHydration = (): Promise<void> =>
   apiKeyHydrationTask ?? hydrateNativeApiKey()
 
-export type SettingsSnapshot = Omit<Settings, 'apiKey'>
+export type SettingsSnapshot = Omit<Settings, 'apiKey' | 'customApiKey'>
 
 export const exportSettingsSnapshot = (): SettingsSnapshot => {
   const state = useSettings.getState()
   return Object.fromEntries(
-    Object.entries(state).filter(([key]) => key !== 'apiKey')
+    Object.entries(state).filter(([key]) => key !== 'apiKey' && key !== 'customApiKey')
   ) as SettingsSnapshot
 }
 
@@ -441,6 +532,28 @@ export const applySettingsSnapshot = (raw: Partial<SettingsSnapshot>) => {
   ) {
     setCompactionLevel(raw.compactionLevel)
   }
+  if (raw.apiProvider === 'official' || raw.apiProvider === 'custom') {
+    setApiProvider(raw.apiProvider)
+  }
+  if (
+    typeof raw.customApiUrl === 'string' ||
+    typeof raw.customApiModel === 'string' ||
+    raw.customApiProtocol === 'openai' ||
+    raw.customApiProtocol === 'anthropic'
+  ) {
+    const cur = useSettings.getState()
+    setCustomApiConfig({
+      url: typeof raw.customApiUrl === 'string' ? raw.customApiUrl : cur.customApiUrl,
+      model: typeof raw.customApiModel === 'string' ? raw.customApiModel : cur.customApiModel,
+      protocol:
+        raw.customApiProtocol === 'openai' || raw.customApiProtocol === 'anthropic'
+          ? raw.customApiProtocol
+          : cur.customApiProtocol,
+    })
+  }
+  if (typeof raw.gameCacheEnabled === 'boolean') {
+    setGameCacheEnabled(raw.gameCacheEnabled)
+  }
 }
 
 export const setThinking = (thinking: boolean) => {
@@ -525,4 +638,9 @@ export const setCompactionAuto = (compactionAuto: boolean) => {
 export const setCompactionLevel = (compactionLevel: CompactionLevel) => {
   write(KEYS.compactionLevel, compactionLevel)
   useSettings.setState({ compactionLevel })
+}
+
+export const setGameCacheEnabled = (gameCacheEnabled: boolean) => {
+  write(KEYS.gameCacheEnabled, String(gameCacheEnabled))
+  useSettings.setState({ gameCacheEnabled })
 }

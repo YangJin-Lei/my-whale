@@ -19,6 +19,7 @@ import { Button } from '../base/Button.js'
 import { IconDownloadOutline16, IconUploadOutline14 } from '../base/icons.js'
 import { Modal } from '../base/Modal.js'
 import { showToast } from '../base/toastState.js'
+import { openSettings } from '../settings/settingsDialogState.js'
 import { useApiKeyForm } from '../settings/useApiKeyForm.js'
 import { closeOnboarding, useOnboarding } from './onboardingState.js'
 import styles from './Onboarding.module.css'
@@ -244,6 +245,18 @@ const OnboardingContent = () => {
                 {form.error ? <div className={styles.error}>{form.error}</div> : null}
               </div>
             </div>
+
+            <Button
+              variant="outlined"
+              size="m"
+              block
+              onClick={() => {
+                closeOnboarding()
+                openSettings('data')
+              }}
+            >
+              {t('apiProviderCustom')}
+            </Button>
           </div>
         ) : (
           <div className={styles.verifiedBox}>

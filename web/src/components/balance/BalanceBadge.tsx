@@ -26,9 +26,10 @@ const formatClock = (timestamp: number | null): string => {
 export const BalanceBadge = ({ variant }: { variant: 'sider' | 'header' | 'settings' }) => {
   const t = useTranslate()
   const apiKey = useSettings((state) => state.apiKey)
+  const apiProvider = useSettings((state) => state.apiProvider)
   const { status, data, updatedAt } = useBalance()
 
-  if (!apiKey) {
+  if (apiProvider === 'custom' || !apiKey) {
     return null
   }
 

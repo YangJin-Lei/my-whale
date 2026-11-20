@@ -58,8 +58,8 @@ export const refreshBalance = async (): Promise<void> => {
     window.clearTimeout(debounceTimer)
     debounceTimer = null
   }
-  const apiKey = useSettings.getState().apiKey
-  if (!apiKey) {
+  const { apiProvider, apiKey } = useSettings.getState()
+  if (apiProvider === 'custom' || !apiKey) {
     controller?.abort()
     controller = null
     useBalance.setState({ status: 'idle', data: null, updatedAt: null })
@@ -129,7 +129,7 @@ export const bindBalanceAutoRefresh = () => {
   window.addEventListener('focus', onFocus)
   const timer = window.setInterval(onVisible, 60_000)
   const unsub = useSettings.subscribe((state, prev) => {
-    if (state.apiKey !== prev.apiKey) {
+    if (state.apiKey !== prev.apiKey || state.apiProvider !== prev.apiProvider) {
       useBalance.setState({ data: null, updatedAt: null })
       void refreshBalance()
     }

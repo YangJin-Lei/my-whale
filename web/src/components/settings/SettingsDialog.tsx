@@ -44,6 +44,7 @@ import {
   setCacheBackendUrl,
   setCacheModeEnabled,
   setCompactionEnabled,
+  setGameCacheEnabled,
   setChatBgImage,
   setChatBgPreset,
   setFontFollowSystem,
@@ -70,6 +71,7 @@ import { MemorySettings } from '../memory/MemorySettings.js'
 import { PersonaSettings } from '../persona/PersonaSettings.js'
 import { PetSettings } from './PetSettings.js'
 import { ApiKeyConfirm, ApiKeyField, useApiKeyEditor } from './ApiKeyField.js'
+import { CustomApiManagement } from './CustomApiSection.js'
 import { FullBackupSection } from './FullBackupSection.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
 import styles from './Settings.module.css'
@@ -204,6 +206,7 @@ const SettingsContent = () => {
                 <CompactionSetting />
                 <UpdateSetting />
                 <UpdateAccelerateSetting />
+                <GameCacheSetting />
                 <AppNotice />
               </>
             ) : section === 'pet' ? (
@@ -214,6 +217,7 @@ const SettingsContent = () => {
               <MemorySettings />
             ) : (
               <>
+                <CustomApiManagement />
                 <ApiKeyField editor={apiKeyEditor} />
                 <FullBackupSection disabled={historyBusy} />
                 <DeepSeekExportSetting />
@@ -694,6 +698,25 @@ const CacheModeSetting = () => {
         </div>
       ) : null}
     </div>
+  )
+}
+
+const GameCacheSetting = () => {
+  const t = useTranslate()
+  const gameCacheEnabled = useSettings((state) => state.gameCacheEnabled)
+  return (
+    <SettingCell
+      label={t('settingsGameCache')}
+      status={null}
+      action={
+        <input
+          type="checkbox"
+          aria-label={t('settingsGameCache')}
+          checked={gameCacheEnabled}
+          onChange={(e) => setGameCacheEnabled(e.target.checked)}
+        />
+      }
+    />
   )
 }
 

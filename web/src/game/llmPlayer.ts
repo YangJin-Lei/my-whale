@@ -1,6 +1,7 @@
-import type { Locale } from '../services/settings.js'
+import { useSettings, type Locale } from '../services/settings.js'
 import { streamMessage } from '../services/api/client.js'
 import type { MessageParam } from '../services/api/types.js'
+import { buildDecisionCacheKey, getCachedGameDecision, saveCachedGameDecision } from './history.js'
 import type { AiTurnDecision, GameOpponent, GamePlugin } from './types.js'
 
 const MAX_MOVE_ATTEMPTS = 3
@@ -64,6 +65,7 @@ const callDeepSeekTurn = async ({
   signal,
   timeoutMs,
   locale,
+  sessionId,
   onThinkingUpdate,
 }: {
   apiKey: string
@@ -73,6 +75,7 @@ const callDeepSeekTurn = async ({
   signal: AbortSignal
   timeoutMs: number
   locale: Locale
+  sessionId: string
   onThinkingUpdate?: (snippet: string) => void
 }): Promise<{ rawText: string; rawThinking: string }> => {
   const controller = new AbortController()
@@ -94,7 +97,8 @@ const callDeepSeekTurn = async ({
         thinking: { type: thinking ? 'enabled' : 'disabled' },
         safety_check: { level: 'high' },
       },
-      controller.signal
+      controller.signal,
+      sessionId
     )
 
     for await (const event of events) {
@@ -148,9 +152,28 @@ export const requestAiMoveFromLlm = async <TState, TMove>({
   onThinkingUpdate?: (snippet: string) => void
   onStateUpdate?: (nextState: TState) => void
 }): Promise<AiTurnDecision<TMove>> => {
+  const gameCacheEnabled = useSettings.getState().gameCacheEnabled
+  const cacheKey = gameCacheEnabled
+    ? buildDecisionCacheKey(plugin.id, opponent.id, thinking, state)
+    : null
+  if (cacheKey) {
+    const cached = getCachedGameDecision(cacheKey)
+    if (cached) {
+      const check = plugin.parseAndValidateAiMove(state, cached.move, locale)
+      if (check.valid) {
+        return {
+          move: check.move,
+          thoughtSummary: cached.thoughtSummary,
+          speech: cached.speech,
+        }
+      }
+    }
+  }
+
   let currentState = state
   const promptPayload = plugin.buildAiPrompt(currentState, opponent, locale)
   const history: MessageParam[] = [{ role: 'user', content: promptPayload.userPrompt }]
+  const gameSessionId = `mywhale-game-${plugin.id}-${opponent.id}`
 
   let latestThinkingTrace = ''
   const deadline = Date.now() + requestTimeoutMs
@@ -171,6 +194,7 @@ export const requestAiMoveFromLlm = async <TState, TMove>({
       signal,
       timeoutMs: remainingMs,
       locale,
+      sessionId: gameSessionId,
       onThinkingUpdate,
     })
     if (rawThinking.trim()) {
@@ -218,6 +242,14 @@ export const requestAiMoveFromLlm = async <TState, TMove>({
       const speech = plugin.formatMoveSpeech
         ? plugin.formatMoveSpeech(currentState, validation.move, baseSpeech, locale)
         : baseSpeech
+      if (cacheKey && controlCount === 0) {
+        saveCachedGameDecision({
+          key: cacheKey,
+          move: validation.move,
+          thoughtSummary,
+          speech,
+        })
+      }
       return {
         move: validation.move,
         thoughtSummary,

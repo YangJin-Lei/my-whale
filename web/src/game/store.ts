@@ -2,7 +2,14 @@ import { create } from 'zustand'
 import { ensureApiKey } from '../components/settings/settingsDialogState.js'
 import { classifyApiError } from '../services/api/errors.js'
 import type { TtsVoice } from '../services/api/speech.js'
-import { type Locale, useSettings } from '../services/settings.js'
+import { getActiveApiKey, type Locale, useSettings } from '../services/settings.js'
+import { createId } from '../utils/id.js'
+import {
+  deleteGameHistoryRecord,
+  formatGameScoreLabel,
+  upsertGameHistoryRecord,
+  useGameHistory,
+} from './history.js'
 import { requestAiMoveFromLlm } from './llmPlayer.js'
 import { resolveCurrentOpponent } from './opponents.js'
 import { findRegisteredGame, type RegisteredGame } from './registry.js'
@@ -13,6 +20,8 @@ type GameStoreState = {
   drawerOpen: boolean
   expanded: boolean
   activeGameId: GameId | null
+  activeRecordId: string | null
+  activeRecordCreatedAt: number | null
   gameState: unknown
   aiThinking: boolean
   thinkingMode: boolean
@@ -61,6 +70,8 @@ export const useGameStore = create<GameStoreState>(() => ({
   drawerOpen: false,
   expanded: false,
   activeGameId: null,
+  activeRecordId: null,
+  activeRecordCreatedAt: null,
   gameState: null,
   aiThinking: false,
   thinkingMode: true,
@@ -118,6 +129,37 @@ const getResultBubble = (plugin: RegisteredGame, state: unknown, locale: Locale)
     return locale === 'zh-CN' ? '棋逢对手，难分伯仲。' : 'A hard-fought draw!'
   }
   return null
+}
+
+const syncActiveHistoryRecord = (plugin: RegisteredGame) => {
+  const {
+    activeGameId,
+    activeRecordId,
+    activeRecordCreatedAt,
+    gameState,
+    bubbleText,
+    thoughtText,
+  } = useGameStore.getState()
+  if (activeGameId !== plugin.id || !gameState || !activeRecordId) {
+    return
+  }
+  const locale = useSettings.getState().locale
+  const opponent = resolveActiveOpponent(plugin, gameState, locale)
+  const status = plugin.getStatus(gameState)
+  const now = Date.now()
+  upsertGameHistoryRecord({
+    id: activeRecordId,
+    gameId: plugin.id,
+    opponentId: opponent.id,
+    opponentName: opponent.name,
+    status,
+    scoreLabel: formatGameScoreLabel(plugin.id, gameState, status, locale),
+    state: gameState,
+    bubbleText,
+    thoughtText,
+    createdAt: activeRecordCreatedAt ?? now,
+    updatedAt: now,
+  })
 }
 
 const startTurnCountdown = (plugin: RegisteredGame, expectedEpoch: number) => {
@@ -209,7 +251,8 @@ const triggerAiTurn = async (plugin: RegisteredGame, expectedEpoch: number) => {
   const controller = new AbortController()
   turnController = controller
 
-  const { apiKey, locale } = useSettings.getState()
+  const { locale } = useSettings.getState()
+  const apiKey = getActiveApiKey()
   const { gameState, thinkingMode } = useGameStore.getState()
   if (!gameState) {
     return
@@ -232,7 +275,7 @@ const triggerAiTurn = async (plugin: RegisteredGame, expectedEpoch: number) => {
       plugin,
       state: gameState,
       opponent,
-      apiKey: apiKey ?? '',
+      apiKey,
       thinking: thinkingMode,
       locale,
       signal: controller.signal,
@@ -276,6 +319,7 @@ const triggerAiTurn = async (plugin: RegisteredGame, expectedEpoch: number) => {
       errorText: null,
       moveEpoch: nextEpoch,
     })
+    syncActiveHistoryRecord(plugin)
 
     if (useGameStore.getState().gameVoiceOn) {
       speakGameLine(spokenLine, opponent.preferredVoice)
@@ -311,6 +355,7 @@ const triggerAiTurn = async (plugin: RegisteredGame, expectedEpoch: number) => {
           errorText: null,
           moveEpoch: nextEpoch,
         })
+        syncActiveHistoryRecord(plugin)
         if (plugin.getStatus(timeoutOutcome.nextState) === 'playing') {
           if (plugin.getTurn(timeoutOutcome.nextState) === 'ai') {
             chainTimerId = window.setTimeout(() => {
@@ -381,6 +426,8 @@ export const backToGamePicker = () => {
   stopGameVoice()
   useGameStore.setState((prev) => ({
     activeGameId: null,
+    activeRecordId: null,
+    activeRecordCreatedAt: null,
     gameState: null,
     aiThinking: false,
     errorText: null,
@@ -408,6 +455,8 @@ export const startGame = (gameId: GameId) => {
   useGameStore.setState({
     drawerOpen: true,
     activeGameId: plugin.id,
+    activeRecordId: createId(),
+    activeRecordCreatedAt: Date.now(),
     gameState: initialState,
     aiThinking: false,
     errorText: null,
@@ -423,6 +472,53 @@ export const startGame = (gameId: GameId) => {
     void triggerAiTurn(plugin, nextEpoch)
   } else {
     startTurnCountdown(plugin, nextEpoch)
+  }
+}
+
+export const resumeGameRecord = (recordId: string) => {
+  const record = useGameHistory.getState().records.find((item) => item.id === recordId)
+  if (!record) {
+    return
+  }
+  const plugin = findRegisteredGame(record.gameId)
+  if (!plugin) {
+    return
+  }
+  abortPendingAiTurn()
+  stopGameVoice()
+  const locale = useSettings.getState().locale
+  const opponent = resolveActiveOpponent(plugin, record.state, locale)
+  const nextEpoch = useGameStore.getState().moveEpoch + 1
+
+  useGameStore.setState({
+    drawerOpen: true,
+    activeGameId: plugin.id,
+    activeRecordId: record.id,
+    activeRecordCreatedAt: record.createdAt,
+    gameState: record.state,
+    aiThinking: false,
+    errorText: null,
+    bubbleText: record.bubbleText || opponent.greeting,
+    thoughtText: record.thoughtText || '',
+    lastSpeechText: record.bubbleText || opponent.greeting,
+    lastVoice: opponent.preferredVoice,
+    turnSecondsLeft: plugin.turnTimeoutSec ?? null,
+    moveEpoch: nextEpoch,
+  })
+
+  if (plugin.getStatus(record.state) === 'playing') {
+    if (plugin.getTurn(record.state) === 'ai') {
+      void triggerAiTurn(plugin, nextEpoch)
+    } else {
+      startTurnCountdown(plugin, nextEpoch)
+    }
+  }
+}
+
+export const removeGameRecord = (recordId: string) => {
+  deleteGameHistoryRecord(recordId)
+  if (useGameStore.getState().activeRecordId === recordId) {
+    useGameStore.setState({ activeRecordId: createId(), activeRecordCreatedAt: Date.now() })
   }
 }
 
@@ -452,6 +548,7 @@ export const undoGameRound = () => {
     thoughtText: '',
     moveEpoch: nextEpoch,
   })
+  syncActiveHistoryRecord(plugin)
   startTurnCountdown(plugin, nextEpoch)
 }
 
@@ -510,6 +607,7 @@ export const submitPlayerGameMove = (move: unknown) => {
       turnSecondsLeft: null,
       moveEpoch: nextEpoch,
     })
+    syncActiveHistoryRecord(plugin)
     if (state.gameVoiceOn) {
       speakGameLine(endBubble, opponent.preferredVoice)
     }
@@ -522,6 +620,7 @@ export const submitPlayerGameMove = (move: unknown) => {
     turnSecondsLeft: plugin.turnTimeoutSec ?? null,
     moveEpoch: nextEpoch,
   })
+  syncActiveHistoryRecord(plugin)
 
   if (plugin.getTurn(result.nextState) === 'ai') {
     void triggerAiTurn(plugin, nextEpoch)

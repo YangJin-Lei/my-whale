@@ -1,7 +1,7 @@
 import { streamMessage } from '../api/client.js'
 import { useBalance } from '../balance.js'
 import type { MemoryScope } from '../persona/types.js'
-import { useSettings } from '../settings.js'
+import { getActiveApiKey, useSettings } from '../settings.js'
 import { buildExtractUserPrompt, EXTRACT_SYSTEM_PROMPT } from './extractPrompt.js'
 import { hasSensitiveInfo } from './sensitive.js'
 import { addMemory, deleteMemory, updateMemory, useMemoryStore } from './store.js'
@@ -148,7 +148,7 @@ export const runExtractNow = async (snapshot: ExtractSnapshot, manual = false): 
   if (!manual && !canRunAutoExtract(snapshot)) {
     return 0
   }
-  const { apiKey } = useSettings.getState()
+  const apiKey = getActiveApiKey()
   if (!apiKey || snapshot.turns.length < 2) {
     return 0
   }
