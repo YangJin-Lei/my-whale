@@ -298,6 +298,10 @@ export const getContextRounds = (history: Message[]): [UserMessage, AssistantMes
 /**
  * 把会话转成请求的 messages：只保留「提问 + 有回答的回复」成对的轮次，最后接上本轮提问。
  * 失败或没有回答的轮次不进上下文。续写时末尾再带上本轮 assistant。
+ *
+ * 前缀稳定性约束：
+ * - 压缩摘要按分段顺序放在最前面，每段一经生成永不改写，新压缩只在尾部追加新段；
+ * - latest_reminder 只向末尾追加快照，历史快照原样回放，绝不修改已发过的消息。
  */
 export const toRequestMessages = (
   history: Message[],
@@ -305,9 +309,12 @@ export const toRequestMessages = (
   prefix?: AssistantMessage,
   thinking = prefix?.thinking ?? false,
   latestReminder?: string,
-  prefixCacheStable = false
+  compactionSegments: string[] = []
 ): MessageParam[] => {
   const messages: MessageParam[] = []
+  for (const summary of compactionSegments) {
+    messages.push({ role: 'latest_reminder', content: `[早期对话摘要] ${summary}` })
+  }
   let previousReminder: string | undefined
   const appendReminder = (reminder: string | undefined) => {
     // 仅在当前分支首次出现或内容变化时插入快照；缺少快照的消息保持原有内容。
@@ -321,14 +328,10 @@ export const toRequestMessages = (
     if (!user.content && toFileBlocks(user.files).length === 0) {
       continue
     }
-    if (!prefixCacheStable) {
-      appendReminder(reply.latestReminder)
-    }
+    appendReminder(reply.latestReminder)
     messages.push(toUserParam(user), toAssistantParam(reply))
   }
-  if (!prefixCacheStable) {
-    appendReminder(latestReminder)
-  }
+  appendReminder(latestReminder)
   messages.push(toUserParam(question))
   if (prefix?.prefix) {
     const assistant = toAssistantParam(prefix, true, thinking)

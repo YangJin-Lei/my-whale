@@ -845,28 +845,20 @@ public class LocalCacheServer {
         return out;
     }
 
+    /**
+     * 客户端会把历史轮次里的 latest_reminder 快照原样回放以保证前缀逐字节稳定，
+     * 这里只做浅拷贝，绝不再改动消息顺序或删除任何历史消息。
+     */
     private static JSONArray stabilizePrefixMessages(JSONArray messages) {
         JSONArray out = new JSONArray();
         if (messages == null) {
             return out;
         }
-        int lastUser = -1;
-        for (int i = messages.length() - 1; i >= 0; i--) {
-            JSONObject m = messages.optJSONObject(i);
-            if (m != null && "user".equals(m.optString("role"))) {
-                lastUser = i;
-                break;
-            }
-        }
         for (int i = 0; i < messages.length(); i++) {
             JSONObject m = messages.optJSONObject(i);
-            if (m == null) {
-                continue;
+            if (m != null) {
+                out.put(m);
             }
-            if ("latest_reminder".equals(m.optString("role")) && i < lastUser - 1) {
-                continue;
-            }
-            out.put(m);
         }
         return out;
     }

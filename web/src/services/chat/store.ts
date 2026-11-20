@@ -17,7 +17,7 @@ import {
   clearCompactionController,
   estimateHistoryTokens,
   fitRequestHistory,
-  formatCompactionSystemBlock,
+  formatCompactionRecordsBlock,
   recallCompactedEvidence,
   registerCompactionController,
   runCompactionPass,
@@ -156,8 +156,6 @@ const sessionAccess = new Map<string, number>()
 const unsavedSessions = new Set<string>()
 /** 临时试聊会话，不保存到 IndexedDB 与侧边栏列表 */
 const ephemeralSessions = new Set<string>()
-/** 记录每个会话在哪个 memoryStore.version 下计算过 memoryIds */
-const sessionMemoryVersion = new Map<string, number>()
 /** 保存失败时保留原件，重试成功后才释放。 */
 const pendingFiles = new Map<string, db.StoredFile[]>()
 const deletingSessions = new Set<string>()
@@ -548,7 +546,6 @@ const cleanupEphemeralIfLeaving = (nextActiveId: string | null) => {
   }
   getStreamController(prevId)?.abort()
   ephemeralSessions.delete(prevId)
-  sessionMemoryVersion.delete(prevId)
   set((state) => ({
     sessionCache: Object.fromEntries(
       Object.entries(state.sessionCache).filter(([id]) => id !== prevId)
@@ -1183,23 +1180,22 @@ const waitForRetry = (attempt: number, signal: AbortSignal) =>
     signal.addEventListener('abort', onAbort, { once: true })
   })
 
-const EXPLICIT_SEARCH_INTENT_RE =
-  /(?:搜索|搜一下|查一下|帮我查|上网查|联网查|最新消息|最新新闻|今日新闻|实时动态)/i
+/**
+ * 冻结提示词版本。调整系统提示词结构（如移除动态时间、把压缩摘要移出 system）后递增，
+ * 让旧会话只重建一次，之后永久复用同一前缀。
+ */
+const FROZEN_PROMPT_VERSION = 2
 
-const resolveSessionSystemPrompt = (
-  sessionId: string,
-  query: string,
-  freezeForCache = false
-): string => {
+/**
+ * 系统提示词在会话首轮一次性冻结，之后永不重建：
+ * 时间、位置、压缩摘要、会话中新增的记忆一律走请求末尾增量，
+ * 保证发给 DeepSeek 的消息前缀逐字节稳定，KV 前缀缓存可持续命中。
+ */
+const resolveSessionSystemPrompt = (sessionId: string, query: string): string => {
   const session = getSession(sessionId)
-  const compactionBlock = useSettings.getState().compactionEnabled
-    ? formatCompactionSystemBlock(session?.compaction)
-    : ''
-  const withCompaction = compactionBlock !== ''
   if (
-    freezeForCache &&
     session?.persona?.frozenSystemPrompt &&
-    Boolean(session.persona.frozenWithCompaction) === withCompaction
+    session.persona.frozenPromptVersion === FROZEN_PROMPT_VERSION
   ) {
     return session.persona.frozenSystemPrompt
   }
@@ -1207,41 +1203,27 @@ const resolveSessionSystemPrompt = (
   const incognito = Boolean(session?.persona?.incognito)
   const memoryScope: MemoryScope = session?.persona?.memoryScope ?? 'global_and_local'
   let chosenMemories: Memory[] = []
+  let memoryIds = session?.persona?.memoryIds
+  let memoryVersion = session?.persona?.memoryVersion
+  let freshSelection = false
 
   if (memoryEnabled && !incognito && memoryScope !== 'local_only') {
     const { memories, version } = useMemoryStore.getState()
-    const cachedVersion = sessionMemoryVersion.get(sessionId)
-    const hasStableIds =
-      session?.persona?.memoryIds !== undefined &&
-      (cachedVersion === version || (cachedVersion === undefined && version === 0))
+    memoryVersion = version
+    const stableIds =
+      memoryIds !== undefined && session?.persona?.memoryVersion === version ? memoryIds : undefined
 
-    if (hasStableIds && session?.persona?.memoryIds) {
+    if (stableIds) {
       const byId = new Map(memories.filter((m) => m.enabled).map((m) => [m.id, m]))
-      chosenMemories = session.persona.memoryIds
-        .map((id) => byId.get(id))
-        .filter((m): m is Memory => Boolean(m))
-      sessionMemoryVersion.set(sessionId, version)
+      chosenMemories = stableIds.map((id) => byId.get(id)).filter((m): m is Memory => Boolean(m))
     } else {
       chosenMemories = selectMemories(memories, query)
-      const memoryIds = chosenMemories.map((m) => m.id)
-      sessionMemoryVersion.set(sessionId, version)
-      updateSession(sessionId, (current) => ({
-        ...current,
-        persona: {
-          personaId: current.persona?.personaId ?? null,
-          snapshot: current.persona?.snapshot ?? null,
-          ...current.persona,
-          memoryIds,
-        },
-      }))
-      persist(sessionId)
-      if (memoryIds.length > 0) {
-        void markMemoriesUsed(memoryIds)
-      }
+      memoryIds = chosenMemories.map((m) => m.id)
+      freshSelection = true
     }
   }
 
-  const basePrompt = buildSystemPrompt({
+  const frozen = buildSystemPrompt({
     persona: session?.persona?.snapshot ?? null,
     sessionNote: session?.persona?.note,
     memoryEnabled,
@@ -1249,27 +1231,28 @@ const resolveSessionSystemPrompt = (
     memoryScope,
     profile,
     memories: chosenMemories,
-    localMemories: session?.persona?.localMemories,
+    // 会话中新增的局部记忆只作为请求末尾增量，不写进冻结提示词。
+    localMemories: [],
     tunedMidSession: Boolean(
       session?.persona?.tunedMidSession || (session?.personaNotices?.length ?? 0) > 0
     ),
   })
-  const combinedBase = compactionBlock ? `${basePrompt}\n\n${compactionBlock}` : basePrompt
-  if (!freezeForCache) {
-    return combinedBase
-  }
-  const frozen = `${combinedBase}\n\n[会话环境] ${createLatestReminder(useSettings.getState())}`
   updateSession(sessionId, (current) => ({
     ...current,
     persona: {
       personaId: current.persona?.personaId ?? null,
       snapshot: current.persona?.snapshot ?? null,
       ...current.persona,
+      ...(memoryIds === undefined ? {} : { memoryIds }),
+      ...(memoryVersion === undefined ? {} : { memoryVersion }),
       frozenSystemPrompt: frozen,
-      frozenWithCompaction: withCompaction,
+      frozenPromptVersion: FROZEN_PROMPT_VERSION,
     },
   }))
   persist(sessionId)
+  if (freshSelection && memoryIds && memoryIds.length > 0) {
+    void markMemoriesUsed(memoryIds)
+  }
   return frozen
 }
 
@@ -1563,12 +1546,6 @@ export const clearSessionCompaction = (sessionId: string) => {
   updateSession(sessionId, (current) => ({
     ...current,
     compaction: undefined,
-    persona: current.persona
-      ? {
-          ...current.persona,
-          frozenSystemPrompt: undefined,
-        }
-      : undefined,
     updatedAt: Date.now(),
   }))
   persist(sessionId)
@@ -1597,12 +1574,6 @@ export const compactSessionNow = async (
       updateSession(sessionId, (current) => ({
         ...current,
         compaction: result.compaction,
-        persona: current.persona
-          ? {
-              ...current.persona,
-              frozenSystemPrompt: undefined,
-            }
-          : undefined,
         updatedAt: Date.now(),
       }))
       persist(sessionId)
@@ -1690,8 +1661,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         reply = { ...reply, latestReminder }
         updateReply(sessionId, reply)
         persist(sessionId)
-        const { cacheModeEnabled, compactionEnabled, compactionAuto, compactionLevel } =
-          useSettings.getState()
+        const { compactionEnabled, compactionAuto, compactionLevel } = useSettings.getState()
         const currentSession = getSession(sessionId)
         let activeHistory = prepared.history
         // 压缩总开关关闭时完全忽略已有压缩记录，按完整历史发送（前缀稳定，缓存友好）
@@ -1709,15 +1679,10 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             activeHistory = compacted.tailHistory
             activeCompaction = compacted.compaction
             if (compacted.changed && compacted.compaction) {
+              // 压缩结果只追加为不可变分段，不改写已冻结的系统提示词。
               updateSession(sessionId, (current) => ({
                 ...current,
                 compaction: compacted.compaction,
-                persona: current.persona
-                  ? {
-                      ...current.persona,
-                      frozenSystemPrompt: undefined,
-                    }
-                  : undefined,
               }))
               persist(sessionId)
             }
@@ -1747,10 +1712,24 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
                 COMPACTION_PRESETS[activeCompaction.level].evidenceBudget
               )
             : ''
-        const requestQuestion = recallBlock
+        // 关键事实属于易变内容，只拼在本轮提问末尾，绝不进入 system 或历史。
+        const recordsBlock = prepared.prefix ? '' : formatCompactionRecordsBlock(activeCompaction)
+        // 会话中新增的局部记忆同样只作为末尾增量下发，避免改写已缓存的前缀。
+        const localMemories = currentSession?.persona?.localMemories ?? []
+        const memoryBlock =
+          !prepared.prefix &&
+          useSettings.getState().memoryEnabled &&
+          !currentSession?.persona?.incognito &&
+          localMemories.length > 0
+            ? `[本会话记忆]\n${localMemories
+                .map((m, index) => `${index + 1}. ${m.content.trim()}`)
+                .join('\n')}`
+            : ''
+        const tailBlocks = [recallBlock, recordsBlock, memoryBlock].filter(Boolean).join('\n\n')
+        const requestQuestion = tailBlocks
           ? {
               ...prepared.question,
-              content: `${recallBlock}\n\n${prepared.question.content}`,
+              content: `${tailBlocks}\n\n${prepared.question.content}`,
             }
           : prepared.question
 
@@ -1760,15 +1739,9 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           prepared.prefix,
           initial.thinking ?? false,
           latestReminder,
-          cacheModeEnabled
+          activeCompaction?.segments.map((segment) => segment.summary)
         )
-        const systemPrompt = resolveSessionSystemPrompt(
-          sessionId,
-          prepared.question.content,
-          cacheModeEnabled
-        )
-        const explicitSearch =
-          cacheModeEnabled && EXPLICIT_SEARCH_INTENT_RE.test(prepared.question.content)
+        const systemPrompt = resolveSessionSystemPrompt(sessionId, prepared.question.content)
         const events = streamMessage(
           useSettings.getState().apiKey ?? '',
           {
@@ -1777,7 +1750,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             messages,
             thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
             safety_check: SAFETY_CHECK,
-            tools: serverTools(Boolean(initial.search) || explicitSearch),
+            tools: serverTools(Boolean(initial.search)),
             ...(titleRequests.has(controller) ? { title: { enabled: true } } : {}),
           },
           controller.signal,

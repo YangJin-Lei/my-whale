@@ -434,21 +434,10 @@ fn send_http(stream: &mut TcpStream, status: u16, ct: &str, body: &[u8]) {
     let _ = stream.flush();
 }
 
+/// 客户端会把历史轮次里的 latest_reminder 快照原样回放以保证前缀逐字节稳定，
+/// 这里只做浅拷贝，绝不再改动消息顺序或删除任何历史消息。
 fn stabilize_messages_prefix(messages: Vec<Value>) -> Vec<Value> {
-    let last_user = messages
-        .iter()
-        .rposition(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"));
     messages
-        .into_iter()
-        .enumerate()
-        .filter(|(idx, m)| {
-            if m.get("role").and_then(|r| r.as_str()) == Some("latest_reminder") {
-                return last_user.map(|u| *idx + 1 >= u).unwrap_or(true);
-            }
-            true
-        })
-        .map(|(_, m)| m)
-        .collect()
 }
 
 fn handle_tcp_client(mut stream: TcpStream, client: reqwest::Client, cache: Arc<MemoryToolCache>) {

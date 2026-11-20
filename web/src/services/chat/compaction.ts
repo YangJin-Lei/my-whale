@@ -506,27 +506,16 @@ const isCompactionValidForRounds = (
   return idx > 0
 }
 
-export const formatCompactionSystemBlock = (compaction: SessionCompaction | undefined): string => {
-  if (!compaction) {
+/**
+ * 压缩摘要按不可变分段回放到 messages 开头（见 reply.ts），关键事实则属于易变内容，
+ * 只拼在本轮提问末尾，绝不写入 system，避免每次压缩都让整段前缀缓存失效。
+ */
+export const formatCompactionRecordsBlock = (compaction: SessionCompaction | undefined): string => {
+  if (!compaction || compaction.records.length === 0) {
     return ''
   }
-  const hasRecords = compaction.records.length > 0
-  const hasSegments = compaction.segments.length > 0
-  if (!hasRecords && !hasSegments) {
-    return ''
-  }
-  const parts: string[] = [
-    `[长期上下文压缩记忆 · 档位:${compaction.level}（以下内容来自更早对话的真实提炼，请视作完整背景延续）]`,
-  ]
-  if (hasRecords) {
-    const recLines = compaction.records.map((r) => `- [${r.category}] ${r.content}`)
-    parts.push(`关键事实与约束:\n${recLines.join('\n')}`)
-  }
-  if (hasSegments) {
-    const segLines = compaction.segments.map((s, i) => `${i + 1}. (${s.roundCount}轮) ${s.summary}`)
-    parts.push(`更早阶段摘要:\n${segLines.join('\n')}`)
-  }
-  return parts.join('\n\n')
+  const lines = compaction.records.map((r) => `- [${r.category}] ${r.content}`)
+  return `[长期对话关键事实 · 档位:${compaction.level}]\n${lines.join('\n')}`
 }
 
 const extractQueryTerms = (query: string): string[] => {

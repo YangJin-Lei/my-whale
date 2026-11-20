@@ -97,27 +97,14 @@ function makeTurnKey(sessionKey, rawText) {
 }
 
 /**
- * 保证发往上游模型的历史消息前缀逐字节稳定：
- * - 剔除历史轮次之间穿插的易变 `latest_reminder` 块，避免打断 DeepSeek KV Prefix Cache；
- * - 保留末尾最新 `latest_reminder`（若有）以及全部 `image` / `document` 附件块。
+ * 客户端会把历史轮次里的 `latest_reminder` 快照原样回放以保证前缀逐字节稳定，
+ * 这里只做浅拷贝，绝不再改动消息顺序或删除任何历史消息。
  */
 function stabilizeMessagesForPrefixCache(messages) {
   if (!Array.isArray(messages)) {
     return []
   }
-  let lastUserIdx = -1
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    if (messages[i]?.role === 'user') {
-      lastUserIdx = i
-      break
-    }
-  }
-  return messages.filter((msg, idx) => {
-    if (msg?.role !== 'latest_reminder') {
-      return true
-    }
-    return idx >= lastUserIdx - 1
-  })
+  return messages.map((msg) => (msg && typeof msg === 'object' ? { ...msg } : msg))
 }
 
 function appendGroundingToLastUserMessage(messages, groundingNote) {
