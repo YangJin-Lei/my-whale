@@ -36,7 +36,6 @@ type Settings = {
   profile: string
   memoryEnabled: boolean
   memoryAuto: boolean
-  memoryNoticeShown: boolean
   defaultPersonaId: string
   petEnabled: boolean
   activePetId: string
@@ -67,7 +66,6 @@ const KEYS = {
   profile: 'chat-demo:profile',
   memoryEnabled: 'chat-demo:memory-enabled',
   memoryAuto: 'chat-demo:memory-auto',
-  memoryNoticeShown: 'chat-demo:memory-notice-shown',
   defaultPersonaId: 'chat-demo:default-persona-id',
   petEnabled: 'chat-demo:pet-enabled',
   activePetId: 'chat-demo:active-pet-id',
@@ -174,7 +172,6 @@ export const useSettings = create<Settings>(() => ({
   profile: read(KEYS.profile) ?? '',
   memoryEnabled: read(KEYS.memoryEnabled) !== 'false',
   memoryAuto: read(KEYS.memoryAuto) !== 'false',
-  memoryNoticeShown: read(KEYS.memoryNoticeShown) === 'true',
   defaultPersonaId: read(KEYS.defaultPersonaId) || 'builtin-default',
   petEnabled: read(KEYS.petEnabled) !== 'false',
   activePetId: read(KEYS.activePetId) || 'nailong',
@@ -410,9 +407,6 @@ export const applySettingsSnapshot = (raw: Partial<SettingsSnapshot>) => {
   if (typeof raw.memoryAuto === 'boolean') {
     setMemoryAuto(raw.memoryAuto)
   }
-  if (typeof raw.memoryNoticeShown === 'boolean') {
-    setMemoryNoticeShown(raw.memoryNoticeShown)
-  }
   if (typeof raw.defaultPersonaId === 'string') {
     setDefaultPersonaId(raw.defaultPersonaId)
   }
@@ -477,11 +471,6 @@ export const setMemoryEnabled = (memoryEnabled: boolean) => {
 export const setMemoryAuto = (memoryAuto: boolean) => {
   write(KEYS.memoryAuto, String(memoryAuto))
   useSettings.setState({ memoryAuto })
-}
-
-export const setMemoryNoticeShown = (memoryNoticeShown: boolean) => {
-  write(KEYS.memoryNoticeShown, String(memoryNoticeShown))
-  useSettings.setState({ memoryNoticeShown })
 }
 
 export const setDefaultPersonaId = (defaultPersonaId: string) => {

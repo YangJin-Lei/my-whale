@@ -19,7 +19,6 @@ import { MobileHeader } from '../components/session/MobileHeader.js'
 import { Welcome } from '../components/session/Welcome.js'
 import { ensureApiKey } from '../components/settings/settingsDialogState.js'
 import { Onboarding } from '../components/onboarding/Onboarding.js'
-import { MemoryToast } from '../components/memory/MemoryToast.js'
 import { SettingsDialog } from '../components/settings/SettingsDialog.js'
 import { bindBalanceAutoRefresh } from '../services/balance.js'
 import { checkForUpdates } from '../services/update.js'
@@ -186,7 +185,6 @@ export const App = () => {
       <Onboarding />
       <SettingsDialog />
       <PetOverlay />
-      <MemoryToast />
       <Toast />
     </>
   )

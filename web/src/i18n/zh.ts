@@ -307,11 +307,6 @@ export const zh = {
   memoryAutoLabel: '自动记忆',
   memoryAutoDesc: '默认开启，对话结束时后台提炼长期记忆（会产生少量 API 费用）',
   memoryAutoSavedToast: '已记住 {count} 条新信息',
-  memoryToastView: '查看',
-  memoryFirstNotice:
-    'my-whale 会自动记住你的偏好，让对话更懂你。这会产生少量 API 费用，可以在 设置 → 记忆 中关闭。',
-  memoryFirstNoticeAck: '知道了',
-  memoryFirstNoticeSettings: '去设置',
   profileExport: '导出人设与记忆',
   profileImport: '导入人设与记忆',
   profileImportFailed: '文件格式无效，请选择 my-whale 导出的 JSON 文件',
@@ -467,7 +462,8 @@ export const zh = {
   compactionNoticeTitle: '注意事项与档位推荐',
   compactionNoticeCost:
     '不删本地记录；压缩会额外消耗摘要请求，并让缓存重建一次。普通短对话（约 6 万 token 以内）无需压缩。',
-  compactionNoticeLight: '• 轻度：长时间闲聊、角色扮演、小说/长文写作、持续写代码，保留原文细节最多',
+  compactionNoticeLight:
+    '• 轻度：长时间闲聊、角色扮演、小说/长文写作、持续写代码，保留原文细节最多',
   compactionNoticeMedium: '• 中度：上传了多份 PDF/文件或粘贴大段文本、多主题问答、资料整理',
   compactionNoticeHeavy: '• 重度：接近上下文上限、超长期连续对话或极致省钱，早期细节会变成摘要',
   compactionRunNow: '立即压缩',

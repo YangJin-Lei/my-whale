@@ -324,11 +324,6 @@ export const en = {
   memoryAutoDesc:
     'On by default; extracts durable facts after chats (uses a small amount of API credits)',
   memoryAutoSavedToast: 'Remembered {count} new item(s)',
-  memoryToastView: 'View',
-  memoryFirstNotice:
-    'my-whale automatically remembers your preferences to personalize chats. This uses a small amount of API credits and can be turned off in Settings → Memory.',
-  memoryFirstNoticeAck: 'Got it',
-  memoryFirstNoticeSettings: 'Settings',
   profileExport: 'Export personas & memory',
   profileImport: 'Import personas & memory',
   profileImportFailed: 'Invalid profile JSON file exported from my-whale',

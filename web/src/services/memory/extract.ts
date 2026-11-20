@@ -1,17 +1,10 @@
-import { create } from 'zustand'
 import { streamMessage } from '../api/client.js'
 import { useBalance } from '../balance.js'
 import type { MemoryScope } from '../persona/types.js'
 import { useSettings } from '../settings.js'
 import { buildExtractUserPrompt, EXTRACT_SYSTEM_PROMPT } from './extractPrompt.js'
 import { hasSensitiveInfo } from './sensitive.js'
-import {
-  addMemory,
-  deleteMemory,
-  restoreMemoriesBatch,
-  updateMemory,
-  useMemoryStore,
-} from './store.js'
+import { addMemory, deleteMemory, updateMemory, useMemoryStore } from './store.js'
 import type { Memory, MemoryCategory } from './types.js'
 
 export type ExtractTurn = { role: 'user' | 'assistant'; content: string }
@@ -25,56 +18,10 @@ export type ExtractSnapshot = {
   turns: ExtractTurn[]
 }
 
-type UndoBatch = {
-  count: number
-  addedIds: string[]
-  previous: Memory[]
-  showCostNotice: boolean
-}
-
-type MemoryToastState = {
-  batch: UndoBatch | null
-}
-
-export const useMemoryToast = create<MemoryToastState>(() => ({
-  batch: null,
-}))
-
-let toastTimer: number | null = null
 let localMemorySink: ((sessionId: string, contents: string[]) => void) | null = null
 
 export const registerLocalMemorySink = (sink: (sessionId: string, contents: string[]) => void) => {
   localMemorySink = sink
-}
-
-export const dismissMemoryToast = () => {
-  if (toastTimer !== null) {
-    window.clearTimeout(toastTimer)
-    toastTimer = null
-  }
-  useMemoryToast.setState({ batch: null })
-}
-
-export const undoMemoryToastBatch = async () => {
-  const batch = useMemoryToast.getState().batch
-  if (!batch) {
-    return
-  }
-  dismissMemoryToast()
-  await restoreMemoriesBatch({ addedIds: batch.addedIds, previous: batch.previous })
-}
-
-const showExtractToast = (batch: UndoBatch) => {
-  if (toastTimer !== null) {
-    window.clearTimeout(toastTimer)
-  }
-  useMemoryToast.setState({ batch })
-  if (!batch.showCostNotice) {
-    toastTimer = window.setTimeout(() => {
-      useMemoryToast.setState({ batch: null })
-      toastTimer = null
-    }, 10_000)
-  }
 }
 
 const DEBOUNCE_MS = 5_000
@@ -201,7 +148,7 @@ export const runExtractNow = async (snapshot: ExtractSnapshot, manual = false): 
   if (!manual && !canRunAutoExtract(snapshot)) {
     return 0
   }
-  const { apiKey, memoryNoticeShown } = useSettings.getState()
+  const { apiKey } = useSettings.getState()
   if (!apiKey || snapshot.turns.length < 2) {
     return 0
   }
@@ -257,8 +204,6 @@ export const runExtractNow = async (snapshot: ExtractSnapshot, manual = false): 
     }
 
     const byId = new Map(existingGlobal.map((m) => [m.id, m]))
-    const addedIds: string[] = []
-    const previousMap = new Map<string, Memory>()
     let changeCount = 0
 
     for (const item of ops) {
@@ -285,7 +230,6 @@ export const runExtractNow = async (snapshot: ExtractSnapshot, manual = false): 
           sourceSessionId: sessionId,
         })
         if (created) {
-          addedIds.push(created.id)
           changeCount += 1
         }
       } else if (
@@ -298,7 +242,6 @@ export const runExtractNow = async (snapshot: ExtractSnapshot, manual = false): 
         if (!prev || !content || hasSensitiveInfo(content)) {
           continue
         }
-        previousMap.set(prev.id, prev)
         await updateMemory(prev.id, { content })
         changeCount += 1
       } else if (op === 'delete' && typeof item.id === 'string') {
@@ -306,20 +249,11 @@ export const runExtractNow = async (snapshot: ExtractSnapshot, manual = false): 
         if (!prev) {
           continue
         }
-        previousMap.set(prev.id, prev)
         await deleteMemory(prev.id)
         changeCount += 1
       }
     }
 
-    if (changeCount > 0) {
-      showExtractToast({
-        count: changeCount,
-        addedIds,
-        previous: [...previousMap.values()],
-        showCostNotice: !memoryNoticeShown,
-      })
-    }
     return changeCount
   } catch (error) {
     if (manual) {
