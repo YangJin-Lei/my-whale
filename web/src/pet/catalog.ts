@@ -10,14 +10,22 @@ import shisaUrl from '../assets/pet/chiikawa/shisa.webp'
 import tashiUrl from '../assets/pet/chiikawa/tashi.webp'
 import usagiUrl from '../assets/pet/chiikawa/usagi.webp'
 import libChangeUrl from '../assets/pet/library/change.webp'
+import libCreamRatUrl from '../assets/pet/library/cream-rat.webp'
 import libDounaiUrl from '../assets/pet/library/dounai.webp'
+import libGgbondUrl from '../assets/pet/library/ggbond.webp'
+import libGugaUrl from '../assets/pet/library/guga.webp'
+import libHutaoUrl from '../assets/pet/library/hutao.webp'
+import libIcebunNoirUrl from '../assets/pet/library/icebun-noir.webp'
 import libIkunUrl from '../assets/pet/library/ikun.webp'
+import libIkunnnUrl from '../assets/pet/library/ikunnn.webp'
 import libKenanUrl from '../assets/pet/library/kenan.webp'
 import libLuluUrl from '../assets/pet/library/lulu.webp'
 import libNailongUrl from '../assets/pet/library/nailong.webp'
 import libPikachuUrl from '../assets/pet/library/pikachu.webp'
 import libTuziUrl from '../assets/pet/library/tuzi.webp'
+import libXiaobaiUrl from '../assets/pet/library/xiaobai.webp'
 import libXiaoxinUrl from '../assets/pet/library/xiaoxin.webp'
+import libYuexinmiaoUrl from '../assets/pet/library/yuexinmiao.webp'
 import type { TtsVoice } from '../services/api/speech.js'
 import type { Locale } from '../services/settings.js'
 import { type CustomPetRecord, useCustomPetsStore } from './customPets.js'
@@ -191,12 +199,103 @@ export const PET_CATALOG: readonly PetDefinition[] = [
   {
     id: 'xiaohuang',
     categoryId: 'library',
-    name: { 'zh-CN': '小黄', 'en-US': 'Xiaohuang' },
+    name: { 'zh-CN': '豆奶', 'en-US': 'Dounai' },
     spriteUrl: libDounaiUrl,
     voicePack: { id: 'xiaohuang', preferredVoice: 'stella' },
     promptHint: {
-      'zh-CN': '你是「小黄」，棕色短发、圆滚可爱又精力满满的3D玩偶女孩，反应机灵直接。',
-      'en-US': 'You are Xiaohuang—bright, bouncy, curious, and always ready to help.',
+      'zh-CN': '你是「豆奶」，棕色短发、圆滚可爱又精力满满的3D玩偶女孩，反应机灵直接。',
+      'en-US': 'You are Dounai—bright, bouncy, curious, and always ready to help.',
+    },
+  },
+  {
+    id: 'cream-rat',
+    categoryId: 'library',
+    name: { 'zh-CN': '奶油鼠', 'en-US': 'Cream Rat' },
+    spriteUrl: libCreamRatUrl,
+    voicePack: { id: 'cream-rat', preferredVoice: 'stella' },
+    promptHint: {
+      'zh-CN': '你是「奶油鼠」，奶白色绒毛、红宝石眼睛与粉嫩耳朵的小白鼠，性格温柔乖巧。',
+      'en-US': 'You are Cream Rat—a soft painterly cream-white rat with gentle charm.',
+    },
+  },
+  {
+    id: 'ggbond',
+    categoryId: 'library',
+    name: { 'zh-CN': '猪猪侠', 'en-US': 'GG Bond' },
+    spriteUrl: libGgbondUrl,
+    voicePack: { id: 'ggbond', preferredVoice: 'tide' },
+    promptHint: {
+      'zh-CN':
+        '你是「猪猪侠」，身穿红色英雄战衣的小英雄，自信臭屁又热心仗义、爱吹牛但关键时刻靠得住。',
+      'en-US': 'You are GG Bond—a tiny red-suited hero, cheeky, confident, and loyal.',
+    },
+  },
+  {
+    id: 'guga',
+    categoryId: 'library',
+    name: { 'zh-CN': '咕嘎', 'en-US': 'Guga' },
+    spriteUrl: libGugaUrl,
+    voicePack: { id: 'guga', preferredVoice: 'stella' },
+    promptHint: {
+      'zh-CN': '你是「咕嘎」，穿着企鹅兜帽衫的圆脸萌妹，声音软乎乎的、爱亲近同伴。',
+      'en-US': 'You are Guga—a cozy penguin-hoodie chibi companion who is warm and friendly.',
+    },
+  },
+  {
+    id: 'hutao',
+    categoryId: 'library',
+    name: { 'zh-CN': '胡桃', 'en-US': 'Hu Tao' },
+    spriteUrl: libHutaoUrl,
+    voicePack: { id: 'hutao', preferredVoice: 'stella' },
+    promptHint: {
+      'zh-CN':
+        '你是「胡桃」，往生堂第七十七代堂主，古灵精怪、活泼俏皮、爱作打油诗和搞怪，说话灵动有戏。',
+      'en-US': 'You are Hu Tao—mischievous, poetic, spirited, and playfully mysterious.',
+    },
+  },
+  {
+    id: 'icebun-noir',
+    categoryId: 'library',
+    name: { 'zh-CN': '冰包黑糖', 'en-US': 'Icebun Noir' },
+    spriteUrl: libIcebunNoirUrl,
+    voicePack: { id: 'icebun-noir', preferredVoice: 'stella' },
+    promptHint: {
+      'zh-CN': '你是「冰包黑糖」，高冷优雅、平时爱斜眼发呆吃面包、偶尔偷笑的傲娇丸子头小少女。',
+      'en-US': 'You are Icebun Noir—aloof, cool-headed, secretly soft, and subtly expressive.',
+    },
+  },
+  {
+    id: 'ikun-pet',
+    categoryId: 'library',
+    name: { 'zh-CN': '鸡哥 ikun', 'en-US': 'Chicken ikun' },
+    spriteUrl: libIkunnnUrl,
+    voicePack: { id: 'ikun-pet', preferredVoice: 'tide' },
+    promptHint: {
+      'zh-CN': '你是「鸡哥 ikun」，中分背带裤、喜欢唱跳篮球的梗系桌宠，开口自带幽默节目效果。',
+      'en-US': 'You are Chicken ikun—a playful basketball meme companion full of rhythm and jokes.',
+    },
+  },
+  {
+    id: 'xiaobai_webp',
+    categoryId: 'library',
+    name: { 'zh-CN': '线条小狗小白', 'en-US': 'Xiaobai' },
+    spriteUrl: libXiaobaiUrl,
+    voicePack: { id: 'xiaobai_webp', preferredVoice: 'stella' },
+    promptHint: {
+      'zh-CN':
+        '你是「线条小狗小白」，软乎乎黏人的白色线条小狗，口头禅是“我们天下第一好~”，超级治愈。',
+      'en-US': 'You are Xiaobai—an affectionate line-art puppy who is loyal and cheerful.',
+    },
+  },
+  {
+    id: 'yuexinmiao',
+    categoryId: 'library',
+    name: { 'zh-CN': '月薪喵', 'en-US': 'Yuexin Miao' },
+    spriteUrl: libYuexinmiaoUrl,
+    voicePack: { id: 'yuexinmiao', preferredVoice: 'stella' },
+    promptHint: {
+      'zh-CN': '你是「月薪喵」，白色打工猫咪，眼里透着打工人摸鱼与按点下班的执念，幽默又接地气。',
+      'en-US': 'You are Yuexin Miao—a witty office cat living for payday and clock-out time.',
     },
   },
   {
@@ -304,6 +403,7 @@ export const usePetCatalog = (): PetDefinition[] => {
 }
 
 export const findPetById = (id: string | null | undefined): PetDefinition => {
+  const normalized = id === 'dounai' ? 'xiaohuang' : id
   const all = getAllPets()
-  return all.find((item) => item.id === id) ?? PET_CATALOG[0]
+  return all.find((item) => item.id === normalized) ?? PET_CATALOG[0]
 }
