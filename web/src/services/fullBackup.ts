@@ -5,6 +5,11 @@ import {
   upsertCustomPets,
   type CustomPetRecord,
 } from '../pet/customPets.js'
+import {
+  exportPetApiConfigsSnapshot,
+  exportPetApiSecretsMap,
+  restorePetApiBackup,
+} from '../pet/chatroom.js'
 import { getGameOpponentSnapshot, restoreGameOpponentSnapshot } from '../game/opponents.js'
 import { getGameHistorySnapshot, restoreGameHistorySnapshot } from '../game/history.js'
 import { formatDate } from '../utils/format.js'
@@ -154,6 +159,7 @@ const deriveAesKey = async (
 type EncryptedSecretsPayload = {
   apiKey: string | null
   customApiKey?: string | null
+  petApiSecrets?: Record<string, string>
 }
 
 const encryptSecrets = async (
@@ -197,6 +203,15 @@ const decryptSecrets = async (
     const parsed = JSON.parse(new TextDecoder().decode(plainBuf)) as {
       apiKey?: unknown
       customApiKey?: unknown
+      petApiSecrets?: unknown
+    }
+    const petApiSecrets: Record<string, string> = {}
+    if (typeof parsed.petApiSecrets === 'object' && parsed.petApiSecrets !== null) {
+      for (const [k, v] of Object.entries(parsed.petApiSecrets as Record<string, unknown>)) {
+        if (typeof v === 'string' && v.trim()) {
+          petApiSecrets[k] = v.trim()
+        }
+      }
     }
     return {
       apiKey:
@@ -205,6 +220,7 @@ const decryptSecrets = async (
         typeof parsed.customApiKey === 'string' && parsed.customApiKey.trim()
           ? parsed.customApiKey.trim()
           : null,
+      petApiSecrets,
     }
   } catch {
     throw new FullBackupError('wrongPassword')
@@ -328,7 +344,10 @@ export const exportFullBackup = async (options?: {
   const settingsState = useSettings.getState()
   const apiKey = settingsState.apiKey?.trim() ?? ''
   const customApiKey = settingsState.customApiKey?.trim() ?? ''
-  const hasSecrets = Boolean(password && (apiKey || customApiKey))
+  const petApiSecrets = exportPetApiSecretsMap()
+  const hasSecrets = Boolean(
+    password && (apiKey || customApiKey || Object.keys(petApiSecrets).length > 0)
+  )
 
   const attachmentsMeta: AttachmentMetaEntry[] = []
   const attachmentEntries: { name: string; blob: Blob }[] = []
@@ -379,6 +398,7 @@ export const exportFullBackup = async (options?: {
     gameOpponent: getGameOpponentSnapshot(),
     gameHistory: getGameHistorySnapshot(),
     petPosition: readPetPosition(),
+    petApiConfigs: exportPetApiConfigsSnapshot(),
   }
 
   const entries: { name: string; blob: Blob }[] = [
@@ -399,6 +419,7 @@ export const exportFullBackup = async (options?: {
         {
           apiKey: apiKey || null,
           customApiKey: customApiKey || null,
+          petApiSecrets,
         },
         password
       ),
@@ -500,6 +521,7 @@ export const restoreFullBackup = async (
     gameOpponent?: unknown
     gameHistory?: unknown
     petPosition?: unknown
+    petApiConfigs?: unknown
   }
   let manifest: FullBackupManifestV1 | null = null
   let settingsData: SettingsBundle | null = null
@@ -569,6 +591,7 @@ export const restoreFullBackup = async (
 
   let recoveredApiKey: string | null = null
   let recoveredCustomApiKey: string | null = null
+  let recoveredPetApiSecrets: Record<string, string> | null = null
   if (secretsBlob && !options.skipSecrets) {
     options.onProgress?.({ phase: 'decrypting', current: 1, total: 3 })
     const pw = options.password?.trim() ?? ''
@@ -578,6 +601,7 @@ export const restoreFullBackup = async (
     const decrypted = await decryptSecrets(secretsBlob, pw, manifest.encryption.iterations)
     recoveredApiKey = decrypted.apiKey
     recoveredCustomApiKey = decrypted.customApiKey ?? null
+    recoveredPetApiSecrets = decrypted.petApiSecrets ?? null
   }
 
   options.onProgress?.({ phase: 'committing', current: 2, total: 3 })
@@ -615,6 +639,11 @@ export const restoreFullBackup = async (
     if (settingsData.petPosition) {
       writePetPosition(settingsData.petPosition)
     }
+    if (settingsData.petApiConfigs || recoveredPetApiSecrets) {
+      restorePetApiBackup(settingsData.petApiConfigs, recoveredPetApiSecrets)
+    }
+  } else if (recoveredPetApiSecrets) {
+    restorePetApiBackup(null, recoveredPetApiSecrets)
   }
 
   if (recoveredApiKey) {

@@ -5,10 +5,12 @@ import logoUrl from '../../assets/logo.png'
 import {
   IconGamepadOutline16,
   IconPanelLeftOutline16,
+  IconPetOutline16,
   IconSettingsOutline16,
   NewChatIcon,
 } from '../base/icons.js'
 import { openGameDrawer } from '../../game/store.js'
+import { openPetChatroom } from '../../pet/chatroom.js'
 import { setSiderCollapsed } from '../../services/settings.js'
 import { dismissUpdateBanner, startInAppUpdate, useUpdateStore } from '../../services/update.js'
 import { groupSessions } from '../../services/chat/sessionGroups.js'
@@ -138,6 +140,19 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
           </div>
         ) : null}
         <BalanceBadge variant="sider" />
+        <button
+          type="button"
+          className={styles.settings}
+          onClick={() => {
+            closeMobileSider()
+            openPetChatroom()
+          }}
+        >
+          <span className={styles.settingsIcon}>
+            <IconPetOutline16 />
+          </span>
+          <span className={styles.settingsLabel}>{t('petRoomTitle')}</span>
+        </button>
         <button
           type="button"
           className={styles.settings}

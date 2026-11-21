@@ -283,6 +283,14 @@ export const verifyCustomApi = async (
   }
 }
 
+export type StreamApiOverride = {
+  provider: 'official' | 'custom'
+  protocol?: 'openai' | 'anthropic'
+  url?: string
+  apiKey?: string
+  model?: string
+}
+
 /**
  * POST /anthropic/v1/messages（stream: true），逐个产出流式事件，收到 message_stop 时结束。
  * ping、保活注释与无法解析的内容不产出；中止请求时抛出 signal 的 AbortError。
@@ -291,17 +299,20 @@ export async function* streamMessage(
   apiKey: string,
   body: CreateMessageRequest,
   signal: AbortSignal,
-  sessionId?: string
+  sessionId?: string,
+  apiOverride?: StreamApiOverride
 ): AsyncGenerator<MessageStreamEvent> {
   const settings = useSettings.getState()
-  if (settings.apiProvider === 'custom') {
-    const customUrl = settings.customApiUrl.trim()
-    const customKey = settings.customApiKey?.trim() || apiKey
-    const customModel = settings.customApiModel.trim() || body.model
+  const activeProvider = apiOverride?.provider ?? settings.apiProvider
+  if (activeProvider === 'custom') {
+    const customUrl = (apiOverride?.url ?? settings.customApiUrl).trim()
+    const customKey = (apiOverride?.apiKey ?? settings.customApiKey ?? '').trim() || apiKey
+    const customModel = (apiOverride?.model ?? settings.customApiModel).trim() || body.model
+    const customProtocol = apiOverride?.protocol ?? settings.customApiProtocol
     if (!customUrl || !customKey) {
       throw new ApiError('http', 'Missing custom API URL or API Key', 401)
     }
-    if (settings.customApiProtocol === 'openai') {
+    if (customProtocol === 'openai') {
       try {
         yield* streamCustomOpenAiMessage(
           { url: customUrl, apiKey: customKey, model: customModel },
@@ -360,15 +371,21 @@ export async function* streamMessage(
     throw new ApiError('interrupted', '')
   }
 
+  const effectiveOfficialKey = (apiOverride?.apiKey ?? '').trim() || apiKey
+  const effectiveBody =
+    apiOverride?.provider === 'official' && apiOverride.model?.trim()
+      ? { ...body, model: apiOverride.model.trim() as CreateMessageRequest['model'] }
+      : body
+
   const response = await request(`${getAnthropicBaseUrl()}/messages`, {
     method: 'POST',
     headers: {
-      ...anthropicHeaders(apiKey, hasFile(body)),
+      ...anthropicHeaders(effectiveOfficialKey, hasFile(effectiveBody)),
       ...(sessionId ? { 'x-session-id': sessionId } : {}),
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
     },
-    body: JSON.stringify({ ...body, stream: true }),
+    body: JSON.stringify({ ...effectiveBody, stream: true }),
     signal,
   })
   const contentType = response.headers.get('Content-Type') ?? ''

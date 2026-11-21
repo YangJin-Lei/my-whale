@@ -14,6 +14,7 @@ import { closeSearchPanel } from '../components/search/searchPanelState.js'
 import { GameDrawer } from '../game/GameDrawer.js'
 import { useGameStore } from '../game/store.js'
 import { PetOverlay } from '../pet/PetOverlay.js'
+import { PetChatroomDrawer } from '../pet/PetChatroomDrawer.js'
 import { SessionView } from '../components/session/SessionView.js'
 import { MobileHeader } from '../components/session/MobileHeader.js'
 import { Welcome } from '../components/session/Welcome.js'
@@ -41,7 +42,11 @@ const PRESET_BG_STYLES: Record<Exclude<ChatBgPreset, 'none' | 'custom'>, string>
   mint: 'linear-gradient(160deg, rgba(16, 185, 129, 0.13) 0%, rgba(59, 130, 246, 0.08) 100%)',
 }
 
-const resolveChatBgStyle = (preset: ChatBgPreset, image: string): CSSProperties | null => {
+const resolveChatBgStyle = (
+  preset: ChatBgPreset,
+  image: string,
+  opacity: number
+): CSSProperties | null => {
   if (preset === 'none') {
     return null
   }
@@ -53,7 +58,7 @@ const resolveChatBgStyle = (preset: ChatBgPreset, image: string): CSSProperties 
       backgroundImage: `url(${image})`,
       backgroundSize: 'cover',
       backgroundPosition: 'center',
-      opacity: 0.24,
+      opacity,
     }
   }
   return { backgroundImage: PRESET_BG_STYLES[preset] }
@@ -65,7 +70,8 @@ export const App = () => {
   const locale = useSettings((state) => state.locale)
   const chatBgPreset = useSettings((state) => state.chatBgPreset)
   const chatBgImage = useSettings((state) => state.chatBgImage)
-  const chatBgStyle = resolveChatBgStyle(chatBgPreset, chatBgImage)
+  const chatBgOpacity = useSettings((state) => state.chatBgOpacity)
+  const chatBgStyle = resolveChatBgStyle(chatBgPreset, chatBgImage, chatBgOpacity)
   // 移动端侧边栏以独立抽屉管理开合状态
   const siderCollapsed = useSettings((state) => state.siderCollapsed) && !isMobile
   const ready = useChatStore((state) => state.ready)
@@ -185,6 +191,7 @@ export const App = () => {
       <Onboarding />
       <SettingsDialog />
       <PetOverlay />
+      <PetChatroomDrawer />
       <Toast />
     </>
   )

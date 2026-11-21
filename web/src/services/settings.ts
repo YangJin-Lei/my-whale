@@ -38,6 +38,7 @@ type Settings = {
   fontScale: number
   chatBgPreset: ChatBgPreset
   chatBgImage: string
+  chatBgOpacity: number
   thinking: boolean
   search: boolean
   siderCollapsed: boolean
@@ -47,6 +48,9 @@ type Settings = {
   defaultPersonaId: string
   petEnabled: boolean
   activePetId: string
+  desktopPetIds: string[]
+  chatroomExtraPetIds: string[]
+  petSize: number
   updateAccelerate: boolean
   updateMirror: string
   cacheModeEnabled: boolean
@@ -74,6 +78,7 @@ const KEYS = {
   fontScale: 'chat-demo:font-scale',
   chatBgPreset: 'chat-demo:chat-bg-preset',
   chatBgImage: 'chat-demo:chat-bg-image',
+  chatBgOpacity: 'chat-demo:chat-bg-opacity',
   thinking: 'chat-demo:thinking',
   search: 'chat-demo:search',
   siderCollapsed: 'chat-demo:sider-collapsed',
@@ -83,6 +88,9 @@ const KEYS = {
   defaultPersonaId: 'chat-demo:default-persona-id',
   petEnabled: 'chat-demo:pet-enabled',
   activePetId: 'chat-demo:active-pet-id',
+  desktopPetIds: 'chat-demo:desktop-pet-ids',
+  chatroomExtraPetIds: 'chat-demo:chatroom-extra-pet-ids',
+  petSize: 'chat-demo:pet-size',
   updateAccelerate: 'chat-demo:update-accelerate',
   updateMirror: 'chat-demo:update-mirror',
   cacheModeEnabled: 'chat-demo:cache-mode',
@@ -175,6 +183,64 @@ const initialApiProvider = (): ApiProvider =>
 const initialCustomApiProtocol = (): CustomApiProtocol =>
   read(KEYS.customApiProtocol) === 'anthropic' ? 'anthropic' : 'openai'
 
+export const PET_SIZE_MIN = 32
+export const PET_MAX_DESKTOP = 3
+export const PET_CHATROOM_MAX = 8
+
+export const getMaxPetWidth = (
+  viewportWidth = typeof window === 'undefined' ? 390 : window.innerWidth
+) => Math.max(120, Math.round(viewportWidth / 2))
+
+export const clampPetSize = (size: number, viewportWidth?: number) =>
+  Math.max(PET_SIZE_MIN, Math.min(getMaxPetWidth(viewportWidth), Math.round(size)))
+
+const initialChatBgOpacity = (): number => {
+  const n = Number(read(KEYS.chatBgOpacity))
+  return Number.isFinite(n) && n >= 0.05 && n <= 1 ? n : 0.24
+}
+
+const initialPetSize = (): number => {
+  const n = Number(read(KEYS.petSize))
+  if (Number.isFinite(n) && n >= PET_SIZE_MIN) {
+    return clampPetSize(n)
+  }
+  return 72
+}
+
+const parseIdArray = (raw: string | null): string[] => {
+  if (!raw) {
+    return []
+  }
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+    return Array.from(
+      new Set(
+        parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      )
+    )
+  } catch {
+    return []
+  }
+}
+
+const initialDesktopPetIds = (fallbackActive: string): string[] => {
+  const stored = parseIdArray(read(KEYS.desktopPetIds)).slice(0, PET_MAX_DESKTOP)
+  return stored.length > 0 ? stored : [fallbackActive || 'nailong']
+}
+
+const initialChatroomExtraPetIds = (desktopIds: string[]): string[] => {
+  const desktopSet = new Set(desktopIds)
+  return parseIdArray(read(KEYS.chatroomExtraPetIds))
+    .filter((id) => !desktopSet.has(id))
+    .slice(0, Math.max(0, PET_CHATROOM_MAX - desktopIds.length))
+}
+
+const initialDesktopActive = read(KEYS.activePetId) || 'nailong'
+const initialDesktopList = initialDesktopPetIds(initialDesktopActive)
+
 export const useSettings = create<Settings>(() => ({
   apiKey: read(KEYS.apiKey),
   apiProvider: initialApiProvider(),
@@ -192,6 +258,7 @@ export const useSettings = create<Settings>(() => ({
   fontScale: initialFontScale(),
   chatBgPreset: initialChatBgPreset(),
   chatBgImage: read(KEYS.chatBgImage) ?? '',
+  chatBgOpacity: initialChatBgOpacity(),
   thinking: read(KEYS.thinking) === 'true',
   search: read(KEYS.search) === 'true',
   siderCollapsed: read(KEYS.siderCollapsed) === 'true',
@@ -200,7 +267,10 @@ export const useSettings = create<Settings>(() => ({
   memoryAuto: read(KEYS.memoryAuto) !== 'false',
   defaultPersonaId: read(KEYS.defaultPersonaId) || 'builtin-default',
   petEnabled: read(KEYS.petEnabled) !== 'false',
-  activePetId: read(KEYS.activePetId) || 'nailong',
+  activePetId: initialDesktopList[0] ?? 'nailong',
+  desktopPetIds: initialDesktopList,
+  chatroomExtraPetIds: initialChatroomExtraPetIds(initialDesktopList),
+  petSize: initialPetSize(),
   updateAccelerate:
     read(KEYS.updateAccelerate) !== null
       ? read(KEYS.updateAccelerate) === 'true'
@@ -318,6 +388,12 @@ export const setChatBgImage = (chatBgImage: string) => {
     write(KEYS.chatBgPreset, 'none')
     useSettings.setState({ chatBgPreset: 'none', chatBgImage: '' })
   }
+}
+
+export const setChatBgOpacity = (chatBgOpacity: number) => {
+  const clamped = Math.max(0.05, Math.min(1, Number(chatBgOpacity.toFixed(2))))
+  write(KEYS.chatBgOpacity, String(clamped))
+  useSettings.setState({ chatBgOpacity: clamped })
 }
 
 export const setApiKey = (apiKey: string | null) => {
@@ -480,6 +556,9 @@ export const applySettingsSnapshot = (raw: Partial<SettingsSnapshot>) => {
   ) {
     setChatBgPreset(raw.chatBgPreset)
   }
+  if (typeof raw.chatBgOpacity === 'number' && Number.isFinite(raw.chatBgOpacity)) {
+    setChatBgOpacity(raw.chatBgOpacity)
+  }
   if (typeof raw.thinking === 'boolean') {
     setThinking(raw.thinking)
   }
@@ -504,8 +583,18 @@ export const applySettingsSnapshot = (raw: Partial<SettingsSnapshot>) => {
   if (typeof raw.petEnabled === 'boolean') {
     setPetEnabled(raw.petEnabled)
   }
-  if (typeof raw.activePetId === 'string') {
+  if (Array.isArray(raw.desktopPetIds)) {
+    setDesktopPetIds(raw.desktopPetIds.filter((x): x is string => typeof x === 'string'))
+  } else if (typeof raw.activePetId === 'string') {
     setActivePetId(raw.activePetId)
+  }
+  if (Array.isArray(raw.chatroomExtraPetIds)) {
+    setChatroomExtraPetIds(
+      raw.chatroomExtraPetIds.filter((x): x is string => typeof x === 'string')
+    )
+  }
+  if (typeof raw.petSize === 'number' && Number.isFinite(raw.petSize)) {
+    setPetSize(raw.petSize)
   }
   if (typeof raw.updateAccelerate === 'boolean') {
     setUpdateAccelerate(raw.updateAccelerate)
@@ -596,9 +685,68 @@ export const setPetEnabled = (petEnabled: boolean) => {
   useSettings.setState({ petEnabled })
 }
 
+export const setDesktopPetIds = (rawIds: string[]) => {
+  const unique = Array.from(new Set(rawIds.map((id) => id.trim()).filter(Boolean))).slice(
+    0,
+    PET_MAX_DESKTOP
+  )
+  const next = unique.length > 0 ? unique : ['nailong']
+  const desktopSet = new Set(next)
+  const prunedExtra = useSettings
+    .getState()
+    .chatroomExtraPetIds.filter((id) => !desktopSet.has(id))
+    .slice(0, Math.max(0, PET_CHATROOM_MAX - next.length))
+  write(KEYS.desktopPetIds, JSON.stringify(next))
+  write(KEYS.activePetId, next[0])
+  write(KEYS.chatroomExtraPetIds, JSON.stringify(prunedExtra))
+  useSettings.setState({
+    desktopPetIds: next,
+    activePetId: next[0],
+    chatroomExtraPetIds: prunedExtra,
+  })
+}
+
+export const toggleDesktopPet = (petId: string): 'added' | 'removed' | 'full' | 'min' => {
+  const current = useSettings.getState().desktopPetIds
+  if (current.includes(petId)) {
+    if (current.length <= 1) {
+      return 'min'
+    }
+    setDesktopPetIds(current.filter((id) => id !== petId))
+    return 'removed'
+  }
+  if (current.length >= PET_MAX_DESKTOP) {
+    return 'full'
+  }
+  setDesktopPetIds([...current, petId])
+  return 'added'
+}
+
 export const setActivePetId = (activePetId: string) => {
-  write(KEYS.activePetId, activePetId || 'nailong')
-  useSettings.setState({ activePetId: activePetId || 'nailong' })
+  const clean = activePetId || 'nailong'
+  const current = useSettings.getState().desktopPetIds
+  const next = [clean, ...current.filter((id) => id !== clean)].slice(0, PET_MAX_DESKTOP)
+  setDesktopPetIds(next)
+}
+
+export const setChatroomExtraPetIds = (rawIds: string[]) => {
+  const state = useSettings.getState()
+  const desktopSet = new Set(state.desktopPetIds)
+  const maxExtra = Math.max(0, PET_CHATROOM_MAX - state.desktopPetIds.length)
+  const next = Array.from(new Set(rawIds.map((id) => id.trim()).filter(Boolean)))
+    .filter((id) => !desktopSet.has(id))
+    .slice(0, maxExtra)
+  write(KEYS.chatroomExtraPetIds, JSON.stringify(next))
+  useSettings.setState({ chatroomExtraPetIds: next })
+}
+
+export const getChatroomPetIds = (state: Settings = useSettings.getState()): string[] =>
+  [...state.desktopPetIds, ...state.chatroomExtraPetIds].slice(0, PET_CHATROOM_MAX)
+
+export const setPetSize = (petSize: number) => {
+  const clamped = clampPetSize(petSize)
+  write(KEYS.petSize, String(clamped))
+  useSettings.setState({ petSize: clamped })
 }
 
 export const setUpdateAccelerate = (updateAccelerate: boolean) => {

@@ -20,6 +20,7 @@ import {
   importHistory,
 } from '../../services/chat/backup.js'
 import { exportBlobFile } from '../../services/fileExport.js'
+import { clearDrawGuessCache, clearGameDecisionCache } from '../../game/history.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { useChatStore } from '../../services/chat/store.js'
 import { regionCodes, getRegionName, provinces } from '../../services/location.js'
@@ -46,6 +47,7 @@ import {
   setCompactionEnabled,
   setGameCacheEnabled,
   setChatBgImage,
+  setChatBgOpacity,
   setChatBgPreset,
   setFontFollowSystem,
   setFontScale,
@@ -608,6 +610,8 @@ const CacheModeSetting = () => {
   }
 
   const handleClearCache = async () => {
+    clearGameDecisionCache()
+    clearDrawGuessCache()
     const ok = await clearRemoteCacheBackend(cacheBackendUrl).catch(() => false)
     if (ok) {
       showToast({ key: 'settingsCacheCleared' })
@@ -890,6 +894,7 @@ const ChatBackgroundSetting = () => {
   const t = useTranslate()
   const chatBgPreset = useSettings((state) => state.chatBgPreset)
   const chatBgImage = useSettings((state) => state.chatBgImage)
+  const chatBgOpacity = useSettings((state) => state.chatBgOpacity)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const handleUploadBg = async (file: File) => {
@@ -966,6 +971,23 @@ const ChatBackgroundSetting = () => {
           </button>
         ) : null}
       </div>
+      {chatBgImage ? (
+        <div className={styles.cacheUrlRow}>
+          <span className={styles.cacheSubLabel}>
+            {t('settingsChatBgOpacity')} ({Math.round(chatBgOpacity * 100)}%)
+          </span>
+          <input
+            type="range"
+            min={5}
+            max={100}
+            step={1}
+            aria-label={t('settingsChatBgOpacity')}
+            className={styles.fontSlider}
+            value={Math.round(chatBgOpacity * 100)}
+            onChange={(event) => setChatBgOpacity(Number(event.target.value) / 100)}
+          />
+        </div>
+      ) : null}
     </div>
   )
 }

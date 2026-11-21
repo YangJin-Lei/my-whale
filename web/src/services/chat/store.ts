@@ -1877,3 +1877,80 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
     }
   }
 }
+
+export type PetChatroomSaveEntry = {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  createdAt: number
+  personaName?: string
+  personaAvatar?: string
+}
+
+/** 将多桌宠聊天室记录保存或更新到 IndexedDB 正式会话，便于回看、导出与跨端备份 */
+export const savePetChatroomSession = (params: {
+  sessionId?: string | null
+  title: string
+  entries: PetChatroomSaveEntry[]
+}): string | null => {
+  if (params.entries.length === 0) {
+    return null
+  }
+  const now = Date.now()
+  const existing =
+    params.sessionId && get().sessions.some((item) => item.id === params.sessionId)
+      ? params.sessionId
+      : null
+  const id = existing ?? createId()
+
+  const messages: Message[] = params.entries.map((entry, idx) => {
+    const parentId = idx === 0 ? null : params.entries[idx - 1].id
+    const nextId = idx < params.entries.length - 1 ? params.entries[idx + 1].id : undefined
+    if (entry.role === 'user') {
+      return {
+        id: entry.id,
+        role: 'user',
+        content: entry.content,
+        files: [],
+        createdAt: entry.createdAt,
+        parentId,
+        ...(nextId ? { selectedChildId: nextId } : {}),
+      } satisfies UserMessage
+    }
+    return {
+      id: entry.id,
+      role: 'assistant',
+      createdAt: entry.createdAt,
+      model: MODEL,
+      prefix: false,
+      status: 'done',
+      personaName: entry.personaName,
+      personaAvatar: entry.personaAvatar,
+      blocks: [{ type: 'text', text: entry.content }],
+      parentId,
+      ...(nextId ? { selectedChildId: nextId } : {}),
+    } satisfies AssistantMessage
+  })
+
+  const prevSession = existing ? getSession(existing) : undefined
+  const session: Session = {
+    id,
+    title: params.title.trim() || '桌宠聊天室',
+    createdAt: prevSession?.createdAt ?? params.entries[0]?.createdAt ?? now,
+    updatedAt: now,
+    messages,
+    rootMessageId: messages[0]?.id ?? null,
+    persona: prevSession?.persona,
+  }
+
+  touchSession(id)
+  set((state) => {
+    const filtered = state.sessions.filter((s) => s.id !== id)
+    return {
+      sessions: sortSessions([toSessionSummary(session), ...filtered]),
+      sessionCache: { ...state.sessionCache, [id]: session },
+    }
+  })
+  persist(id)
+  return id
+}

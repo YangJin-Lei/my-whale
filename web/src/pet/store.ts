@@ -15,7 +15,9 @@ type PetTurn = {
 
 type PetStoreState = {
   panelOpen: boolean
+  activeChatPetId: string | null
   mood: NaiwaMood
+  petMoods: Record<string, NaiwaMood>
   replyText: string
   streaming: boolean
   errorText: string | null
@@ -34,23 +36,32 @@ const clearMoodReset = () => {
 
 export const usePetStore = create<PetStoreState>(() => ({
   panelOpen: false,
+  activeChatPetId: null,
   mood: 'wave',
+  petMoods: {},
   replyText: '',
   streaming: false,
   errorText: null,
   turns: [],
 }))
 
-export const setPetMood = (mood: NaiwaMood) => {
+export const setPetMood = (mood: NaiwaMood, petId?: string) => {
   clearMoodReset()
-  usePetStore.setState({ mood })
+  usePetStore.setState((prev) => ({
+    mood,
+    ...(petId ? { petMoods: { ...prev.petMoods, [petId]: mood } } : {}),
+  }))
 }
 
-export const togglePetPanel = () => {
+export const togglePetPanel = (petId?: string) => {
   clearMoodReset()
-  const next = !usePetStore.getState().panelOpen
+  const state = usePetStore.getState()
+  const samePet = !petId || !state.activeChatPetId || state.activeChatPetId === petId
+  const next = state.panelOpen && samePet ? false : true
+  const resolvedPet = petId ?? state.activeChatPetId ?? useSettings.getState().activePetId
   usePetStore.setState((prev) => ({
     panelOpen: next,
+    activeChatPetId: resolvedPet,
     mood: prev.streaming ? prev.mood : next ? 'wait' : 'idle',
   }))
 }
@@ -74,7 +85,8 @@ export const stopPetSession = () => {
 
 const resolvePetSystemPrompt = (): string => {
   const { locale, profile, activePetId } = useSettings.getState()
-  const pet = findPetById(activePetId)
+  const targetId = usePetStore.getState().activeChatPetId ?? activePetId
+  const pet = findPetById(targetId)
   const chatState = useChatStore.getState()
   const customPersonas = usePersonaStore.getState().personas
   const activeSession =

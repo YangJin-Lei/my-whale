@@ -19,6 +19,7 @@ import {
   setOpenExternal,
 } from '../services/links.js'
 import { flushPendingExtracts } from '../services/memory/extract.js'
+import { closePetChatroom, hydratePetApiSecrets, usePetChatroom } from '../pet/chatroom.js'
 import { setNativeSecureStorage } from '../services/secureStorage.js'
 import { hasConfiguredActiveApi, hydrateNativeApiKey, useSettings } from '../services/settings.js'
 import {
@@ -147,6 +148,7 @@ export const setupNative = () => {
         SecureStorage.status ? SecureStorage.status() : Promise.resolve({ available: true }),
     })
     void hydrateNativeApiKey()
+    void hydratePetApiSecrets()
     void AppUpdater.getAppInfo?.()
       .then((info) => {
         if (info?.versionName) {
@@ -215,6 +217,10 @@ export const setupNative = () => {
     // 1. 优先关闭抽屉 / 搜索面板 / 设置弹窗 / 其他顶层 Modal
     if (useMobileSider.getState().open) {
       closeMobileSider()
+      return
+    }
+    if (usePetChatroom.getState().drawerOpen) {
+      closePetChatroom()
       return
     }
     if (useSearchPanel.getState().entry !== null) {
