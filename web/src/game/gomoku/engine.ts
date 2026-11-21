@@ -370,9 +370,19 @@ const buildPrompt = (
           'Pick a legal empty (.) coordinate and return JSON.',
         ].join('\n\n')
 
+  const moveLog = state.history
+    .map((m) => `${m.side === 'player' ? 'B' : 'W'}:${coordToLabel(m)}`)
+    .join(' ')
+  const stablePrefix = state.history.length
+    ? locale === 'zh-CN'
+      ? `对局落子记录（按时间顺序，B=玩家黑，W=你白）：${moveLog}`
+      : `Move log (chronological, B=player Black, W=you White): ${moveLog}`
+    : undefined
+
   return {
     systemPrompt,
     userPrompt,
+    stablePrefix,
     legalExamples: nearby.slice(0, 12),
   }
 }

@@ -1,12 +1,18 @@
 import { useSettings, type Locale } from '../services/settings.js'
-import { streamMessage } from '../services/api/client.js'
+import { ApiError, streamMessage } from '../services/api/client.js'
 import type { MessageParam } from '../services/api/types.js'
 import { buildDecisionCacheKey, getCachedGameDecision, saveCachedGameDecision } from './history.js'
 import type { AiTurnDecision, GameOpponent, GamePlugin } from './types.js'
 
 const MAX_MOVE_ATTEMPTS = 3
 const MAX_CONTROL_USES = 2
-const DEFAULT_TIMEOUT_MS = 65_000
+/** 长时间无任何流式数据才判定断流；深度思考会持续下发 thinking_delta */
+const DEFAULT_IDLE_TIMEOUT_MS = 90_000
+/** 单回合最长等待，避免真正挂死 */
+const DEFAULT_MAX_TURN_MS = 8 * 60_000
+/** 网络抖动/断流时自动重试次数，避免熄屏回来必须手动点重试 */
+const MAX_TRANSPORT_RETRIES = 1
+const TRANSPORT_RETRY_DELAY_MS = 900
 
 type RawDecisionJson = {
   move?: unknown
@@ -63,9 +69,9 @@ const callDeepSeekTurn = async ({
   messages,
   thinking,
   signal,
-  timeoutMs,
+  deadline,
+  idleTimeoutMs,
   locale,
-  sessionId,
   onThinkingUpdate,
 }: {
   apiKey: string
@@ -73,15 +79,22 @@ const callDeepSeekTurn = async ({
   messages: MessageParam[]
   thinking: boolean
   signal: AbortSignal
-  timeoutMs: number
+  deadline: number
+  idleTimeoutMs: number
   locale: Locale
-  sessionId: string
   onThinkingUpdate?: (snippet: string) => void
 }): Promise<{ rawText: string; rawThinking: string }> => {
   const controller = new AbortController()
   const onAbort = () => controller.abort()
   signal.addEventListener('abort', onAbort, { once: true })
-  const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
+
+  let timedOut = false
+  const abortForTimeout = () => {
+    timedOut = true
+    controller.abort()
+  }
+  let idleTimer = window.setTimeout(abortForTimeout, idleTimeoutMs)
+  const hardTimer = window.setTimeout(abortForTimeout, Math.max(4_000, deadline - Date.now()))
 
   let rawText = ''
   let rawThinking = ''
@@ -97,11 +110,12 @@ const callDeepSeekTurn = async ({
         thinking: { type: thinking ? 'enabled' : 'disabled' },
         safety_check: { level: 'high' },
       },
-      controller.signal,
-      sessionId
+      controller.signal
     )
 
     for await (const event of events) {
+      window.clearTimeout(idleTimer)
+      idleTimer = window.setTimeout(abortForTimeout, idleTimeoutMs)
       if (event.type !== 'content_block_delta') {
         continue
       }
@@ -118,11 +132,48 @@ const callDeepSeekTurn = async ({
     }
 
     return { rawText, rawThinking }
+  } catch (error) {
+    if (timedOut && !signal.aborted) {
+      throw new ApiError(
+        'interrupted',
+        locale === 'zh-CN' ? 'AI 思考超时，正在自动重试…' : 'AI turn timed out; retrying…'
+      )
+    }
+    throw error
   } finally {
-    window.clearTimeout(timeout)
+    window.clearTimeout(idleTimer)
+    window.clearTimeout(hardTimer)
     signal.removeEventListener('abort', onAbort)
   }
 }
+
+const isRetryableTransportError = (error: unknown): boolean =>
+  error instanceof ApiError &&
+  (error.kind === 'network' || error.kind === 'interrupted' || error.kind === 'stream')
+
+const waitBeforeRetry = (signal: AbortSignal): Promise<void> =>
+  new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'))
+      return
+    }
+    let timer = 0
+    const onAbort = () => {
+      window.clearTimeout(timer)
+      reject(new DOMException('Aborted', 'AbortError'))
+    }
+    timer = window.setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, TRANSPORT_RETRY_DELAY_MS)
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+
+/** 固定追加在系统提示词末尾，既压缩推理长度，也保持前缀稳定 */
+const reasoningStyleHint = (locale: Locale): string =>
+  locale === 'zh-CN'
+    ? '推理请控制在本轮 200 字以内，避免长篇展开；正文必须仍然是纯 JSON。'
+    : 'Keep internal reasoning under 150 words; the reply body must remain pure JSON.'
 
 /**
  * 由 DeepSeek 大模型决定每一步 AI 决策：
@@ -137,7 +188,7 @@ export const requestAiMoveFromLlm = async <TState, TMove>({
   thinking,
   locale,
   signal,
-  requestTimeoutMs = DEFAULT_TIMEOUT_MS,
+  requestTimeoutMs = DEFAULT_MAX_TURN_MS,
   onThinkingUpdate,
   onStateUpdate,
 }: {
@@ -153,8 +204,17 @@ export const requestAiMoveFromLlm = async <TState, TMove>({
   onStateUpdate?: (nextState: TState) => void
 }): Promise<AiTurnDecision<TMove>> => {
   const gameCacheEnabled = useSettings.getState().gameCacheEnabled
+  const promptPayload = plugin.buildAiPrompt(state, opponent, locale)
+  const systemPrompt = `${promptPayload.systemPrompt}\n\n${reasoningStyleHint(locale)}`
   const cacheKey = gameCacheEnabled
-    ? buildDecisionCacheKey(plugin.id, opponent.id, thinking, state)
+    ? buildDecisionCacheKey({
+        gameId: plugin.id,
+        opponentId: opponent.id,
+        locale,
+        thinking,
+        state,
+        systemPrompt,
+      })
     : null
   if (cacheKey) {
     const cached = getCachedGameDecision(cacheKey)
@@ -171,9 +231,10 @@ export const requestAiMoveFromLlm = async <TState, TMove>({
   }
 
   let currentState = state
-  const promptPayload = plugin.buildAiPrompt(currentState, opponent, locale)
-  const history: MessageParam[] = [{ role: 'user', content: promptPayload.userPrompt }]
-  const gameSessionId = `mywhale-game-${plugin.id}-${opponent.id}`
+  const firstUserContent = promptPayload.stablePrefix
+    ? `${promptPayload.stablePrefix}\n\n${promptPayload.userPrompt}`
+    : promptPayload.userPrompt
+  const history: MessageParam[] = [{ role: 'user', content: firstUserContent }]
 
   let latestThinkingTrace = ''
   const deadline = Date.now() + requestTimeoutMs
@@ -184,19 +245,37 @@ export const requestAiMoveFromLlm = async <TState, TMove>({
     if (signal.aborted) {
       throw new DOMException('Aborted', 'AbortError')
     }
-    const remainingMs = Math.max(4_000, deadline - Date.now())
 
-    const { rawText, rawThinking } = await callDeepSeekTurn({
-      apiKey,
-      systemPrompt: promptPayload.systemPrompt,
-      messages: history,
-      thinking,
-      signal,
-      timeoutMs: remainingMs,
-      locale,
-      sessionId: gameSessionId,
-      onThinkingUpdate,
-    })
+    let rawText = ''
+    let rawThinking = ''
+    let transportAttempt = 0
+    for (;;) {
+      try {
+        const response = await callDeepSeekTurn({
+          apiKey,
+          systemPrompt,
+          messages: history,
+          thinking,
+          signal,
+          deadline,
+          idleTimeoutMs: DEFAULT_IDLE_TIMEOUT_MS,
+          locale,
+          onThinkingUpdate,
+        })
+        rawText = response.rawText
+        rawThinking = response.rawThinking
+        break
+      } catch (error) {
+        if (signal.aborted) {
+          throw error
+        }
+        if (transportAttempt >= MAX_TRANSPORT_RETRIES || !isRetryableTransportError(error)) {
+          throw error
+        }
+        transportAttempt += 1
+        await waitBeforeRetry(signal)
+      }
+    }
     if (rawThinking.trim()) {
       latestThinkingTrace = rawThinking.trim()
     }

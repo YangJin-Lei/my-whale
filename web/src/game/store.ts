@@ -643,3 +643,26 @@ export const retryAiTurn = () => {
   useGameStore.setState({ moveEpoch: nextEpoch })
   void triggerAiTurn(plugin, nextEpoch)
 }
+
+/**
+ * 熄屏或切后台后，Android WebView 可能挂起网络请求并让本轮失败。
+ * 回到前台且仍轮到 AI 时自动续上，避免用户手动点重试。
+ */
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') {
+      return
+    }
+    const state = useGameStore.getState()
+    const plugin = findRegisteredGame(state.activeGameId)
+    if (!plugin || !state.gameState || state.aiThinking || !state.errorText) {
+      return
+    }
+    if (
+      plugin.getStatus(state.gameState) === 'playing' &&
+      plugin.getTurn(state.gameState) === 'ai'
+    ) {
+      retryAiTurn()
+    }
+  })
+}

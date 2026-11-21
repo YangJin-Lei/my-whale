@@ -531,9 +531,17 @@ const buildPrompt = (
           .filter(Boolean)
           .join('\n\n')
 
+  const moveLog = state.history.map((h) => `${h.side === 'player' ? 'R' : 'B'}:${h.ucci}`).join(' ')
+  const stablePrefix = state.history.length
+    ? locale === 'zh-CN'
+      ? `对局着法记录（按时间顺序，R=红方玩家，B=你黑方）：${moveLog}`
+      : `Move log (chronological, R=Red player, B=you Black): ${moveLog}`
+    : undefined
+
   return {
     systemPrompt,
     userPrompt,
+    stablePrefix,
     legalExamples: legalUcci.slice(0, 10),
   }
 }

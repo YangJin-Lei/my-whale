@@ -44,6 +44,11 @@ export type AiMovePromptPayload = {
   systemPrompt: string
   /** 当前完整棋/牌局状态、最近着法与明确格式说明 */
   userPrompt: string
+  /**
+   * 只增不改的稳定前缀（如完整落子记录）。
+   * 放在用户消息最前面，让相邻回合的请求共享尽可能长的字节前缀。
+   */
+  stablePrefix?: string
   /** 可选：供大模型参考或纠偏的合法着法示例 */
   legalExamples?: string[]
 }

@@ -101,8 +101,7 @@ export const WerewolfBoard = ({
           thinking: { type: thinkingMode ? 'enabled' : 'disabled' },
           safety_check: { level: 'high' },
         },
-        controller.signal,
-        'mywhale-game-werewolf'
+        controller.signal
       )
 
       for await (const ev of events) {

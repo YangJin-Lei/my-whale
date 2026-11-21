@@ -10,6 +10,13 @@ const MAX_HISTORY_RECORDS = 20
 const MAX_DECISION_ENTRIES = 80
 const MAX_DRAW_PUZZLES = 60
 
+/** 决策缓存协议版本：结构调整后递增，旧条目读取时自动淘汰 */
+const DECISION_CACHE_VERSION = 2
+/** 决策缓存有效期，过期的旧局面不再回放 */
+const DECISION_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+/** 题库缓存有效期，避免长期堆积过期 HTML */
+const DRAW_PUZZLE_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
 export type GameHistoryRecord = {
   id: string
   gameId: GameId
@@ -223,45 +230,85 @@ const fnv1a = (input: string): string => {
   return (hash >>> 0).toString(36)
 }
 
-export const buildDecisionCacheKey = (
-  gameId: GameId,
-  opponentId: string,
-  thinking: boolean,
+export type DecisionCacheKeyInput = {
+  gameId: GameId
+  opponentId: string
+  locale: Locale
+  thinking: boolean
   state: unknown
-): string => `${gameId}:${opponentId}:${thinking ? '1' : '0'}:${fnv1a(JSON.stringify(state) ?? '')}`
+  /** 实际下发给模型的系统提示词指纹，覆盖语言、人设与规则版本 */
+  systemPrompt: string
+}
+
+export const buildDecisionCacheKey = ({
+  gameId,
+  opponentId,
+  locale,
+  thinking,
+  state,
+  systemPrompt,
+}: DecisionCacheKeyInput): string =>
+  [
+    `v${DECISION_CACHE_VERSION}`,
+    gameId,
+    opponentId,
+    locale,
+    thinking ? '1' : '0',
+    fnv1a(systemPrompt),
+    fnv1a(JSON.stringify(state) ?? ''),
+  ].join(':')
+
+const isFreshDecisionEntry = (value: unknown, now: number): value is CachedDecisionEntry => {
+  const obj = asRecord(value)
+  return (
+    obj !== null &&
+    typeof obj.key === 'string' &&
+    obj.key.startsWith(`v${DECISION_CACHE_VERSION}:`) &&
+    obj.move !== undefined &&
+    typeof obj.thoughtSummary === 'string' &&
+    typeof obj.speech === 'string' &&
+    typeof obj.savedAt === 'number' &&
+    now - obj.savedAt <= DECISION_CACHE_TTL_MS
+  )
+}
+
+const readDecisionEntries = (now: number): CachedDecisionEntry[] => {
+  const raw = readStorageJson<unknown>(DECISION_CACHE_KEY, [])
+  if (!Array.isArray(raw)) {
+    return []
+  }
+  return raw
+    .filter((item) => isFreshDecisionEntry(item, now))
+    .map((item) => item as CachedDecisionEntry)
+}
 
 export const getCachedGameDecision = (cacheKey: string): CachedDecisionEntry | null => {
-  const list = readStorageJson<unknown>(DECISION_CACHE_KEY, [])
-  if (!Array.isArray(list)) {
+  const now = Date.now()
+  const entries = readDecisionEntries(now)
+  const hit = entries.find((item) => item.key === cacheKey)
+  if (!hit) {
     return null
   }
-  for (const item of list) {
-    const obj = asRecord(item)
-    if (
-      obj &&
-      obj.key === cacheKey &&
-      obj.move !== undefined &&
-      typeof obj.thoughtSummary === 'string' &&
-      typeof obj.speech === 'string'
-    ) {
-      return {
-        key: cacheKey,
-        move: obj.move,
-        thoughtSummary: obj.thoughtSummary,
-        speech: obj.speech,
-        savedAt: typeof obj.savedAt === 'number' ? obj.savedAt : Date.now(),
-      }
-    }
+  return {
+    key: hit.key,
+    move: hit.move,
+    thoughtSummary: hit.thoughtSummary,
+    speech: hit.speech,
+    savedAt: hit.savedAt,
   }
-  return null
 }
 
 export const saveCachedGameDecision = (entry: Omit<CachedDecisionEntry, 'savedAt'>): void => {
-  const raw = readStorageJson<unknown>(DECISION_CACHE_KEY, [])
-  const current = Array.isArray(raw) ? raw : []
-  const filtered = current.filter((item) => asRecord(item)?.key !== entry.key)
-  const next = [{ ...entry, savedAt: Date.now() }, ...filtered].slice(0, MAX_DECISION_ENTRIES)
+  const now = Date.now()
+  const current = readDecisionEntries(now)
+  const filtered = current.filter((item) => item.key !== entry.key)
+  const next = [{ ...entry, savedAt: now }, ...filtered].slice(0, MAX_DECISION_ENTRIES)
   writeStorageJson(DECISION_CACHE_KEY, next)
+}
+
+/** 清空 AI 决策回放缓存（不影响对局历史） */
+export const clearGameDecisionCache = (): void => {
+  writeStorageJson(DECISION_CACHE_KEY, [])
 }
 
 const readPuzzlePool = (): CachedDrawGuessPuzzle[] => {
@@ -269,6 +316,7 @@ const readPuzzlePool = (): CachedDrawGuessPuzzle[] => {
   if (!Array.isArray(raw)) {
     return []
   }
+  const now = Date.now()
   return raw
     .map((item) => asRecord(item))
     .filter(
@@ -277,7 +325,9 @@ const readPuzzlePool = (): CachedDrawGuessPuzzle[] => {
         typeof obj.answer === 'string' &&
         obj.answer.trim().length > 0 &&
         typeof obj.html === 'string' &&
-        obj.html.trim().length > 0
+        obj.html.trim().length > 0 &&
+        typeof obj.savedAt === 'number' &&
+        now - obj.savedAt <= DRAW_PUZZLE_TTL_MS
     )
     .map((obj) => ({
       answer: String(obj.answer).trim(),
@@ -314,4 +364,9 @@ export const pickCachedDrawGuessPuzzle = (usedIdioms: string[]): CachedDrawGuess
   }
   const index = Math.floor(Math.random() * available.length)
   return available[index] ?? null
+}
+
+/** 清空你画我猜题库缓存（不影响正在进行的对局） */
+export const clearDrawGuessCache = (): void => {
+  writeStorageJson(DRAW_PUZZLE_CACHE_KEY, [])
 }

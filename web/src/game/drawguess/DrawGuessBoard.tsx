@@ -273,7 +273,7 @@ export const DrawGuessBoard = ({
     }
   }
 
-  const STREAM_TIMEOUT_MS = 45_000
+  const STREAM_IDLE_TIMEOUT_MS = 90_000
 
   useEffect(() => () => abortRef.current?.abort(), [])
 
@@ -287,10 +287,15 @@ export const DrawGuessBoard = ({
     let timedOut = false
     const onParentAbort = () => localController.abort()
     signal.addEventListener('abort', onParentAbort, { once: true })
-    const timer = window.setTimeout(() => {
-      timedOut = true
-      localController.abort()
-    }, STREAM_TIMEOUT_MS)
+    let timer = 0
+    const armIdleTimer = () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        timedOut = true
+        localController.abort()
+      }, STREAM_IDLE_TIMEOUT_MS)
+    }
+    armIdleTimer()
 
     let text = ''
     let thought = ''
@@ -304,10 +309,10 @@ export const DrawGuessBoard = ({
           thinking: { type: thinkingMode ? 'enabled' : 'disabled' },
           safety_check: { level: 'high' },
         },
-        localController.signal,
-        'mywhale-game-draw_guess'
+        localController.signal
       )
       for await (const ev of events) {
+        armIdleTimer()
         if (ev.type !== 'content_block_delta') {
           continue
         }
