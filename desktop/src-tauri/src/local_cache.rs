@@ -478,7 +478,7 @@ fn handle_tcp_client(mut stream: TcpStream, client: reqwest::Client, cache: Arc<
     }
 
     if method == "OPTIONS" {
-        let opt = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET,POST,DELETE,OPTIONS\r\nAccess-Control-Allow-Headers: *\r\nContent-Length: 0\r\n\r\n";
+        let opt = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET,POST,DELETE,OPTIONS\r\nAccess-Control-Allow-Headers: *, authorization, x-target-url\r\nAccess-Control-Allow-Private-Network: true\r\nContent-Length: 0\r\n\r\n";
         let _ = stream.write_all(opt.as_bytes());
         let _ = stream.flush();
         return;

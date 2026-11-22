@@ -512,7 +512,15 @@ async function handlePassthrough(req, res, targetPath) {
 
 const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
-    res.writeHead(204, CORS_HEADERS)
+    const requested = req.headers['access-control-request-headers']
+    res.writeHead(204, {
+      ...CORS_HEADERS,
+      'Access-Control-Allow-Headers': requested
+        ? `${requested}, authorization, x-target-url`
+        : 'authorization, content-type, accept, x-api-key, anthropic-version, anthropic-beta, x-target-url',
+      'Access-Control-Allow-Private-Network': 'true',
+      'Access-Control-Max-Age': '600',
+    })
     res.end()
     return
   }

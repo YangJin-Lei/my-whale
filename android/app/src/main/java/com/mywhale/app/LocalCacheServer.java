@@ -1123,7 +1123,8 @@ public class LocalCacheServer {
             "HTTP/1.1 204 No Content\r\n"
                 + "Access-Control-Allow-Origin: *\r\n"
                 + "Access-Control-Allow-Methods: GET,POST,DELETE,OPTIONS\r\n"
-                + "Access-Control-Allow-Headers: *\r\n"
+                + "Access-Control-Allow-Headers: *, authorization, x-target-url\r\n"
+                + "Access-Control-Allow-Private-Network: true\r\n"
                 + "Content-Length: 0\r\n\r\n";
         out.write(resp.getBytes(StandardCharsets.UTF_8));
         out.flush();

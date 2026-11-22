@@ -178,6 +178,26 @@ export const fetchWithProxyFallback = async (
         headers: buildProxyHeaders(init.headers, targetUrl),
       })
     }
-    throw directError
+    const sameOrigin = typeof location !== 'undefined' ? location.origin : ''
+    if (/^https?:/.test(sameOrigin)) {
+      try {
+        const res = await fetch(`${sameOrigin}/api/proxy`, {
+          ...init,
+          headers: buildProxyHeaders(init.headers, targetUrl),
+        })
+        if (res.status !== 404 && res.status !== 405) {
+          return res
+        }
+      } catch (sameOriginError) {
+        if (init.signal?.aborted) {
+          throw sameOriginError
+        }
+      }
+    }
+    throw new TypeError(
+      useSettings.getState().locale === 'en-US'
+        ? 'Blocked by browser CORS. Start the local cache-server or use the desktop/mobile app.'
+        : '浏览器跨域限制，该接口不支持网页直连。请启动本地缓存服务（cache-server）或使用桌面/手机客户端。'
+    )
   }
 }

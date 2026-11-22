@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from '@rspack/cli'
@@ -14,6 +15,74 @@ const { version } = JSON.parse(
 const cssLoader = {
   loader: 'builtin:lightningcss-loader',
   options: { targets },
+}
+
+const PROXY_FORWARD_HEADERS = [
+  'authorization',
+  'x-api-key',
+  'anthropic-version',
+  'anthropic-beta',
+  'content-type',
+  'accept',
+]
+
+/** 开发服务器同源转发：绕过第三方 API 不支持浏览器跨域的问题 */
+const devApiProxy = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+  const rawTarget = req.headers['x-target-url']
+  const target = (Array.isArray(rawTarget) ? rawTarget[0] : rawTarget)?.trim() ?? ''
+  if (!/^https?:\/\//i.test(target) || target.includes('/api/proxy')) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: { message: 'Invalid X-Target-Url' } }))
+    return
+  }
+  let rawBody = ''
+  for await (const chunk of req) {
+    rawBody += Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk)
+  }
+  const headers: Record<string, string> = {}
+  for (const key of PROXY_FORWARD_HEADERS) {
+    const value = req.headers[key]
+    if (typeof value === 'string') {
+      headers[key] = value
+    }
+  }
+  const controller = new AbortController()
+  req.on('close', () => {
+    if (!res.writableEnded) {
+      controller.abort()
+    }
+  })
+  try {
+    const method = req.method ?? 'POST'
+    const upstream = await fetch(target, {
+      method,
+      headers,
+      body: method === 'GET' || method === 'HEAD' ? undefined : rawBody,
+      signal: controller.signal,
+    })
+    res.writeHead(upstream.status, {
+      'Content-Type': upstream.headers.get('content-type') ?? 'application/json',
+      'Cache-Control': 'no-cache',
+    })
+    if (upstream.body) {
+      const reader = upstream.body.getReader()
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) {
+          break
+        }
+        res.write(value)
+      }
+    }
+    res.end()
+  } catch (error) {
+    if (!res.headersSent) {
+      res.writeHead(502, { 'Content-Type': 'application/json' })
+    }
+    res.end(
+      JSON.stringify({ error: { message: error instanceof Error ? error.message : String(error) } })
+    )
+  }
 }
 
 type ConfigOptions = {
@@ -91,7 +160,18 @@ export const createConfig = ({
     }),
   ],
   performance: { hints: false },
-  devServer: { port: 8090, ...devServer },
+  devServer: {
+    port: 8090,
+    setupMiddlewares: (middlewares) => {
+      middlewares.unshift({
+        name: 'my-whale-api-proxy',
+        path: '/api/proxy',
+        middleware: devApiProxy,
+      })
+      return middlewares
+    },
+    ...devServer,
+  },
 })
 
 // eslint-disable-next-line import/no-default-export
