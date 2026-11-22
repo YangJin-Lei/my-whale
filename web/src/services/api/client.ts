@@ -160,6 +160,56 @@ const requestCustomProxy = async (url: string, init: RequestInit): Promise<Respo
   return response
 }
 
+const unsupportedAnthropicThinkingEndpoints = new Set<string>()
+
+const requestCustomAnthropic = async (
+  endpoint: string,
+  customKey: string,
+  customModel: string,
+  body: CreateMessageRequest,
+  stream: boolean,
+  signal?: AbortSignal
+): Promise<Response> => {
+  const headers = {
+    'x-api-key': customKey,
+    Authorization: `Bearer ${customKey}`,
+    'anthropic-version': '2023-06-01',
+    'Content-Type': 'application/json',
+    Accept: stream ? 'text/event-stream' : 'application/json',
+  }
+  const cacheKey = `${endpoint}::${customModel}`
+  const tryWithThinking =
+    body.thinking.type === 'enabled' && !unsupportedAnthropicThinkingEndpoints.has(cacheKey)
+  try {
+    return await requestCustomProxy(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(
+        buildCustomAnthropicPayload(body, customModel, stream, undefined, tryWithThinking)
+      ),
+      signal,
+    })
+  } catch (error) {
+    if (
+      tryWithThinking &&
+      error instanceof ApiError &&
+      error.kind === 'http' &&
+      (error.status === 400 || error.status === 422)
+    ) {
+      unsupportedAnthropicThinkingEndpoints.add(cacheKey)
+      return requestCustomProxy(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(
+          buildCustomAnthropicPayload(body, customModel, stream, undefined, false)
+        ),
+        signal,
+      })
+    }
+    throw error
+  }
+}
+
 export const request = async (url: string, init: RequestInit): Promise<Response> => {
   const { cacheModeEnabled, cacheBackendUrl } = useSettings.getState()
   const cacheOrigin = normalizeCacheBackendUrl(cacheBackendUrl)
@@ -303,18 +353,14 @@ export const createMessage = async (
         )
       }
       const endpoint = normalizeCustomEndpoint(customUrl, 'anthropic')
-      const response = await requestCustomProxy(endpoint, {
-        method: 'POST',
-        headers: {
-          'x-api-key': customKey,
-          Authorization: `Bearer ${customKey}`,
-          'anthropic-version': '2023-06-01',
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(buildCustomAnthropicPayload(resolvedBody, customModel, false)),
-        signal,
-      })
+      const response = await requestCustomAnthropic(
+        endpoint,
+        customKey,
+        customModel,
+        resolvedBody,
+        false,
+        signal
+      )
       const data = (await response.json()) as {
         content?: Array<{ type?: string; text?: string }>
       }
@@ -409,18 +455,14 @@ export async function* streamMessage(
       }
     }
     const endpoint = normalizeCustomEndpoint(customUrl, 'anthropic')
-    const response = await requestCustomProxy(endpoint, {
-      method: 'POST',
-      headers: {
-        'x-api-key': customKey,
-        Authorization: `Bearer ${customKey}`,
-        'anthropic-version': '2023-06-01',
-        'Content-Type': 'application/json',
-        Accept: 'text/event-stream',
-      },
-      body: JSON.stringify(buildCustomAnthropicPayload(resolvedBody, customModel, true)),
-      signal,
-    })
+    const response = await requestCustomAnthropic(
+      endpoint,
+      customKey,
+      customModel,
+      resolvedBody,
+      true,
+      signal
+    )
     const contentType = response.headers.get('Content-Type') ?? ''
     if (!response.body || !contentType.includes('text/event-stream')) {
       throw await readErrorResponse(response, 'protocol', '')

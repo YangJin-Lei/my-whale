@@ -110,7 +110,7 @@ const resolveCustomSystemPrompt = (body: CreateMessageRequest): string => {
     (hasChineseReminder || (systemParts.length > 0 && locale === 'zh-CN')) &&
     locale === 'zh-CN'
   ) {
-    systemParts.push('请始终使用中文进行思考和回复（除非用户明确要求使用其他语言）。')
+    systemParts.push('请始终使用中文回复（除非用户明确要求使用其他语言）。')
   }
   return systemParts.join('\n\n')
 }
@@ -169,14 +169,17 @@ export const buildCustomAnthropicPayload = (
   body: CreateMessageRequest,
   model: string,
   stream: boolean,
-  maxTokens?: number
+  maxTokens?: number,
+  includeThinking = false
 ) => {
   const systemPrompt = resolveCustomSystemPrompt(body)
+  const thinkingEnabled = includeThinking && body.thinking.type === 'enabled'
   return {
     model: model.trim() || body.model,
     ...(systemPrompt ? { system: systemPrompt } : {}),
     messages: sanitizeAnthropicMessages(body.messages),
-    max_tokens: maxTokens ?? 4096,
+    max_tokens: maxTokens ?? (thinkingEnabled ? 8192 : 4096),
+    ...(thinkingEnabled ? { thinking: { type: 'enabled', budget_tokens: 4096 } } : {}),
     stream,
   }
 }
@@ -227,6 +230,35 @@ const doCustomFetch = async (
     throw new CustomApiRequestError('http', await readCustomErrorMessage(response), response.status)
   }
   return response
+}
+
+const unsupportedThinkingEndpoints = new Set<string>()
+
+const doCustomOpenAiFetch = async (
+  endpoint: string,
+  model: string,
+  headers: Record<string, string>,
+  basePayload: Record<string, unknown>,
+  thinking: CreateMessageRequest['thinking'] | undefined,
+  signal?: AbortSignal
+): Promise<Response> => {
+  const cacheKey = `${endpoint}::${model}`
+  if (!thinking || unsupportedThinkingEndpoints.has(cacheKey)) {
+    return doCustomFetch(endpoint, headers, basePayload, signal)
+  }
+  try {
+    return await doCustomFetch(endpoint, headers, { ...basePayload, thinking }, signal)
+  } catch (error) {
+    if (
+      error instanceof CustomApiRequestError &&
+      error.kind === 'http' &&
+      (error.status === 400 || error.status === 422)
+    ) {
+      unsupportedThinkingEndpoints.add(cacheKey)
+      return doCustomFetch(endpoint, headers, basePayload, signal)
+    }
+    throw error
+  }
 }
 
 const readRecord = (value: unknown): Record<string, unknown> | null =>
@@ -331,20 +363,23 @@ export const createCustomOpenAiMessage = async (
   maxTokens?: number
 ): Promise<string> => {
   const endpoint = normalizeCustomEndpoint(config.url, 'openai')
+  const model = config.model.trim() || body.model
   const payload = {
-    model: config.model.trim() || body.model,
+    model,
     messages: buildOpenAiMessages(body),
     stream: false,
     ...(typeof maxTokens === 'number' ? { max_tokens: maxTokens } : {}),
   }
-  const response = await doCustomFetch(
+  const response = await doCustomOpenAiFetch(
     endpoint,
+    model,
     {
       Authorization: `Bearer ${config.apiKey}`,
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
     payload,
+    body.thinking,
     signal
   )
   const data = (await response.json()) as unknown
@@ -358,8 +393,9 @@ export async function* streamCustomOpenAiMessage(
 ): AsyncGenerator<MessageStreamEvent> {
   const endpoint = normalizeCustomEndpoint(config.url, 'openai')
   const model = config.model.trim() || body.model
-  const response = await doCustomFetch(
+  const response = await doCustomOpenAiFetch(
     endpoint,
+    model,
     {
       Authorization: `Bearer ${config.apiKey}`,
       'Content-Type': 'application/json',
@@ -370,6 +406,7 @@ export async function* streamCustomOpenAiMessage(
       messages: buildOpenAiMessages(body),
       stream: true,
     },
+    body.thinking,
     signal
   )
 

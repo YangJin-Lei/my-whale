@@ -27,9 +27,19 @@ describe('openaiCompat custom API helpers', () => {
     const payload = buildCustomAnthropicPayload(makeBody(), 'claude-test', true)
     expect(payload.system).toContain('默认系统设定')
     expect(payload.system).toContain('[早期对话摘要] 用户偏好简短回答')
-    expect(payload.system).toContain('请始终使用中文进行思考和回复')
+    expect(payload.system).toContain('请始终使用中文回复')
+    expect(payload.system).not.toContain('进行思考和回复')
     expect(payload.messages).toHaveLength(1)
     expect(payload.messages[0]?.role).toBe('user')
+
+    const withThinking = buildCustomAnthropicPayload(
+      makeBody(),
+      'claude-test',
+      true,
+      undefined,
+      true
+    )
+    expect(withThinking.thinking).toEqual({ type: 'enabled', budget_tokens: 4096 })
   })
 
   it('strips inline <think> tags from non-streaming OpenAI completion text', () => {
@@ -78,9 +88,11 @@ describe('openaiCompat custom API helpers', () => {
 
     const parsedReq = JSON.parse(capturedBody) as {
       messages: Array<{ role: string; content: string }>
+      thinking?: { type: string }
     }
     expect(parsedReq.messages[0]?.role).toBe('system')
-    expect(parsedReq.messages[0]?.content).toContain('请始终使用中文进行思考和回复')
+    expect(parsedReq.messages[0]?.content).toContain('请始终使用中文回复')
+    expect(parsedReq.thinking).toEqual({ type: 'enabled' })
 
     const thinkingText = events
       .filter((e) => e.type === 'content_block_delta' && e.delta.type === 'thinking_delta')
@@ -99,5 +111,52 @@ describe('openaiCompat custom API helpers', () => {
 
     expect(thinkingText).toBe('内部思考')
     expect(replyText).toBe('正式中文回复')
+  })
+
+  it('retries without thinking param if endpoint rejects it with 400 and caches fallback', async () => {
+    const calls: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: unknown, init?: RequestInit) => {
+        const body = typeof init?.body === 'string' ? init.body : ''
+        calls.push(body)
+        if (body.includes('"thinking"')) {
+          return new Response(
+            JSON.stringify({ error: { message: 'Unrecognized request argument: thinking' } }),
+            { status: 400, headers: { 'Content-Type': 'application/json' } }
+          )
+        }
+        return new Response(
+          'data: {"id":"2","choices":[{"index":0,"delta":{"content":"OK"}}]}\n\ndata: [DONE]\n\n',
+          { status: 200, headers: { 'Content-Type': 'text/event-stream' } }
+        )
+      })
+    )
+
+    const body = { ...makeBody(), thinking: { type: 'disabled' as const } }
+    const drained1: string[] = []
+    for await (const ev of streamCustomOpenAiMessage(
+      { url: 'https://strict-openai.example/v1', apiKey: 'sk-test', model: 'gpt-4o-mini' },
+      body,
+      new AbortController().signal
+    )) {
+      drained1.push(ev.type)
+    }
+    expect(drained1).toContain('message_stop')
+    expect(calls).toHaveLength(2)
+    expect(calls[0]).toContain('"thinking"')
+    expect(calls[1]).not.toContain('"thinking"')
+
+    const drained2: string[] = []
+    for await (const ev of streamCustomOpenAiMessage(
+      { url: 'https://strict-openai.example/v1', apiKey: 'sk-test', model: 'gpt-4o-mini' },
+      body,
+      new AbortController().signal
+    )) {
+      drained2.push(ev.type)
+    }
+    expect(drained2).toContain('message_stop')
+    expect(calls).toHaveLength(3)
+    expect(calls[2]).not.toContain('"thinking"')
   })
 })
