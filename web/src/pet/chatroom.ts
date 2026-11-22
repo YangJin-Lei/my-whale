@@ -65,10 +65,14 @@ export type PetChatroomMessage = {
   createdAt: number
 }
 
+export type PetChatroomSpeakMode = 'buzz' | 'sequential'
+
 type StoredRoomState = {
   roomId: string
   linkedSessionId: string | null
   autoIntervalSec: number
+  speakMode: PetChatroomSpeakMode
+  chaosRate: number
   messages: PetChatroomMessage[]
 }
 
@@ -76,6 +80,8 @@ type PetChatroomStoreState = {
   drawerOpen: boolean
   running: boolean
   autoIntervalSec: number
+  speakMode: PetChatroomSpeakMode
+  chaosRate: number
   countdownSec: number | null
   roomId: string
   linkedSessionId: string | null
@@ -103,6 +109,8 @@ const readStoredRoom = (): StoredRoomState => {
     roomId: createId(),
     linkedSessionId: null,
     autoIntervalSec: 12,
+    speakMode: 'buzz',
+    chaosRate: 0.3,
     messages: [],
   }
   if (typeof window === 'undefined') {
@@ -134,6 +142,11 @@ const readStoredRoom = (): StoredRoomState => {
         typeof parsed.autoIntervalSec === 'number' && parsed.autoIntervalSec >= 5
           ? Math.min(300, Math.round(parsed.autoIntervalSec))
           : 12,
+      speakMode: parsed.speakMode === 'sequential' ? 'sequential' : 'buzz',
+      chaosRate:
+        typeof parsed.chaosRate === 'number' && parsed.chaosRate >= 0 && parsed.chaosRate <= 1
+          ? parsed.chaosRate
+          : 0.3,
       messages,
     }
   } catch {
@@ -193,6 +206,8 @@ const writeStoredRoom = (state: PetChatroomStoreState) => {
       roomId: state.roomId,
       linkedSessionId: state.linkedSessionId,
       autoIntervalSec: state.autoIntervalSec,
+      speakMode: state.speakMode,
+      chaosRate: state.chaosRate,
       messages: state.messages.slice(-120),
     }
     window.localStorage.setItem(ROOM_STORAGE_KEY, JSON.stringify(payload))
@@ -223,6 +238,8 @@ export const usePetChatroom = create<PetChatroomStoreState>(() => ({
   drawerOpen: false,
   running: false,
   autoIntervalSec: initialRoom.autoIntervalSec,
+  speakMode: initialRoom.speakMode,
+  chaosRate: initialRoom.chaosRate,
   countdownSec: null,
   roomId: initialRoom.roomId,
   linkedSessionId: initialRoom.linkedSessionId,
@@ -236,8 +253,16 @@ export const usePetChatroom = create<PetChatroomStoreState>(() => ({
 }))
 
 let loopTimerId: number | null = null
+let buzzTimerId: number | null = null
 let activeTurnController: AbortController | null = null
 let lastSpeakerIdx = -1
+
+const clearBuzzTimer = () => {
+  if (buzzTimerId !== null) {
+    window.clearTimeout(buzzTimerId)
+    buzzTimerId = null
+  }
+}
 
 const clearLoopTimer = () => {
   if (loopTimerId !== null) {
@@ -247,6 +272,7 @@ const clearLoopTimer = () => {
 }
 
 const abortActiveTurn = () => {
+  clearBuzzTimer()
   if (activeTurnController) {
     activeTurnController.abort()
     activeTurnController = null
@@ -266,6 +292,24 @@ export const closePetChatroom = () => {
     countdownSec: null,
     streamingPetId: null,
     streamingText: '',
+  })
+}
+
+export const setChatroomSpeakMode = (speakMode: PetChatroomSpeakMode) => {
+  usePetChatroom.setState((prev) => {
+    const nextState: PetChatroomStoreState = { ...prev, speakMode }
+    writeStoredRoom(nextState)
+    return { speakMode }
+  })
+}
+
+export const cycleChatroomChaosRate = () => {
+  const cur = usePetChatroom.getState().chaosRate
+  const nextRate = cur < 0.15 ? 0.3 : cur < 0.45 ? 0.6 : 0
+  usePetChatroom.setState((prev) => {
+    const nextState: PetChatroomStoreState = { ...prev, chaosRate: nextRate }
+    writeStoredRoom(nextState)
+    return { chaosRate: nextRate }
   })
 }
 
@@ -502,16 +546,43 @@ const buildPetStaticSystemPrompt = (petId: string): string => {
   const baseHint = pet.promptHint[locale]
   const custom = cfg.customPrompt ? `\n${cfg.customPrompt}` : ''
   if (locale === 'zh-CN') {
-    return `${baseHint}${custom}\n你现在正在多桌宠聊天室里和大家实时群聊。规则：1）严格保持自己的性格和口吻发言；2）每次只说 1~3 句简短口语的话，自然接话、吐槽或互动，不要长篇大论，不要带「${pet.name['zh-CN']}:」前缀；3）能记住聊天室里加入、离开的成员以及所有历史话题。`
+    return `${baseHint}${custom}\n你现在正在多桌宠聊天室里和大家实时群聊。规则：1）严格保持自己的性格和口吻发言；2）每次只说 1~3 句简短口语的话，自然接话、吐槽或互动，不要长篇大论，不要带「${pet.name['zh-CN']}:」前缀；3）能记住聊天室里加入、离开的成员以及所有历史话题；4）如果本轮末尾出现【临场状态】提示，自然按该状态发挥（如调皮偷换概念、瞎说跑题或抢答拆台），但仍要和大家保持对话感。`
   }
-  return `${baseHint}${custom}\nYou are chatting live in the multi-pet chatroom. Rules: 1) Stay in character; 2) Keep replies natural and short (1-3 sentences) without prefixing your own name; 3) Remember members joining/leaving and prior topics.`
+  return `${baseHint}${custom}\nYou are chatting live in the multi-pet chatroom. Rules: 1) Stay in character; 2) Keep replies natural and short (1-3 sentences) without prefixing your own name; 3) Remember members joining/leaving and prior topics; 4) If a trailing [Mood] cue appears, playfully improvise accordingly (e.g. twisting a word, rambling humorously off-topic, or chiming in eagerly).`
 }
 
 const WINDOW_STEP = 20
 const MAX_WINDOW_MESSAGES = 60
 
-const buildPetLaneMessages = (petId: string, allMessages: PetChatroomMessage[]): MessageParam[] => {
-  // 按 20 条固定分块步进裁剪，确保两次分块之间消息前缀逐字节稳定以命中 KV Prefix Cache
+const pickVibeCue = (chaosRate: number, isBuzzIn: boolean, locale: 'zh-CN' | 'en-US'): string => {
+  const roll = Math.random()
+  if (roll >= chaosRate) {
+    return isBuzzIn
+      ? locale === 'zh-CN'
+        ? '[临场状态：抢答补充一句，顺着刚刚的话题搭茬]'
+        : '[Mood: chime in quickly on what was just said]'
+      : ''
+  }
+  const stylesZh = [
+    '[临场状态：调皮偷换概念，把上一段话里的一个词故意曲解成好玩的歪理并自然接梗]',
+    '[临场状态：突然走神脑洞跑偏，一本正经地瞎回答或扯一句看似有道理其实无厘头的话]',
+    '[临场状态：急性子抢答拆台或反向抬杠一句，机灵又逗比]',
+  ]
+  const stylesEn = [
+    '[Mood: playfully twist a word from the last message into funny nonsense logic]',
+    '[Mood: go delightfully off-topic with confident nonsense before tying it back]',
+    '[Mood: buzz in cheekily to tease or playfully disagree]',
+  ]
+  const pool = locale === 'zh-CN' ? stylesZh : stylesEn
+  return pool[Math.floor(Math.random() * pool.length)] ?? ''
+}
+
+const buildPetLaneMessages = (
+  petId: string,
+  allMessages: PetChatroomMessage[],
+  vibeCue: string
+): MessageParam[] => {
+  // 按 20 条固定分块步进裁剪，并仅在最后一轮末尾临时附加临场状态提示，确保前序消息前缀逐字节稳定以命中 KV Prefix Cache
   const overflow = Math.max(0, allMessages.length - MAX_WINDOW_MESSAGES)
   const startIdx = overflow > 0 ? Math.ceil(overflow / WINDOW_STEP) * WINDOW_STEP : 0
   const slice = allMessages.slice(startIdx)
@@ -562,11 +633,13 @@ const buildPetLaneMessages = (petId: string, allMessages: PetChatroomMessage[]):
     const members = getChatroomPetIds()
       .map((id) => findPetById(id).name[locale])
       .join('、')
-    pushUserLine(
+    const baseTrigger =
       locale === 'zh-CN'
         ? `[当前在场: ${members}] 请接一句自然的群聊发言。`
         : `[Present: ${members}] Say one natural line in the chatroom.`
-    )
+    pushUserLine(vibeCue ? `${baseTrigger}\n${vibeCue}` : baseTrigger)
+  } else if (vibeCue && typeof last.content === 'string') {
+    last.content = `${last.content}\n${vibeCue}`
   }
 
   return out
@@ -632,7 +705,10 @@ const resolvePetApiOverride = (
   }
 }
 
-const pickNextSpeakerId = (preferredPetId?: string): string | null => {
+const pickNextSpeakerId = (
+  preferredPetId?: string,
+  excludePetId?: string | null
+): string | null => {
   const members = getChatroomPetIds()
   if (members.length === 0) {
     return null
@@ -640,9 +716,14 @@ const pickNextSpeakerId = (preferredPetId?: string): string | null => {
   if (preferredPetId && members.includes(preferredPetId)) {
     return preferredPetId
   }
-  const latest = usePetChatroom.getState().messages.at(-1)
+  const { messages, speakMode } = usePetChatroom.getState()
+  const latest = messages.at(-1)
+
   if (latest?.senderType === 'user') {
     const matched = members.find((id) => {
+      if (excludePetId && id === excludePetId && members.length > 1) {
+        return false
+      }
       const def = findPetById(id)
       return (
         latest.content.includes(`@${def.name['zh-CN']}`) ||
@@ -654,24 +735,69 @@ const pickNextSpeakerId = (preferredPetId?: string): string | null => {
       return matched
     }
   }
+
   if (members.length === 1) {
     return members[0]
   }
-  lastSpeakerIdx = (lastSpeakerIdx + 1) % members.length
-  let candidate = members[lastSpeakerIdx]
-  if (latest?.senderType === 'pet' && latest.petId === candidate) {
+
+  const lastPetId = excludePetId ?? (latest?.senderType === 'pet' ? latest.petId : null)
+
+  if (speakMode === 'sequential') {
     lastSpeakerIdx = (lastSpeakerIdx + 1) % members.length
-    candidate = members[lastSpeakerIdx]
+    let candidate = members[lastSpeakerIdx]
+    if (lastPetId && candidate === lastPetId) {
+      lastSpeakerIdx = (lastSpeakerIdx + 1) % members.length
+      candidate = members[lastSpeakerIdx]
+    }
+    return candidate
   }
-  return candidate
+
+  // 随机抢答模式：如果刚发言的桌宠点名了其他成员，有较高概率由被点名者抢答；否则按久未发言权重随机抽取
+  const pool = members.filter((id) => id !== lastPetId)
+  if (latest?.senderType === 'pet' && Math.random() < 0.55) {
+    const calledOut = pool.find((id) => {
+      const def = findPetById(id)
+      return (
+        latest.content.includes(def.name['zh-CN']) ||
+        latest.content.toLowerCase().includes(def.name['en-US'].toLowerCase())
+      )
+    })
+    if (calledOut) {
+      return calledOut
+    }
+  }
+
+  const recentPetMessages = messages.filter((m) => m.senderType === 'pet').slice(-8)
+  const weights = pool.map((id) => {
+    let recencyPenalty = 0
+    for (let i = recentPetMessages.length - 1; i >= 0; i -= 1) {
+      if (recentPetMessages[i].petId === id) {
+        recencyPenalty = i + 1
+        break
+      }
+    }
+    return Math.max(1, 10 - recencyPenalty)
+  })
+  const total = weights.reduce((sum, w) => sum + w, 0)
+  let r = Math.random() * total
+  for (let i = 0; i < pool.length; i += 1) {
+    r -= weights[i]
+    if (r <= 0) {
+      return pool[i]
+    }
+  }
+  return pool[0] ?? members[0]
 }
 
-export const triggerPetChatroomTurn = async (preferredPetId?: string): Promise<void> => {
+export const triggerPetChatroomTurn = async (
+  preferredPetId?: string,
+  options?: { allowBuzzIn?: boolean; isBuzzIn?: boolean; excludePetId?: string | null }
+): Promise<void> => {
   const current = usePetChatroom.getState()
   if (current.streamingPetId) {
     return
   }
-  const petId = pickNextSpeakerId(preferredPetId)
+  const petId = pickNextSpeakerId(preferredPetId, options?.excludePetId)
   if (!petId) {
     return
   }
@@ -699,6 +825,11 @@ export const triggerPetChatroomTurn = async (preferredPetId?: string): Promise<v
   const pet = findPetById(petId)
   const petName = pet.name[locale]
   const roomMessages = usePetChatroom.getState().messages
+  const vibeCue = pickVibeCue(
+    usePetChatroom.getState().chaosRate,
+    Boolean(options?.isBuzzIn),
+    locale
+  )
 
   usePetChatroom.setState({
     streamingPetId: petId,
@@ -716,7 +847,7 @@ export const triggerPetChatroomTurn = async (preferredPetId?: string): Promise<v
       {
         model: 'deepseek-flash',
         system: buildPetStaticSystemPrompt(petId),
-        messages: buildPetLaneMessages(petId, roomMessages),
+        messages: buildPetLaneMessages(petId, roomMessages, vibeCue),
         thinking: { type: resolved.thinking ? 'enabled' : 'disabled' },
         safety_check: { level: 'high' },
       },
@@ -771,6 +902,29 @@ export const triggerPetChatroomTurn = async (preferredPetId?: string): Promise<v
     }))
     setPetMood('laugh', petId)
     window.setTimeout(() => setPetMood('idle', petId), 1800)
+
+    const members = getChatroomPetIds()
+    const stAfter = usePetChatroom.getState()
+    if (
+      replyText &&
+      options?.allowBuzzIn &&
+      stAfter.drawerOpen &&
+      stAfter.speakMode === 'buzz' &&
+      members.length >= 2 &&
+      Math.random() < 0.38
+    ) {
+      clearBuzzTimer()
+      buzzTimerId = window.setTimeout(() => {
+        buzzTimerId = null
+        if (usePetChatroom.getState().drawerOpen && !usePetChatroom.getState().streamingPetId) {
+          void triggerPetChatroomTurn(undefined, {
+            allowBuzzIn: false,
+            isBuzzIn: true,
+            excludePetId: petId,
+          })
+        }
+      }, 1050)
+    }
   } catch (error) {
     if (controller.signal.aborted) {
       setPetMood('idle', petId)
@@ -818,7 +972,7 @@ const armCountdown = () => {
     const next = (st.countdownSec ?? st.autoIntervalSec) - 1
     if (next <= 0) {
       usePetChatroom.setState({ countdownSec: st.autoIntervalSec })
-      void triggerPetChatroomTurn()
+      void triggerPetChatroomTurn(undefined, { allowBuzzIn: true })
     } else {
       usePetChatroom.setState({ countdownSec: next })
     }
@@ -832,7 +986,7 @@ export const startChatroomLoop = () => {
   usePetChatroom.setState({ running: true, errorText: null })
   armCountdown()
   if (!usePetChatroom.getState().streamingPetId) {
-    void triggerPetChatroomTurn()
+    void triggerPetChatroomTurn(undefined, { allowBuzzIn: true })
   }
 }
 
@@ -876,6 +1030,7 @@ export const sendUserToPetChatroom = (rawText: string) => {
   if (!text) {
     return
   }
+  clearBuzzTimer()
   const locale = useSettings.getState().locale
   appendRoomMessage({
     id: createId(),
@@ -888,7 +1043,7 @@ export const sendUserToPetChatroom = (rawText: string) => {
     usePetChatroom.setState({ countdownSec: usePetChatroom.getState().autoIntervalSec })
   }
   if (!usePetChatroom.getState().streamingPetId) {
-    void triggerPetChatroomTurn()
+    void triggerPetChatroomTurn(undefined, { allowBuzzIn: true })
   }
 }
 

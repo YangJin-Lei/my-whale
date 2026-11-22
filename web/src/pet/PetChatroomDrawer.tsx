@@ -11,6 +11,7 @@ import { findPetById, usePetCatalog } from './catalog.js'
 import {
   addChatroomPet,
   closePetChatroom,
+  cycleChatroomChaosRate,
   defaultPetApiConfig,
   getPetApiConfig,
   openPetDebugModal,
@@ -20,6 +21,7 @@ import {
   savePetApiConfig,
   sendUserToPetChatroom,
   setChatroomIntervalSec,
+  setChatroomSpeakMode,
   testPetApiConfig,
   toggleChatroomRunning,
   triggerPetChatroomTurn,
@@ -278,6 +280,8 @@ export const PetChatroomDrawer = () => {
   const drawerOpen = usePetChatroom((s) => s.drawerOpen)
   const running = usePetChatroom((s) => s.running)
   const autoIntervalSec = usePetChatroom((s) => s.autoIntervalSec)
+  const speakMode = usePetChatroom((s) => s.speakMode)
+  const chaosRate = usePetChatroom((s) => s.chaosRate)
   const countdownSec = usePetChatroom((s) => s.countdownSec)
   const messages = usePetChatroom((s) => s.messages)
   const streamingPetId = usePetChatroom((s) => s.streamingPetId)
@@ -368,9 +372,23 @@ export const PetChatroomDrawer = () => {
         <div className={styles.controlGroup}>
           <button
             type="button"
+            className={clsx(styles.pillBtn, speakMode === 'buzz' && styles.pillBtnActive)}
+            onClick={() => setChatroomSpeakMode(speakMode === 'buzz' ? 'sequential' : 'buzz')}
+          >
+            {speakMode === 'buzz' ? t('petRoomSpeakBuzz') : t('petRoomSpeakSeq')}
+          </button>
+          <button
+            type="button"
+            className={clsx(styles.pillBtn, chaosRate > 0 && styles.pillBtnActive)}
+            onClick={cycleChatroomChaosRate}
+          >
+            {t('petRoomChaosLabel', { pct: Math.round(chaosRate * 100) })}
+          </button>
+          <button
+            type="button"
             className={styles.pillBtn}
             disabled={Boolean(streamingPetId)}
-            onClick={() => void triggerPetChatroomTurn()}
+            onClick={() => void triggerPetChatroomTurn(undefined, { allowBuzzIn: true })}
           >
             {t('petRoomStepOnce')}
           </button>
