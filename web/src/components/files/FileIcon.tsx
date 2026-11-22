@@ -1,13 +1,17 @@
 import type { ReactNode } from 'react'
 
 const IMAGE_EXTS = ['JPG', 'JPEG', 'PNG', 'GIF', 'WEBP', 'BMP', 'SVG', 'HEIC', 'TIF', 'TIFF']
-const TABLE_EXTS = ['XLS', 'XLSX', 'CSV']
+const TABLE_EXTS = ['XLS', 'XLSX', 'CSV', 'TSV']
 const PPT_EXTS = ['PPT', 'PPTX']
+const ARCHIVE_EXTS = ['ZIP', 'TAR', 'GZ', 'TGZ']
 
 /** ext 为大写扩展名 */
 export function FileIcon({ ext }: { ext: string }) {
   if (IMAGE_EXTS.includes(ext)) {
     return <ImageIcon />
+  }
+  if (ARCHIVE_EXTS.includes(ext)) {
+    return <ArchiveFileIcon />
   }
   if (ext === 'PDF') {
     return <PdfIcon />
@@ -92,6 +96,16 @@ function PptFileIcon() {
         <path d="M172.922 21.2661C175.337 21.2661 177.294 19.3088 177.294 16.8943H172.922V12.5225C170.508 12.5225 168.55 14.4798 168.55 16.8943C168.55 19.3088 170.508 21.2661 172.922 21.2661Z" />
         <path d="M174.089 10.3672C177.049 10.3672 179.45 12.7674 179.45 15.7283H174.089V10.3672Z" />
       </g>
+    </FileIconFrame>
+  )
+}
+
+function ArchiveFileIcon() {
+  return (
+    <FileIconFrame color="#7C5CFA">
+      <rect x="11.5" y="10" width="5" height="2.2" rx="0.6" fill="white" />
+      <rect x="11.5" y="13.5" width="5" height="2.2" rx="0.6" fill="white" />
+      <rect x="10.2" y="17.2" width="7.6" height="4.8" rx="1.2" fill="white" />
     </FileIconFrame>
   )
 }

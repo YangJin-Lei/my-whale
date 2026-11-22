@@ -1,3 +1,4 @@
+import { getCachedParsedAttachment, type ParsedAttachment } from '../../capabilities/index.js'
 import { translate, type TranslationMessage } from '../../i18n/index.js'
 import {
   ensureNativeCacheStarted,
@@ -19,10 +20,71 @@ import { readServerSentEvents } from './sse.js'
 import type {
   ApiErrorBody,
   CreateMessageRequest,
+  FileBlockParam,
   FileObject,
   FilePurpose,
+  MessageParam,
   MessageStreamEvent,
+  TextBlockParam,
 } from './types.js'
+
+type CustomAttachmentResolver = (fileId: string) => Promise<ParsedAttachment | null>
+
+let customAttachmentResolver: CustomAttachmentResolver | null = null
+
+export const setCustomAttachmentResolver = (resolver: CustomAttachmentResolver | null) => {
+  customAttachmentResolver = resolver
+}
+
+const resolveFileBlockForCustomApi = async (
+  block: FileBlockParam
+): Promise<FileBlockParam | TextBlockParam> => {
+  if (block.source.type !== 'file') {
+    return block
+  }
+  const fileId = block.source.file_id
+  let parsed: ParsedAttachment | null | undefined = getCachedParsedAttachment(fileId)
+  if (!parsed && customAttachmentResolver) {
+    parsed = await customAttachmentResolver(fileId).catch(() => null)
+  }
+  if (!parsed) {
+    return block
+  }
+  if (parsed.kind === 'image') {
+    return {
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: parsed.mimeType,
+        data: parsed.base64,
+      },
+    }
+  }
+  return { type: 'text', text: parsed.text }
+}
+
+const resolveCustomBodyFiles = async (
+  body: CreateMessageRequest
+): Promise<CreateMessageRequest> => {
+  let changed = false
+  const nextMessages: MessageParam[] = []
+  for (const msg of body.messages) {
+    if (msg.role !== 'user' || typeof msg.content === 'string') {
+      nextMessages.push(msg)
+      continue
+    }
+    const nextBlocks = await Promise.all(
+      msg.content.map((block) =>
+        block.type === 'text' ? block : resolveFileBlockForCustomApi(block)
+      )
+    )
+    if (nextBlocks.some((b, idx) => b !== msg.content[idx])) {
+      changed = true
+    }
+    nextMessages.push({ ...msg, content: nextBlocks })
+  }
+  return changed ? { ...body, messages: nextMessages } : body
+}
 
 /** 构建期 API 地址，默认 https://api.deepseek.com；本地开发支持开发服务器代理 */
 export const API_ORIGIN = __API_ORIGIN__
@@ -232,10 +294,11 @@ export const createMessage = async (
       throw new ApiError('http', 'Missing custom API URL or API Key', 401)
     }
     try {
+      const resolvedBody = await resolveCustomBodyFiles(body)
       if (settings.customApiProtocol === 'openai') {
         return await createCustomOpenAiMessage(
           { url: customUrl, apiKey: customKey, model: customModel },
-          body,
+          resolvedBody,
           signal
         )
       }
@@ -249,7 +312,7 @@ export const createMessage = async (
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        body: JSON.stringify(buildCustomAnthropicPayload(body, customModel, false)),
+        body: JSON.stringify(buildCustomAnthropicPayload(resolvedBody, customModel, false)),
         signal,
       })
       const data = (await response.json()) as {
@@ -329,11 +392,12 @@ export async function* streamMessage(
     if (!customUrl || !customKey) {
       throw new ApiError('http', 'Missing custom API URL or API Key', 401)
     }
+    const resolvedBody = await resolveCustomBodyFiles(body)
     if (customProtocol === 'openai') {
       try {
         yield* streamCustomOpenAiMessage(
           { url: customUrl, apiKey: customKey, model: customModel },
-          body,
+          resolvedBody,
           signal
         )
         return
@@ -354,7 +418,7 @@ export async function* streamMessage(
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
       },
-      body: JSON.stringify(buildCustomAnthropicPayload(body, customModel, true)),
+      body: JSON.stringify(buildCustomAnthropicPayload(resolvedBody, customModel, true)),
       signal,
     })
     const contentType = response.headers.get('Content-Type') ?? ''

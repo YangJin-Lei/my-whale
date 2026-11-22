@@ -1,9 +1,20 @@
 import { create } from 'zustand'
+import {
+  parseAttachmentLocally,
+  setCachedParsedAttachment,
+  shouldPreparseForOfficialUpload,
+} from '../capabilities/index.js'
 import type { LinkedMessage, TranslationMessage } from '../i18n/index.js'
 import { uploadFile } from './api/client.js'
 import { classifyApiError, getUploadErrorInfo, isRetryableApiError } from './api/errors.js'
 import type { FilePurpose } from './api/types.js'
+import { useSettings } from './settings.js'
 import { ACCEPT_FILE_EXTS } from './uploadExts.js'
+
+export const LOCAL_INLINE_PREFIX = 'local-inline:'
+
+export const isLocalInlineServerId = (serverId?: string | null): boolean =>
+  Boolean(serverId && serverId.startsWith(LOCAL_INLINE_PREFIX))
 
 /** 允许上传的扩展名，按扩展名白名单过滤，清单见 uploadExts.ts */
 export const ACCEPTED_EXTS = ACCEPT_FILE_EXTS
@@ -119,6 +130,7 @@ const next = () => {
 /** 排队上传，最多同时上传 MAX_CONCURRENT 个；排队期间中止的任务不会发出请求 */
 const enqueueUpload = (
   apiKey: string,
+  id: string,
   file: Blob,
   name: string,
   isImage: boolean,
@@ -131,8 +143,37 @@ const enqueueUpload = (
         return
       }
       try {
-        const body = file instanceof File ? file : new File([file], name, { type: file.type })
-        resolve((await uploadFile(apiKey, body, getUploadPurpose(name, isImage), signal)).id)
+        const mimeType = file.type || MIME_BY_EXT[getFileExt(name)] || ''
+        if (useSettings.getState().apiProvider === 'custom') {
+          const serverId = `${LOCAL_INLINE_PREFIX}${id}`
+          const parsed = await parseAttachmentLocally(file, name, mimeType, serverId)
+          setCachedParsedAttachment(id, parsed)
+          setCachedParsedAttachment(serverId, parsed)
+          resolve(serverId)
+          return
+        }
+        const body = file instanceof File ? file : new File([file], name, { type: mimeType })
+        if (shouldPreparseForOfficialUpload(name, isImage)) {
+          const parsed = await parseAttachmentLocally(body, name, mimeType, id)
+          const markdownText =
+            parsed.kind === 'text' ? parsed.text : `[附件：${name}（图片 ${parsed.mimeType}）]`
+          const converted = new File([markdownText], `${name}.md`, { type: 'text/markdown' })
+          resolve((await uploadFile(apiKey, converted, 'user_data', signal)).id)
+          return
+        }
+        try {
+          resolve((await uploadFile(apiKey, body, getUploadPurpose(name, isImage), signal)).id)
+        } catch (uploadError) {
+          if (!isImage && getUploadErrorInfo(uploadError)?.code === 'parseFailed') {
+            const parsed = await parseAttachmentLocally(body, name, mimeType, id)
+            if (parsed.kind === 'text') {
+              const converted = new File([parsed.text], `${name}.md`, { type: 'text/markdown' })
+              resolve((await uploadFile(apiKey, converted, 'user_data', signal)).id)
+              return
+            }
+          }
+          throw uploadError
+        }
       } catch (error) {
         reject(error)
       }
@@ -177,7 +218,7 @@ export const uploadAttachment = (
   }
   const controller = new AbortController()
   setTask(id, { status: 'uploading' })
-  const promise = enqueueUpload(apiKey, blob, name, isImage, controller.signal)
+  const promise = enqueueUpload(apiKey, id, blob, name, isImage, controller.signal)
     .then((serverId) => {
       setTask(id, { status: 'done', serverId })
       return serverId

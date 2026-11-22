@@ -1,6 +1,7 @@
 import { create } from 'zustand'
+import { parseAttachmentLocally, setCachedParsedAttachment } from '../../capabilities/index.js'
 import { createId } from '../../utils/id.js'
-import { ApiError, streamMessage } from '../api/client.js'
+import { ApiError, setCustomAttachmentResolver, streamMessage } from '../api/client.js'
 import type { ChatModel, CreateMessageRequest } from '../api/types.js'
 import {
   classifyApiError,
@@ -9,7 +10,14 @@ import {
   isContextLengthError,
   isRetryableApiError,
 } from '../api/errors.js'
-import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
+import {
+  LOCAL_INLINE_PREFIX,
+  cancelUpload,
+  describeUploadError,
+  isLocalInlineServerId,
+  uploadAttachment,
+  useUploads,
+} from '../attachments.js'
 import { debouncedRefreshBalance, markInsufficient } from '../balance.js'
 import {
   COMPACTION_PRESETS,
@@ -998,19 +1006,94 @@ const saveServerIds = (sessionId: string, serverIds: Map<string, string>) => {
   persist(sessionId)
 }
 
+const loadAttachmentBlob = async (fileId: string): Promise<Blob | undefined> => {
+  for (const list of pendingFiles.values()) {
+    const found = list.find((item) => item.id === fileId)
+    if (found) {
+      return found.blob
+    }
+  }
+  return await db.loadFile(fileId)
+}
+
+const findAttachmentMeta = (
+  fileIdOrServerId: string
+): { id: string; name: string; mimeType: string } | null => {
+  const rawId = isLocalInlineServerId(fileIdOrServerId)
+    ? fileIdOrServerId.slice(LOCAL_INLINE_PREFIX.length)
+    : fileIdOrServerId
+  for (const session of Object.values(get().sessionCache)) {
+    for (const msg of session.messages) {
+      if (msg.role !== 'user') {
+        continue
+      }
+      const hit = msg.files.find((file) => file.id === rawId || file.serverId === fileIdOrServerId)
+      if (hit) {
+        return { id: hit.id, name: hit.name, mimeType: hit.mimeType }
+      }
+    }
+  }
+  return null
+}
+
+setCustomAttachmentResolver(async (fileIdOrServerId) => {
+  const meta = findAttachmentMeta(fileIdOrServerId)
+  const targetId =
+    meta?.id ??
+    (isLocalInlineServerId(fileIdOrServerId)
+      ? fileIdOrServerId.slice(LOCAL_INLINE_PREFIX.length)
+      : fileIdOrServerId)
+  const blob = await loadAttachmentBlob(targetId)
+  if (!blob) {
+    return null
+  }
+  const parsed = await parseAttachmentLocally(
+    blob,
+    meta?.name || targetId,
+    meta?.mimeType || blob.type,
+    fileIdOrServerId
+  )
+  setCachedParsedAttachment(targetId, parsed)
+  return parsed
+})
+
 /**
  * 附件的服务端 id：已有直接用；正在上传的等待同一任务；否则读取本地原件补传。
- * 本地也没有原件（导入的文档附件只有元数据）时返回 null，该附件只展示、不进入请求。
+ * 自定义 API 模式下不调用官方 `/files` 接口，改为通过 `capabilities` 本地解析并按需内联。
  */
 const ensureServerId = async (apiKey: string, file: FileAttachment): Promise<string | null> => {
-  if (file.serverId) {
+  const customMode = useSettings.getState().apiProvider === 'custom'
+  if (customMode) {
+    if (file.serverId) {
+      const blob = await loadAttachmentBlob(file.id)
+      if (blob) {
+        const parsed = await parseAttachmentLocally(blob, file.name, file.mimeType, file.serverId)
+        setCachedParsedAttachment(file.id, parsed)
+      }
+      return file.serverId
+    }
+    const task = useUploads.getState().tasks[file.id]
+    if (task?.status === 'done' && isLocalInlineServerId(task.serverId)) {
+      return task.serverId
+    }
+    const blob = await loadAttachmentBlob(file.id)
+    if (!blob) {
+      return null
+    }
+    const inlineId = `${LOCAL_INLINE_PREFIX}${file.id}`
+    const parsed = await parseAttachmentLocally(blob, file.name, file.mimeType, inlineId)
+    setCachedParsedAttachment(file.id, parsed)
+    return inlineId
+  }
+
+  if (file.serverId && !isLocalInlineServerId(file.serverId)) {
     return file.serverId
   }
   const task = useUploads.getState().tasks[file.id]
-  if (task?.status === 'done') {
+  if (task?.status === 'done' && !isLocalInlineServerId(task.serverId)) {
     return task.serverId
   }
-  const blob = await db.loadFile(file.id)
+  const blob = await loadAttachmentBlob(file.id)
   if (!blob) {
     return null
   }
@@ -1069,10 +1152,12 @@ const prepareFiles = async (sessionId: string, request: Request, signal: AbortSi
     throw failed.reason
   }
 
+  const customMode = useSettings.getState().apiProvider === 'custom'
   const pending = new Map<string, FileAttachment>()
   for (const [user] of getContextRounds(request.history).toReversed()) {
     for (const file of user.files) {
-      if (!file.serverId && !serverIds.has(file.id) && !pending.has(file.id)) {
+      const missingRemote = !file.serverId || (!customMode && isLocalInlineServerId(file.serverId))
+      if (missingRemote && !serverIds.has(file.id) && !pending.has(file.id)) {
         pending.set(file.id, file)
       }
     }
