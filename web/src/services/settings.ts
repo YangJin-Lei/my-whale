@@ -171,6 +171,17 @@ const initialTtsEngine = (): TtsEngineId => {
   return 'local-sherpa'
 }
 
+const initialLocalTtsVoiceId = (): string => {
+  const saved = read(KEYS.localTtsVoiceId)
+  if (!saved || saved === 'melo-zh-en') {
+    return DEFAULT_LOCAL_VOICE_ID
+  }
+  if (saved === 'kokoro-multi') {
+    return 'kokoro-v1_1'
+  }
+  return saved
+}
+
 const initialLocalTtsSpeakerId = (): number | null => {
   const raw = read(KEYS.localTtsSpeakerId)
   if (raw === null || raw === '') {
@@ -279,7 +290,7 @@ export const useSettings = create<Settings>(() => ({
   voiceEnabled: read(KEYS.voiceEnabled) === 'true',
   voiceAutoPlay: read(KEYS.voiceAutoPlay) === 'true',
   ttsEngine: initialTtsEngine(),
-  localTtsVoiceId: read(KEYS.localTtsVoiceId) || DEFAULT_LOCAL_VOICE_ID,
+  localTtsVoiceId: initialLocalTtsVoiceId(),
   localTtsSpeakerId: initialLocalTtsSpeakerId(),
   ttsVoice: initialTtsVoice(),
   fontFollowSystem: read(KEYS.fontFollowSystem) !== 'false',

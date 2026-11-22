@@ -78,10 +78,22 @@ export const DEFAULT_LOCAL_VOICE_ID = 'default-zh'
 export const LOCAL_VOICE_PACKS: ReadonlyArray<LocalVoicePack> = [
   {
     id: 'default-zh',
-    nameZh: 'Kokoro v1.1 · 中英自然多音色（内置默认）',
-    nameEn: 'Kokoro v1.1 · EN/ZH Natural Multi-Voice (Built-in)',
-    sizeMb: 140.2,
+    nameZh: 'MeloTTS · 中英混读自然女声（内置默认）',
+    nameEn: 'MeloTTS · EN/ZH Natural Voice (Built-in)',
+    sizeMb: 159.3,
     builtIn: true,
+    format: 'vits-melo',
+    archiveUrl:
+      'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-melo-tts-zh_en.tar.bz2',
+    archiveName: 'vits-melo-tts-zh_en.tar.bz2',
+    defaultSid: 0,
+  },
+  {
+    id: 'kokoro-v1_1',
+    nameZh: 'Kokoro v1.1 · 中英自然多音色（103音色）',
+    nameEn: 'Kokoro v1.1 · EN/ZH Multi-Voice (103 Voices)',
+    sizeMb: 140.2,
+    builtIn: false,
     format: 'kokoro',
     archiveUrl:
       'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-int8-multi-lang-v1_1.tar.bz2',
@@ -170,18 +182,6 @@ export const LOCAL_VOICE_PACKS: ReadonlyArray<LocalVoicePack> = [
     archiveName: 'vits-piper-zh_CN-huayan-medium.tar.bz2',
     defaultSid: 0,
   },
-  {
-    id: 'melo-zh-en',
-    nameZh: 'MeloTTS · 中英混读双语',
-    nameEn: 'MeloTTS · Chinese & English Bilingual',
-    sizeMb: 159.3,
-    builtIn: false,
-    format: 'vits-melo',
-    archiveUrl:
-      'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-melo-tts-zh_en.tar.bz2',
-    archiveName: 'vits-melo-tts-zh_en.tar.bz2',
-    defaultSid: 0,
-  },
 ]
 
 export const findLocalVoicePack = (id?: string | null): LocalVoicePack =>
@@ -202,8 +202,8 @@ export const resolveLocalVoiceSpeakerId = (
 }
 
 const FALLBACK_MIRRORS = [
-  'https://ghfast.top/',
   'https://gh-proxy.com/',
+  'https://ghfast.top/',
   'https://mirror.ghproxy.com/',
 ]
 

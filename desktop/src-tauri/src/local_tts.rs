@@ -453,7 +453,9 @@ fn find_first_by_ext(dir: &Path, ext: &str) -> Option<PathBuf> {
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some(ext) {
-            return Some(path);
+            if fs::metadata(&path).map(|m| m.len() > 4096).unwrap_or(false) {
+                return Some(path);
+            }
         }
         if path.is_dir() && !entry.file_name().to_string_lossy().starts_with('.') {
             subdirs.push(path);
@@ -1050,8 +1052,8 @@ mod tests {
             &res_dir,
             &tmp_data,
             DEFAULT_MODEL_ID,
-            "你好 my-whale，我是 Kokoro 本地离线中英双语语音助手。",
-            3,
+            "你好 my whale，通过 A P I 调用 Deep Seek，版本号 v 0 点 1 点 28。",
+            0,
             1.0,
         )
         .expect("sherpa-onnx synthesis should succeed");

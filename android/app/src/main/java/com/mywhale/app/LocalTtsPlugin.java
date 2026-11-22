@@ -645,7 +645,7 @@ public class LocalTtsPlugin extends Plugin {
             return null;
         }
         for (File f : children) {
-            if (f.isFile() && f.getName().endsWith(suffix)) {
+            if (f.isFile() && f.getName().endsWith(suffix) && f.length() > 4096) {
                 return f;
             }
         }
