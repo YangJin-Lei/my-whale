@@ -180,4 +180,22 @@ describe('capabilities local file parser', () => {
       expect(svg.rawBody).toContain('<svg')
     }
   })
+
+  it('handles 1MB GBK txt files with stray null bytes and caps context length cleanly', () => {
+    const unit = [0xd6, 0xd0, 0xce, 0xc4, 0xc1, 0xfa, 0xd7, 0xe5] // "中文龙族" in GBK (8 bytes)
+    const size = 1024 * 1024
+    const buf = new Uint8Array(size)
+    for (let i = 0; i + unit.length <= size; i += unit.length) {
+      buf.set(unit, i)
+    }
+    buf[100] = 0x00 // stray null byte inside exported novel
+    const res = parseDocumentBytes(buf, '【不一样的龙族】1MB.txt', 'text/plain')
+    expect(res.kind).toBe('text')
+    if (res.kind === 'text') {
+      expect(res.truncated).toBe(true)
+      expect(res.text).toContain('已截取前 48000 字符')
+      expect(res.text).toContain('中文龙族')
+      expect(res.text).not.toContain('\u0000')
+    }
+  })
 })

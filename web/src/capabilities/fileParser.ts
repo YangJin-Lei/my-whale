@@ -16,7 +16,7 @@ import {
 import { extractArchiveToMarkdown, wrapSafeCodeFence } from './zipExtractor.js'
 
 const MAX_INLINE_IMAGE_BYTES = 10 * 1024 * 1024
-const MAX_SINGLE_DOC_CHARS = 120_000
+const MAX_SINGLE_DOC_CHARS = 48_000
 
 const VISION_RASTER_EXTS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif'])
 const ARCHIVE_EXTS = new Set(['zip', 'tar', 'gz', 'tgz'])
@@ -170,7 +170,8 @@ const parseBytesCore = (
     return { ok: false, reason: `图片资源 (${Math.round(bytes.length / 1024)} KB)` }
   }
 
-  if (looksBinaryBytes(bytes)) {
+  const isDeclaredTextExt = Object.hasOwn(CODE_FENCE_LANG_BY_EXT, ext)
+  if (!isDeclaredTextExt && looksBinaryBytes(bytes)) {
     return { ok: false, reason: `二进制文件（${Math.round(bytes.length / 1024)} KB）` }
   }
 
@@ -287,6 +288,24 @@ export const parseDocumentBytes = (
   }
 }
 
+const readBlobBytes = async (blob: Blob): Promise<Uint8Array> => {
+  if (typeof blob.arrayBuffer === 'function') {
+    return new Uint8Array(await blob.arrayBuffer())
+  }
+  return new Promise<Uint8Array>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (reader.result instanceof ArrayBuffer) {
+        resolve(new Uint8Array(reader.result))
+      } else {
+        reject(new Error('无法读取附件二进制内容'))
+      }
+    }
+    reader.onerror = () => reject(reader.error ?? new Error('读取附件失败'))
+    reader.readAsArrayBuffer(blob)
+  })
+}
+
 export const parseAttachmentLocally = async (
   blob: Blob,
   name: string,
@@ -299,7 +318,7 @@ export const parseAttachmentLocally = async (
       return hit
     }
   }
-  const bytes = new Uint8Array(await blob.arrayBuffer())
+  const bytes = await readBlobBytes(blob)
   const parsed = parseDocumentBytes(bytes, name, mimeType || blob.type)
   if (cacheKey) {
     parsedCache.set(cacheKey, parsed)

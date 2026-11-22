@@ -78,8 +78,9 @@ const tryDecode = (
 ): { text: string; score: number } | null => {
   try {
     const text = new TextDecoder(label, { fatal }).decode(bytes)
-    const replacements = text.match(REPLACEMENT_RE)?.length ?? 0
-    const cjk = text.match(CJK_RE)?.length ?? 0
+    const sample = text.length > 16_384 ? text.slice(0, 16_384) : text
+    const replacements = sample.match(REPLACEMENT_RE)?.length ?? 0
+    const cjk = sample.match(CJK_RE)?.length ?? 0
     const score = cjk * 3 - replacements * 50
     return { text, score }
   } catch {
