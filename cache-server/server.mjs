@@ -421,6 +421,66 @@ async function handleMessagesProxy(req, res) {
   }
 }
 
+async function handleGenericProxy(req, res) {
+  const targetUrl = req.headers['x-target-url'] ? String(req.headers['x-target-url']).trim() : ''
+  let parsed
+  try {
+    parsed = new URL(targetUrl)
+  } catch {
+    sendJson(res, 400, { error: { message: 'Invalid X-Target-Url' } })
+    return
+  }
+  if (
+    (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
+    parsed.pathname === '/api/proxy'
+  ) {
+    sendJson(res, 400, { error: { message: 'Unsupported proxy target URL' } })
+    return
+  }
+
+  const method = req.method || 'POST'
+  const body = method === 'GET' || method === 'HEAD' ? undefined : await readRequestBuffer(req)
+  const headers = {}
+  for (const key of [
+    'authorization',
+    'x-api-key',
+    'anthropic-version',
+    'anthropic-beta',
+    'content-type',
+    'accept',
+  ]) {
+    if (req.headers[key]) {
+      headers[key] = String(req.headers[key])
+    }
+  }
+
+  try {
+    const upstreamRes = await fetch(targetUrl, { method, headers, body })
+    const ct = upstreamRes.headers.get('content-type') || 'application/json; charset=utf-8'
+    res.writeHead(upstreamRes.status, {
+      ...CORS_HEADERS,
+      'Content-Type': ct,
+      ...(ct.includes('text/event-stream') ? { 'Cache-Control': 'no-cache' } : {}),
+    })
+    if (!upstreamRes.body) {
+      res.end()
+      return
+    }
+    for await (const chunk of upstreamRes.body) {
+      res.write(chunk)
+    }
+    res.end()
+  } catch (error) {
+    if (!res.headersSent) {
+      sendJson(res, 502, {
+        error: { message: error instanceof Error ? error.message : String(error) },
+      })
+    } else {
+      res.end()
+    }
+  }
+}
+
 async function handlePassthrough(req, res, targetPath) {
   const method = req.method || 'GET'
   const body = method === 'GET' || method === 'HEAD' ? undefined : await readRequestBuffer(req)
@@ -483,6 +543,11 @@ const server = http.createServer(async (req, res) => {
     const body = JSON.parse((await readRequestBuffer(req)).toString('utf8') || '{}')
     const result = await runCachedFetch(cacheStore, body.url)
     sendJson(res, 200, result)
+    return
+  }
+
+  if (pathname === '/api/proxy') {
+    await handleGenericProxy(req, res)
     return
   }
 

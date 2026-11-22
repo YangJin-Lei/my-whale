@@ -208,6 +208,11 @@ public class LocalCacheServer {
                 return;
             }
 
+            if ("/api/proxy".equals(pathOnly)) {
+                handleGenericProxy(method, headers, reqBody, out);
+                return;
+            }
+
             if ("POST".equals(method) && "/anthropic/v1/messages".equals(pathOnly)) {
                 handleMessagesProxy(headers, reqBody, out);
                 return;
@@ -509,6 +514,84 @@ public class LocalCacheServer {
         InputStream is = status >= 400 ? conn.getErrorStream() : conn.getInputStream();
         byte[] respBytes = is != null ? readAllBytes(is, 8 * 1024 * 1024) : new byte[0];
         String ct = conn.getContentType() != null ? conn.getContentType() : "application/json";
+        writeHttpResponse(out, status, ct, respBytes);
+        conn.disconnect();
+    }
+
+    private void handleGenericProxy(
+        String method,
+        Map<String, String> headers,
+        byte[] reqBody,
+        OutputStream out
+    ) throws Exception {
+        String target = headers.getOrDefault("x-target-url", "").trim();
+        URL targetUrl;
+        try {
+            targetUrl = new URL(target);
+        } catch (Exception e) {
+            sendJson(out, 400, "{\"error\":{\"message\":\"Invalid X-Target-Url\"}}");
+            return;
+        }
+        String proto = targetUrl.getProtocol().toLowerCase(Locale.ROOT);
+        if ((!"http".equals(proto) && !"https".equals(proto)) || "/api/proxy".equals(targetUrl.getPath())) {
+            sendJson(out, 400, "{\"error\":{\"message\":\"Unsupported proxy target URL\"}}");
+            return;
+        }
+
+        HttpURLConnection conn = (HttpURLConnection) targetUrl.openConnection();
+        conn.setRequestMethod(method);
+        conn.setConnectTimeout(15_000);
+        conn.setReadTimeout(120_000);
+        copyHeader(headers, conn, "authorization");
+        copyHeader(headers, conn, "x-api-key");
+        copyHeader(headers, conn, "anthropic-version");
+        copyHeader(headers, conn, "anthropic-beta");
+        copyHeader(headers, conn, "content-type");
+        copyHeader(headers, conn, "accept");
+
+        if (reqBody.length > 0 && ("POST".equals(method) || "PUT".equals(method))) {
+            conn.setDoOutput(true);
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(reqBody);
+            }
+        }
+
+        int status;
+        try {
+            status = conn.getResponseCode();
+        } catch (Exception e) {
+            conn.disconnect();
+            String errMsg = e.getMessage() != null ? e.getMessage() : "Upstream unreachable";
+            sendJson(out, 502, new JSONObject().put("error", new JSONObject().put("message", errMsg)).toString());
+            return;
+        }
+
+        String ct = conn.getContentType() != null ? conn.getContentType() : "application/json; charset=utf-8";
+        InputStream is = status >= 400 ? conn.getErrorStream() : conn.getInputStream();
+        if (status < 400 && ct.toLowerCase(Locale.ROOT).contains("text/event-stream") && is != null) {
+            String sseHdr =
+                "HTTP/1.1 "
+                    + status
+                    + " OK\r\n"
+                    + "Content-Type: "
+                    + ct
+                    + "\r\nCache-Control: no-cache\r\nConnection: close\r\n"
+                    + "Access-Control-Allow-Origin: *\r\nAccess-Control-Expose-Headers: *\r\n\r\n";
+            out.write(sseHdr.getBytes(StandardCharsets.UTF_8));
+            out.flush();
+            byte[] buf = new byte[2048];
+            int n;
+            try (BufferedInputStream bis = new BufferedInputStream(is)) {
+                while ((n = bis.read(buf)) != -1) {
+                    out.write(buf, 0, n);
+                    out.flush();
+                }
+            }
+            conn.disconnect();
+            return;
+        }
+
+        byte[] respBytes = is != null ? readAllBytes(is, 8 * 1024 * 1024) : new byte[0];
         writeHttpResponse(out, status, ct, respBytes);
         conn.disconnect();
     }

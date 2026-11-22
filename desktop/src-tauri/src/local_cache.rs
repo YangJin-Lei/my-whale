@@ -534,6 +534,58 @@ fn handle_tcp_client(mut stream: TcpStream, client: reqwest::Client, cache: Arc<
         return;
     }
 
+    if path_only == "/api/proxy" {
+        let target = headers.get("x-target-url").map(|s| s.trim()).unwrap_or("");
+        let lower = target.to_lowercase();
+        if (!lower.starts_with("http://") && !lower.starts_with("https://")) || lower.contains("/api/proxy") {
+            send_http(&mut stream, 400, "application/json", b"{\"error\":{\"message\":\"Invalid X-Target-Url\"}}");
+            return;
+        }
+        tauri::async_runtime::block_on(async {
+            let mut rb = match method.as_str() {
+                "POST" => client.post(target),
+                "PUT" => client.put(target),
+                "DELETE" => client.delete(target),
+                _ => client.get(target),
+            };
+            for hk in ["authorization", "x-api-key", "anthropic-version", "anthropic-beta", "content-type", "accept"] {
+                if let Some(v) = headers.get(hk) {
+                    rb = rb.header(hk, v);
+                }
+            }
+            if !body.is_empty() && (method == "POST" || method == "PUT") {
+                rb = rb.body(body);
+            }
+            let mut resp = match rb.send().await {
+                Ok(r) => r,
+                Err(e) => {
+                    send_http(&mut stream, 502, "application/json", json!({ "error": { "message": e.to_string() } }).to_string().as_bytes());
+                    return;
+                }
+            };
+            let status = resp.status().as_u16();
+            let ct = resp.headers().get("content-type").and_then(|v| v.to_str().ok()).unwrap_or("application/json; charset=utf-8").to_string();
+            if status < 400 && ct.to_lowercase().contains("text/event-stream") {
+                let sse_hdr = format!(
+                    "HTTP/1.1 {} OK\r\nContent-Type: {}\r\nCache-Control: no-cache\r\nConnection: close\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Expose-Headers: *\r\n\r\n",
+                    status, ct
+                );
+                let _ = stream.write_all(sse_hdr.as_bytes());
+                let _ = stream.flush();
+                while let Ok(Some(chunk)) = resp.chunk().await {
+                    if stream.write_all(&chunk).is_err() {
+                        break;
+                    }
+                    let _ = stream.flush();
+                }
+            } else {
+                let bytes = resp.bytes().await.unwrap_or_default();
+                send_http(&mut stream, status, &ct, &bytes);
+            }
+        });
+        return;
+    }
+
     if method == "POST" && path_only == "/anthropic/v1/messages" {
         let mut msg_body: Value = match serde_json::from_slice(&body) {
             Ok(v) => v,
@@ -763,7 +815,7 @@ fn handle_tcp_client(mut stream: TcpStream, client: reqwest::Client, cache: Arc<
 
             let mut buf = String::new();
             while let Ok(Some(chunk)) = resp.chunk().await {
-                buf.push_str(&String::from_utf8_lossy(&chunk));
+                buf.push_str(&String::from_utf8_lossy(&chunk).replace("\r\n", "\n"));
                 while let Some(pos) = buf.find("\n\n") {
                     let frame = buf[..pos].to_string();
                     buf.drain(..pos + 2);
@@ -852,13 +904,17 @@ pub fn start_cache_server(
         *g = target_port;
     }
 
-    if let Some(child) = try_spawn_node_server(target_port) {
-        if let Ok(mut cg) = holder.child.lock() {
-            *cg = Some(child);
+    if let Some(mut child) = try_spawn_node_server(target_port) {
+        std::thread::sleep(Duration::from_millis(300));
+        if TcpStream::connect(("127.0.0.1", target_port)).is_ok() {
+            if let Ok(mut cg) = holder.child.lock() {
+                *cg = Some(child);
+            }
+            holder.running_flag.store(true, Ordering::Relaxed);
+            return Ok(get_cache_server_status(holder));
         }
-        holder.running_flag.store(true, Ordering::Relaxed);
-        std::thread::sleep(Duration::from_millis(250));
-        return Ok(get_cache_server_status(holder));
+        let _ = child.kill();
+        let _ = child.wait();
     }
 
     let listener = TcpListener::bind(("127.0.0.1", target_port)).map_err(|e| e.to_string())?;
@@ -867,7 +923,8 @@ pub fn start_cache_server(
     flag.store(true, Ordering::Relaxed);
     let cache = holder.cache.clone();
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(90))
+        .connect_timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(180))
         .build()
         .map_err(|e| e.to_string())?;
 
