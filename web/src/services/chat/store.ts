@@ -1885,6 +1885,8 @@ export type PetChatroomSaveEntry = {
   createdAt: number
   personaName?: string
   personaAvatar?: string
+  petId?: string
+  isSystemNotice?: boolean
 }
 
 /** 将多桌宠聊天室记录保存或更新到 IndexedDB 正式会话，便于回看、导出与跨端备份 */
@@ -1914,6 +1916,7 @@ export const savePetChatroomSession = (params: {
         files: [],
         createdAt: entry.createdAt,
         parentId,
+        ...(entry.isSystemNotice ? { isSystemNotice: true } : {}),
         ...(nextId ? { selectedChildId: nextId } : {}),
       } satisfies UserMessage
     }
@@ -1926,6 +1929,7 @@ export const savePetChatroomSession = (params: {
       status: 'done',
       personaName: entry.personaName,
       personaAvatar: entry.personaAvatar,
+      ...(entry.petId ? { petId: entry.petId } : {}),
       blocks: [{ type: 'text', text: entry.content }],
       parentId,
       ...(nextId ? { selectedChildId: nextId } : {}),

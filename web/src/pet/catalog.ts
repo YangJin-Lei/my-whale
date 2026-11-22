@@ -407,3 +407,27 @@ export const findPetById = (id: string | null | undefined): PetDefinition => {
   const all = getAllPets()
   return all.find((item) => item.id === normalized) ?? PET_CATALOG[0]
 }
+
+export const findPetExact = (
+  id?: string | null,
+  name?: string | null,
+  catalog?: PetDefinition[]
+): PetDefinition | null => {
+  const all = catalog ?? getAllPets()
+  if (id) {
+    const normalized = id === 'dounai' ? 'xiaohuang' : id
+    const byId = all.find((item) => item.id === normalized)
+    if (byId) {
+      return byId
+    }
+  }
+  const trimmedName = name?.trim()
+  if (trimmedName) {
+    return (
+      all.find(
+        (item) => item.name['zh-CN'] === trimmedName || item.name['en-US'] === trimmedName
+      ) ?? null
+    )
+  }
+  return null
+}

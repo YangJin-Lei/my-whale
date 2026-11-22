@@ -1,6 +1,6 @@
 import { useTranslate } from '../../i18n/index.js'
 import clsx from 'clsx'
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 import { IconRefreshOutline16, IconWarningOutline16 } from '../base/icons.js'
 import { describeReply } from '../../services/chat/describe.js'
 import { canContinueReply } from '../../services/chat/reply.js'
@@ -8,6 +8,8 @@ import { continueReply, regenerateReply } from '../../services/chat/store.js'
 import { stopReadAloud } from '../../services/speech/readAloud.js'
 import { openExternal, PLATFORM_TOP_UP_URL } from '../../services/links.js'
 import type { AssistantMessage as AssistantMessageType } from '../../services/chat/types.js'
+import { findPetExact, usePetCatalog } from '../../pet/catalog.js'
+import { PetSprite } from '../../pet/PetSprite.js'
 import { openSettings } from '../settings/settingsDialogState.js'
 import { IconButton } from '../base/IconButton.js'
 import { Button } from '../base/Button.js'
@@ -57,18 +59,19 @@ export const AssistantMessage = memo(function AssistantMessage({
   const copyText = responseText || notice?.text
   const waiting = streaming && view.steps.length === 0 && !view.answer && !message.thinking
   const summaryEntry = `${message.id}-summary`
-  return (
-    <div className={styles.message}>
-      {message.personaName ? (
-        <div className={styles.personaHeader}>
-          <PersonaAvatar
-            avatar={message.personaAvatar ?? '✨'}
-            name={message.personaName}
-            size="s"
-          />
-          <span className={styles.personaHeaderName}>{message.personaName}</span>
-        </div>
-      ) : null}
+  const petCatalog = usePetCatalog()
+  const matchedPet = useMemo(() => {
+    if (message.petId) {
+      return findPetExact(message.petId, message.personaName, petCatalog)
+    }
+    if (message.personaName && !message.personaAvatar?.startsWith('data:image/')) {
+      return findPetExact(null, message.personaName, petCatalog)
+    }
+    return null
+  }, [message.petId, message.personaName, message.personaAvatar, petCatalog])
+
+  const bodyContent = (
+    <>
       {refused ? null : (
         <ReplyArea
           message={message}
@@ -135,6 +138,11 @@ export const AssistantMessage = memo(function AssistantMessage({
           </span>
         </div>
       ) : null}
+    </>
+  )
+
+  const footerContent = (
+    <>
       {!streaming && !refused && view.searchResults.length > 0 ? (
         <div
           className={clsx(styles.summary, panelEntry === summaryEntry && styles.summaryActive)}
@@ -186,6 +194,47 @@ export const AssistantMessage = memo(function AssistantMessage({
             </Button>
           ) : null}
         </div>
+      )}
+    </>
+  )
+
+  return (
+    <div className={styles.message}>
+      {matchedPet ? (
+        <div className={styles.petRow}>
+          <div className={styles.petAvatarBox}>
+            <PetSprite
+              spriteUrl={matchedPet.spriteUrl}
+              mood="idle"
+              width={32}
+              cols={matchedPet.cols}
+              rows={matchedPet.rows}
+              animate={false}
+            />
+          </div>
+          <div className={styles.petMsgBody}>
+            {message.personaName ? (
+              <div className={styles.petNameLine}>{message.personaName}</div>
+            ) : null}
+            <div className={styles.petBubble}>{bodyContent}</div>
+            {footerContent}
+          </div>
+        </div>
+      ) : (
+        <>
+          {message.personaName ? (
+            <div className={styles.personaHeader}>
+              <PersonaAvatar
+                avatar={message.personaAvatar ?? '✨'}
+                name={message.personaName}
+                size="s"
+              />
+              <span className={styles.personaHeaderName}>{message.personaName}</span>
+            </div>
+          ) : null}
+          {bodyContent}
+          {footerContent}
+        </>
       )}
     </div>
   )

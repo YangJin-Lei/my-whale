@@ -13,6 +13,26 @@
   }
 }
 
+.systemRow {
+  display: flex;
+  justify-content: center;
+  padding-bottom: 12px;
+
+  &.isFirst {
+    padding-top: 24px;
+  }
+}
+
+.systemNotice {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer1, rgba(148, 163, 184, 0.14));
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11.5px;
+  line-height: 18px;
+  text-align: center;
+}
+
 .files {
   display: flex;
   flex-wrap: wrap;

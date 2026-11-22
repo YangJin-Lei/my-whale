@@ -61,6 +61,19 @@ export const UserMessage = memo(function UserMessage({
     }
   }
 
+  if (
+    message.isSystemNotice ||
+    (!message.files.length &&
+      /^【[^】]+】$/.test(message.content.trim()) &&
+      message.content.includes('聊天室'))
+  ) {
+    return (
+      <div className={clsx(styles.systemRow, isFirst && styles.isFirst)}>
+        <div className={styles.systemNotice}>{message.content}</div>
+      </div>
+    )
+  }
+
   return (
     <div className={clsx(styles.container, isFirst && styles.isFirst)}>
       {message.files.length > 0 ? (

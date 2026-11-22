@@ -39,6 +39,8 @@ export type UserMessage = MessageBranch & {
   content: string
   files: FileAttachment[]
   createdAt: number
+  /** 桌宠聊天室保存的系统事件条（如成员加入/离开），居中弱化展示 */
+  isSystemNotice?: boolean
 }
 
 /** 思考块：thinking_delta 累积，签名随 signature_delta 到达；历史轮次的思考服务端会丢弃，不回传 */
@@ -87,6 +89,8 @@ export type AssistantMessage = MessageBranch & {
   /** 本条回复使用的人设名称与头像快照（用于展示与回顾） */
   personaName?: string
   personaAvatar?: string
+  /** 桌宠聊天室发言成员 ID（展示对应桌宠静态图标与聊天室气泡样式） */
+  petId?: string
   /** 是否允许作为续写前缀；仍需满足回复状态与内容限制。 */
   prefix: boolean
   status: ReplyStatus

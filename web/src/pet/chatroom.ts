@@ -1062,22 +1062,25 @@ export const saveChatroomToMainSession = (openAfterSave = false): string | null 
       ? `桌宠聊天室${memberNames ? ` (${memberNames})` : ''}`
       : `Pet Chatroom${memberNames ? ` (${memberNames})` : ''}`
 
-  const entries: PetChatroomSaveEntry[] = st.messages.map((msg) =>
-    msg.senderType === 'pet'
-      ? {
-          id: msg.id,
-          role: 'assistant',
-          content: msg.content,
-          createdAt: msg.createdAt,
-          personaName: msg.senderName,
-        }
-      : {
-          id: msg.id,
-          role: 'user',
-          content: msg.senderType === 'system' ? msg.content : msg.content,
-          createdAt: msg.createdAt,
-        }
-  )
+  const entries: PetChatroomSaveEntry[] = st.messages.map((msg) => {
+    if (msg.senderType === 'pet') {
+      return {
+        id: msg.id,
+        role: 'assistant',
+        content: msg.content,
+        createdAt: msg.createdAt,
+        personaName: msg.senderName,
+        ...(msg.petId ? { petId: msg.petId } : {}),
+      }
+    }
+    return {
+      id: msg.id,
+      role: 'user',
+      content: msg.content,
+      createdAt: msg.createdAt,
+      ...(msg.senderType === 'system' ? { isSystemNotice: true } : {}),
+    }
+  })
 
   const savedId = savePetChatroomSession({
     sessionId: st.linkedSessionId,

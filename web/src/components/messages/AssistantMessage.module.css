@@ -24,6 +24,46 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+.petRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.petAvatarBox {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.petMsgBody {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.petNameLine {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.petBubble {
+  max-width: min(88%, 680px);
+  padding: 9px 13px;
+  border-radius: 14px;
+  border-top-left-radius: 4px;
+  background: var(--dsw-alias-bg-layer1, rgba(128, 134, 146, 0.08));
+  border: 1px solid var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-primary);
+
+  :global(.ds-assistant-message-main-content) {
+    padding-bottom: 0;
+  }
+}
+
 .waiting {
   display: flex;
   align-items: center;
