@@ -4,4 +4,5 @@
     <exclude domain="database" path="mywhale_cache.db" />
     <exclude domain="database" path="mywhale_cache.db-journal" />
     <exclude domain="file" path="updates" />
+    <exclude domain="file" path="tts-models" />
 </full-backup-content>

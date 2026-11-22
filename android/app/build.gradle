@@ -52,6 +52,9 @@ android {
         buildConfigField "String", "BUILD_TIME_UTC", "\"${resolveBuildTimeUtc()}\""
         buildConfigField "String", "RELEASE_CERT_SHA256", "\"49defdc7e1aebdb8d57bdea20b4f5fceac22db53cb121cbaec60b3706e272063\""
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a'
+        }
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
@@ -95,6 +98,8 @@ repositories {
 
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation files('libs/sherpa-onnx-static-link-onnxruntime-2.0.2.aar')
+    implementation 'org.apache.commons:commons-compress:1.27.1'
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
@@ -106,6 +111,52 @@ dependencies {
 }
 
 apply from: 'capacitor.build.gradle'
+
+def ensureSherpaOnnxAssets = tasks.register('ensureSherpaOnnxAssets') {
+    doLast {
+        def prebuiltDir = rootProject.file('../vender/sherpa-onnx-prebuilt')
+        def aarTarget = file('libs/sherpa-onnx-static-link-onnxruntime-2.0.2.aar')
+        if (!aarTarget.exists()) {
+            aarTarget.parentFile.mkdirs()
+            def localAar = new File(prebuiltDir, 'sherpa-onnx-static-link-onnxruntime-2.0.2.aar')
+            if (localAar.exists()) {
+                localAar.withInputStream { ins -> aarTarget.withOutputStream { outs -> outs << ins } }
+            } else {
+                def aarUrl = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.2/sherpa-onnx-static-link-onnxruntime-2.0.2.aar'
+                logger.lifecycle("Downloading sherpa-onnx AAR from ${aarUrl}")
+                new URL(aarUrl).withInputStream { ins -> aarTarget.withOutputStream { outs -> outs << ins } }
+            }
+        }
+
+        def ttsTargetDir = file('src/main/assets/tts/default-zh')
+        def markerOnnx = new File(ttsTargetDir, 'zh_CN-xiao_ya-medium.onnx')
+        if (!markerOnnx.exists()) {
+            def localUnpacked = new File(prebuiltDir, 'unpacked/vits-piper-zh_CN-xiao_ya-medium-int8')
+            if (localUnpacked.exists()) {
+                copy {
+                    from localUnpacked
+                    into ttsTargetDir
+                }
+            } else {
+                def tmpArchive = new File(buildDir, 'tmp/vits-piper-zh_CN-xiao_ya-medium-int8.tar.bz2')
+                tmpArchive.parentFile.mkdirs()
+                def modelUrl = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-zh_CN-xiao_ya-medium-int8.tar.bz2'
+                logger.lifecycle("Downloading default Chinese TTS pack from ${modelUrl}")
+                new URL(modelUrl).withInputStream { ins -> tmpArchive.withOutputStream { outs -> outs << ins } }
+                ttsTargetDir.mkdirs()
+                def proc = ['tar', '-xjf', tmpArchive.absolutePath, '--strip-components=1', '-C', ttsTargetDir.absolutePath].execute()
+                proc.waitFor()
+                if (proc.exitValue() != 0) {
+                    throw new GradleException("Failed to extract default-zh TTS pack: ${proc.err.text}")
+                }
+            }
+        }
+    }
+}
+
+tasks.named('preBuild').configure {
+    dependsOn(ensureSherpaOnnxAssets)
+}
 
 try {
     def servicesJSON = file('google-services.json')

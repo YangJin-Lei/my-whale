@@ -4,6 +4,8 @@ import { ApiError } from '../api/client.js'
 import { classifyApiError } from '../api/errors.js'
 import { synthesize, TTS_SAMPLE_RATE } from '../api/speech.js'
 import { useSettings } from '../settings.js'
+import { DEFAULT_LOCAL_VOICE_ID, findLocalVoicePack } from './engines.js'
+import { hasNativeLocalTts, splitSpeechSentences, synthesizeWithLocalTts } from './localTts.js'
 
 /**
  * 朗读：同一时间只读一条回复。
@@ -63,6 +65,13 @@ const finish = (controller: AbortController) => {
     return
   }
   clearSources()
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    try {
+      window.speechSynthesis.cancel()
+    } catch {
+      // 忽略系统朗读停止异常
+    }
+  }
   current = null
   useReadAloud.setState({ messageId: null, status: 'idle' })
 }
@@ -106,6 +115,50 @@ export const describeReadAloudError = (error: unknown): TranslationMessage | str
   }
 }
 
+const speakWithSystemSpeech = async (text: string, controller: AbortController): Promise<void> => {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    throw new Error('SpeechSynthesis unavailable')
+  }
+  const synth = window.speechSynthesis
+  synth.cancel()
+  const chunks = splitSpeechSentences(text, 120)
+  if (chunks.length === 0) {
+    return
+  }
+  for (const chunk of chunks) {
+    if (controller.signal.aborted) {
+      return
+    }
+    await new Promise<void>((resolve, reject) => {
+      const utterance = new SpeechSynthesisUtterance(chunk)
+      utterance.lang = /[\u4e00-\u9fff]/.test(chunk) ? 'zh-CN' : 'en-US'
+      const onAbort = () => {
+        synth.cancel()
+        resolve()
+      }
+      controller.signal.addEventListener('abort', onAbort, { once: true })
+      utterance.onstart = () => {
+        if (!controller.signal.aborted && useReadAloud.getState().status === 'loading') {
+          useReadAloud.setState({ status: 'playing' })
+        }
+      }
+      utterance.onend = () => {
+        controller.signal.removeEventListener('abort', onAbort)
+        resolve()
+      }
+      utterance.onerror = () => {
+        controller.signal.removeEventListener('abort', onAbort)
+        if (controller.signal.aborted) {
+          resolve()
+        } else {
+          reject(new Error('System speech synthesis failed'))
+        }
+      }
+      synth.speak(utterance)
+    })
+  }
+}
+
 /**
  * 开始朗读一条回复的正文；同一条正在朗读时调用等于停止。
  */
@@ -124,11 +177,101 @@ export const toggleReadAloud = (
     return
   }
   const controller = new AbortController()
-  const context = ensureAudioContext()
   current = { controller }
   useReadAloud.setState({ messageId, status: 'loading' })
-  // 音色在开始朗读时读取，设置中切换后下一次朗读生效
-  const { apiKey, ttsVoice } = useSettings.getState()
+  // 引擎与音色在开始朗读时读取，设置中切换后下一次朗读生效
+  const { apiKey, ttsVoice, ttsEngine, localTtsVoiceId } = useSettings.getState()
+  const effectiveEngine = ttsEngine === 'nekospeak' ? 'local-sherpa' : ttsEngine
+
+  if (
+    effectiveEngine === 'system' ||
+    (effectiveEngine === 'local-sherpa' && !hasNativeLocalTts())
+  ) {
+    void speakWithSystemSpeech(cleanText, controller)
+      .then(() => finish(controller))
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          finish(controller)
+          onError(error)
+        }
+      })
+    return
+  }
+
+  const context = ensureAudioContext()
+
+  if (effectiveEngine === 'local-sherpa') {
+    void (async () => {
+      const sentences = splitSpeechSentences(cleanText, 90)
+      if (sentences.length === 0) {
+        finish(controller)
+        return
+      }
+      let nextTime = 0
+      let lastSource: AudioBufferSourceNode | null = null
+      let activePack = findLocalVoicePack(localTtsVoiceId)
+      try {
+        for (const sentence of sentences) {
+          if (controller.signal.aborted) {
+            return
+          }
+          let audio: { samples: Float32Array; sampleRate: number }
+          try {
+            audio = await synthesizeWithLocalTts(
+              sentence,
+              activePack.id,
+              1.0,
+              activePack.defaultSid
+            )
+          } catch (err) {
+            if (activePack.id !== DEFAULT_LOCAL_VOICE_ID) {
+              activePack = findLocalVoicePack(DEFAULT_LOCAL_VOICE_ID)
+              audio = await synthesizeWithLocalTts(
+                sentence,
+                activePack.id,
+                1.0,
+                activePack.defaultSid
+              )
+            } else {
+              throw err
+            }
+          }
+          if (controller.signal.aborted) {
+            return
+          }
+          if (audio.samples.length === 0) {
+            continue
+          }
+          const buffer = context.createBuffer(1, audio.samples.length, audio.sampleRate)
+          const channelSamples = new Float32Array(audio.samples.length)
+          channelSamples.set(audio.samples)
+          buffer.copyToChannel(channelSamples, 0)
+          const source = context.createBufferSource()
+          source.buffer = buffer
+          source.connect(context.destination)
+          nextTime = Math.max(nextTime, context.currentTime + (lastSource ? 0 : START_DELAY))
+          source.start(nextTime)
+          nextTime += buffer.duration
+          lastSource = source
+          activeSources.push(source)
+          if (useReadAloud.getState().status === 'loading') {
+            useReadAloud.setState({ status: 'playing' })
+          }
+        }
+        if (lastSource) {
+          lastSource.onended = () => finish(controller)
+        } else {
+          finish(controller)
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          finish(controller)
+          onError(error)
+        }
+      }
+    })()
+    return
+  }
 
   void (async () => {
     let nextTime = 0

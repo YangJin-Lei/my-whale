@@ -7,6 +7,7 @@ import {
   saveSecureSecret,
 } from './secureStorage.js'
 import type { TtsVoice } from './api/speech.js'
+import { DEFAULT_LOCAL_VOICE_ID, type TtsEngineId } from './speech/engines.js'
 import { normalizeLocation, type UserLocation } from './location.js'
 
 export type Locale = 'zh-CN' | 'en-US'
@@ -33,6 +34,8 @@ type Settings = {
   location: UserLocation | null
   voiceEnabled: boolean
   voiceAutoPlay: boolean
+  ttsEngine: TtsEngineId
+  localTtsVoiceId: string
   ttsVoice: TtsVoice
   fontFollowSystem: boolean
   fontScale: number
@@ -73,6 +76,8 @@ const KEYS = {
   themePreference: 'chat-demo:theme-preference',
   voiceEnabled: 'chat-demo:voice-enabled',
   voiceAutoPlay: 'chat-demo:voice-auto-play',
+  ttsEngine: 'chat-demo:tts-engine',
+  localTtsVoiceId: 'chat-demo:local-tts-voice-id',
   ttsVoice: 'chat-demo:tts-voice',
   fontFollowSystem: 'chat-demo:font-follow-system',
   fontScale: 'chat-demo:font-scale',
@@ -153,6 +158,15 @@ const initialLocation = (): UserLocation | null => {
 const initialThemePreference = (): ThemePreference => {
   const saved = read(KEYS.themePreference)
   return saved === 'light' || saved === 'dark' ? saved : 'system'
+}
+
+/** 默认使用内置离线语音引擎（sherpa-onnx）；屏蔽暂未开放的 nekospeak */
+const initialTtsEngine = (): TtsEngineId => {
+  const saved = read(KEYS.ttsEngine)
+  if (saved === 'official' || saved === 'system' || saved === 'local-sherpa') {
+    return saved
+  }
+  return 'local-sherpa'
 }
 
 /** 未保存过时使用服务端默认音色 stella（海星） */
@@ -253,6 +267,8 @@ export const useSettings = create<Settings>(() => ({
   themePreference: initialThemePreference(),
   voiceEnabled: read(KEYS.voiceEnabled) === 'true',
   voiceAutoPlay: read(KEYS.voiceAutoPlay) === 'true',
+  ttsEngine: initialTtsEngine(),
+  localTtsVoiceId: read(KEYS.localTtsVoiceId) || DEFAULT_LOCAL_VOICE_ID,
   ttsVoice: initialTtsVoice(),
   fontFollowSystem: read(KEYS.fontFollowSystem) !== 'false',
   fontScale: initialFontScale(),
@@ -310,6 +326,20 @@ export const setVoiceEnabled = (voiceEnabled: boolean) => {
 export const setVoiceAutoPlay = (voiceAutoPlay: boolean) => {
   write(KEYS.voiceAutoPlay, String(voiceAutoPlay))
   useSettings.setState({ voiceAutoPlay })
+}
+
+export const setTtsEngine = (ttsEngine: TtsEngineId) => {
+  if (ttsEngine === 'nekospeak') {
+    return
+  }
+  write(KEYS.ttsEngine, ttsEngine)
+  useSettings.setState({ ttsEngine })
+}
+
+export const setLocalTtsVoiceId = (localTtsVoiceId: string) => {
+  const next = localTtsVoiceId.trim() || DEFAULT_LOCAL_VOICE_ID
+  write(KEYS.localTtsVoiceId, next)
+  useSettings.setState({ localTtsVoiceId: next })
 }
 
 export const setTtsVoice = (ttsVoice: TtsVoice) => {
@@ -535,6 +565,16 @@ export const applySettingsSnapshot = (raw: Partial<SettingsSnapshot>) => {
   }
   if (typeof raw.voiceAutoPlay === 'boolean') {
     setVoiceAutoPlay(raw.voiceAutoPlay)
+  }
+  if (
+    raw.ttsEngine === 'local-sherpa' ||
+    raw.ttsEngine === 'official' ||
+    raw.ttsEngine === 'system'
+  ) {
+    setTtsEngine(raw.ttsEngine)
+  }
+  if (typeof raw.localTtsVoiceId === 'string' && raw.localTtsVoiceId.trim()) {
+    setLocalTtsVoiceId(raw.localTtsVoiceId)
   }
   if (raw.ttsVoice === 'stella' || raw.ttsVoice === 'tide') {
     setTtsVoice(raw.ttsVoice)

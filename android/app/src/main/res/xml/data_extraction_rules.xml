@@ -5,11 +5,13 @@
         <exclude domain="database" path="mywhale_cache.db" />
         <exclude domain="database" path="mywhale_cache.db-journal" />
         <exclude domain="file" path="updates" />
+        <exclude domain="file" path="tts-models" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="mywhale_secure_prefs.xml" />
         <exclude domain="database" path="mywhale_cache.db" />
         <exclude domain="database" path="mywhale_cache.db-journal" />
         <exclude domain="file" path="updates" />
+        <exclude domain="file" path="tts-models" />
     </device-transfer>
 </data-extraction-rules>

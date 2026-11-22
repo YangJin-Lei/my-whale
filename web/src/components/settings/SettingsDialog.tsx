@@ -51,9 +51,11 @@ import {
   setChatBgPreset,
   setFontFollowSystem,
   setFontScale,
+  setLocalTtsVoiceId,
   setLocale,
   setLocation,
   setThemePreference,
+  setTtsEngine,
   setTtsVoice,
   setUpdateAccelerate,
   setUpdateMirror,
@@ -64,6 +66,17 @@ import {
   type ThemePreference,
 } from '../../services/settings.js'
 import { stopReadAloud, unlockReadAloudAudio } from '../../services/speech/readAloud.js'
+import {
+  DEFAULT_LOCAL_VOICE_ID,
+  LOCAL_VOICE_PACKS,
+  TTS_ENGINES,
+} from '../../services/speech/engines.js'
+import {
+  deleteLocalVoicePack,
+  downloadLocalVoicePack,
+  getLocalTtsStatus,
+  hasNativeLocalTts,
+} from '../../services/speech/localTts.js'
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
 import { Button } from '../base/Button.js'
 import { Modal } from '../base/Modal.js'
@@ -745,6 +758,7 @@ const VoiceModeSetting = () => {
   const t = useTranslate()
   const voiceEnabled = useSettings((state) => state.voiceEnabled)
   const voiceAutoPlay = useSettings((state) => state.voiceAutoPlay)
+  const ttsEngine = useSettings((state) => state.ttsEngine)
   return (
     <>
       <SettingCell
@@ -787,7 +801,9 @@ const VoiceModeSetting = () => {
               />
             }
           />
-          <TtsVoiceSetting />
+          <TtsEngineSetting />
+          {ttsEngine === 'official' ? <TtsVoiceSetting /> : null}
+          {ttsEngine === 'local-sherpa' ? <LocalTtsVoiceSetting /> : null}
         </>
       ) : null}
     </>
@@ -1010,6 +1026,169 @@ const DeepSeekExportSetting = () => {
         </Button>
       </div>
       <div className={styles.exportGuide}>{t('settingsDeepSeekExportGuide')}</div>
+    </div>
+  )
+}
+
+const TtsEngineSetting = () => {
+  const t = useTranslate()
+  const ttsEngine = useSettings((state) => state.ttsEngine)
+  const locale = useSettings((state) => state.locale)
+  const isEn = locale === 'en-US'
+  return (
+    <SettingCell
+      label={t('settingsTtsEngine')}
+      status={null}
+      action={
+        <Select
+          ariaLabel={t('settingsTtsEngine')}
+          value={ttsEngine}
+          options={TTS_ENGINES.map((engine) => ({
+            value: engine.id,
+            label: isEn ? engine.labelEn : engine.labelZh,
+            disabled: !engine.available,
+          }))}
+          onChange={setTtsEngine}
+        />
+      }
+    />
+  )
+}
+
+const LocalTtsVoiceSetting = () => {
+  const t = useTranslate()
+  const locale = useSettings((state) => state.locale)
+  const localTtsVoiceId = useSettings((state) => state.localTtsVoiceId)
+  const isEn = locale === 'en-US'
+  const nativeSupported = hasNativeLocalTts()
+  const [installedIds, setInstalledIds] = useState<string[]>([DEFAULT_LOCAL_VOICE_ID])
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!nativeSupported) {
+      return
+    }
+    let active = true
+    void getLocalTtsStatus().then((status) => {
+      if (!active) {
+        return
+      }
+      const nextIds = status.installedIds.includes(DEFAULT_LOCAL_VOICE_ID)
+        ? status.installedIds
+        : [DEFAULT_LOCAL_VOICE_ID, ...status.installedIds]
+      setInstalledIds(nextIds)
+      if (status.error) {
+        setErrorMsg(status.error)
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [nativeSupported])
+
+  const handleDownload = async (packId: string) => {
+    if (busyId) {
+      return
+    }
+    setBusyId(packId)
+    setErrorMsg(null)
+    try {
+      const next = await downloadLocalVoicePack(packId)
+      setInstalledIds(next)
+      setLocalTtsVoiceId(packId)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      setErrorMsg(msg)
+      showToast(msg)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const handleDelete = async (packId: string) => {
+    if (busyId || packId === DEFAULT_LOCAL_VOICE_ID) {
+      return
+    }
+    setBusyId(packId)
+    setErrorMsg(null)
+    try {
+      const next = await deleteLocalVoicePack(packId)
+      setInstalledIds(next)
+      if (localTtsVoiceId === packId) {
+        setLocalTtsVoiceId(DEFAULT_LOCAL_VOICE_ID)
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      setErrorMsg(msg)
+      showToast(msg)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  return (
+    <div className={styles.cell}>
+      <div className={styles.text}>
+        <span>{t('settingsTtsLocalVoice')}</span>
+        {!nativeSupported ? (
+          <div className={styles.description}>{t('settingsTtsBrowserHint')}</div>
+        ) : null}
+        {errorMsg ? <div className={styles.error}>{errorMsg}</div> : null}
+      </div>
+      <div className={styles.ttsPackList}>
+        {LOCAL_VOICE_PACKS.map((pack) => {
+          const installed = pack.builtIn || installedIds.includes(pack.id)
+          const selected = localTtsVoiceId === pack.id && installed
+          const downloading = busyId === pack.id
+          return (
+            <div key={pack.id} className={styles.ttsPackItem}>
+              <div className={styles.ttsPackInfo}>
+                <span className={styles.ttsPackName}>{isEn ? pack.nameEn : pack.nameZh}</span>
+                <span className={styles.ttsPackMeta}>
+                  {pack.sizeMb} MB ·{' '}
+                  {pack.builtIn
+                    ? t('settingsTtsBuiltInTag')
+                    : installed
+                      ? t('settingsTtsInstalledTag')
+                      : t('settingsTtsDownload')}
+                </span>
+              </div>
+              <div className={styles.ttsPackActions}>
+                {installed ? (
+                  <Button
+                    size="s"
+                    variant={selected ? 'primary' : 'outlined'}
+                    disabled={selected}
+                    onClick={() => setLocalTtsVoiceId(pack.id)}
+                  >
+                    {selected ? t('settingsTtsActiveTag') : t('settingsTtsUse')}
+                  </Button>
+                ) : (
+                  <Button
+                    size="s"
+                    variant="outlined"
+                    disabled={!nativeSupported || Boolean(busyId)}
+                    onClick={() => void handleDownload(pack.id)}
+                  >
+                    {downloading ? t('settingsTtsDownloading') : t('settingsTtsDownload')}
+                  </Button>
+                )}
+                {!pack.builtIn && installed ? (
+                  <Button
+                    size="s"
+                    variant="outlined"
+                    disabled={Boolean(busyId)}
+                    onClick={() => void handleDelete(pack.id)}
+                  >
+                    {t('settingsTtsDelete')}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

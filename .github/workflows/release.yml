@@ -132,6 +132,28 @@ jobs:
           pnpm --dir web install
           pnpm --dir desktop install
 
+      - name: Prepare sherpa-onnx TTS runtime and built-in voice pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          RES_ROOT="desktop/src-tauri/resources/tts"
+          mkdir -p "$RES_ROOT/lib" "$RES_ROOT/default-zh"
+          curl -fSL --retry 3 "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-zh_CN-xiao_ya-medium-int8.tar.bz2" -o default-zh.tar.bz2
+          tar -xjf default-zh.tar.bz2 --strip-components=1 -C "$RES_ROOT/default-zh"
+          rm -f default-zh.tar.bz2
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            LIB_ARCHIVE="sherpa-onnx-v2.0.2-win-x64-shared-MD-MinSizeRel-lib.tar.bz2"
+            EXT="dll"
+          else
+            LIB_ARCHIVE="sherpa-onnx-v2.0.2-osx-arm64-shared-lib.tar.bz2"
+            EXT="dylib"
+          fi
+          curl -fSL --retry 3 "https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.2/${LIB_ARCHIVE}" -o sherpa-lib.tar.bz2
+          mkdir -p sherpa-lib-unpack
+          tar -xjf sherpa-lib.tar.bz2 --strip-components=1 -C sherpa-lib-unpack
+          cp -a sherpa-lib-unpack/lib/*."$EXT"* "$RES_ROOT/lib/"
+          rm -rf sherpa-lib.tar.bz2 sherpa-lib-unpack
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         with:

@@ -26,3 +26,8 @@ Thumbs.db
 
 # Runtime cache storage
 cache-server/data/
+
+# Sherpa-ONNX prebuilt binaries & default bundled model (populated locally from vender/ or in CI)
+android/app/libs/sherpa-onnx-*.aar
+android/app/src/main/assets/tts/
+desktop/src-tauri/resources/

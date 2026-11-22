@@ -8,6 +8,7 @@ use serde::Serialize;
 use tauri_plugin_opener::OpenerExt;
 
 mod local_cache;
+mod local_tts;
 
 const ALLOWED_URL_PREFIX: &str = "https://github.com/YangJin-Lei/my-whale/";
 const ALLOWED_RELEASE_PATH: &str = "https://github.com/YangJin-Lei/my-whale/releases/download/";
@@ -245,6 +246,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(UpdateProgressHolder(Mutex::new(UpdateProgressState::default())))
         .manage(local_cache::CacheServerHolder::default())
+        .manage(local_tts::LocalTtsHolder::default())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             open_external_url,
@@ -253,7 +255,11 @@ pub fn run() {
             download_and_install_update,
             local_cache::start_cache_server,
             local_cache::stop_cache_server,
-            local_cache::get_cache_server_status
+            local_cache::get_cache_server_status,
+            local_tts::tts_get_status,
+            local_tts::tts_synthesize,
+            local_tts::tts_download_model,
+            local_tts::tts_delete_model
         ])
         .run(tauri::generate_context!())
         .expect("error while running my-whale desktop application");
