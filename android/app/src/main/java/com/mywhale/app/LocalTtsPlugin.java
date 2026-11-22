@@ -87,6 +87,28 @@ public class LocalTtsPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void prewarm(PluginCall call) {
+        String requestedId = call.getString("modelId", DEFAULT_MODEL_ID);
+        final String cleanModelId = isSafeModelId(requestedId) ? requestedId : DEFAULT_MODEL_ID;
+        executor.execute(() -> {
+            try {
+                synchronized (ttsLock) {
+                    ensureLoadedLocked(cleanModelId);
+                }
+                JSObject result = new JSObject();
+                result.put("ok", true);
+                result.put("modelId", activeModelId);
+                call.resolve(result);
+            } catch (Throwable t) {
+                JSObject result = new JSObject();
+                result.put("ok", false);
+                result.put("modelId", "");
+                call.resolve(result);
+            }
+        });
+    }
+
+    @PluginMethod
     public void synthesize(PluginCall call) {
         String text = call.getString("text", "");
         String requestedId = call.getString("modelId", DEFAULT_MODEL_ID);

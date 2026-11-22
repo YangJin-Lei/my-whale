@@ -808,6 +808,67 @@ pub fn tts_get_status(app: tauri::AppHandle, state: tauri::State<'_, LocalTtsHol
 }
 
 #[tauri::command]
+pub async fn tts_prewarm(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, LocalTtsHolder>,
+    model_id: String,
+) -> Result<bool, String> {
+    let Some(res_dir) = resolve_tts_resources_dir(&app) else {
+        return Ok(false);
+    };
+    let data_dir = resolve_models_data_dir(&app)?;
+    let holder = state.0.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let lib_dir = res_dir.join("lib");
+        let api = match get_or_load_api(&lib_dir) {
+            Ok(a) => a,
+            Err(_) => return false,
+        };
+        let mut candidate_id = if is_safe_model_id(&model_id) {
+            model_id
+        } else {
+            DEFAULT_MODEL_ID.to_string()
+        };
+        let external_dir = data_dir.join(&candidate_id);
+        let use_external = candidate_id != DEFAULT_MODEL_ID
+            && external_dir.is_dir()
+            && find_first_by_ext(&external_dir, "onnx").is_some()
+            && find_named_file(&external_dir, "tokens.txt").is_some();
+        let model_dir = if use_external {
+            external_dir
+        } else {
+            candidate_id = DEFAULT_MODEL_ID.to_string();
+            res_dir.join(DEFAULT_MODEL_ID)
+        };
+        let Ok(mut guard) = holder.lock() else {
+            return false;
+        };
+        if guard
+            .active
+            .as_ref()
+            .map(|inst| inst.model_id == candidate_id)
+            .unwrap_or(false)
+        {
+            return true;
+        }
+        guard.active = None;
+        match create_tts_from_dir(&api, &model_dir) {
+            Ok(ptr) => {
+                guard.active = Some(LoadedTtsInstance {
+                    model_id: candidate_id,
+                    ptr,
+                    api,
+                });
+                true
+            }
+            Err(_) => false,
+        }
+    })
+    .await
+    .map_err(|e| format!("TTS prewarm aborted: {e}"))
+}
+
+#[tauri::command]
 pub async fn tts_synthesize(
     app: tauri::AppHandle,
     state: tauri::State<'_, LocalTtsHolder>,

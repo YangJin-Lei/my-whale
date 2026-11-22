@@ -7,7 +7,11 @@ import {
   findLocalVoicePack,
   resolveLocalVoiceSpeakerId,
 } from '../engines.js'
-import { splitSpeechSentences, stripSpeechMarkdown } from '../localTts.js'
+import {
+  normalizeEnglishForSpeech,
+  splitSpeechSentences,
+  stripSpeechMarkdown,
+} from '../localTts.js'
 
 describe('speech engines & local voice packs', () => {
   it('defaults to local-sherpa & keeps nekospeak reserved as unavailable', () => {
@@ -60,8 +64,25 @@ describe('speech engines & local voice packs', () => {
     expect(cleaned).not.toContain('https://example.com')
     expect(cleaned).toContain('代码块已略过')
 
-    const chunks = splitSpeechSentences(raw, 28)
+    const chunks = splitSpeechSentences(raw, 40, 22)
     expect(chunks.length).toBeGreaterThanOrEqual(2)
+    expect(chunks[0].length).toBeLessThanOrEqual(22)
     expect(chunks.every((item) => item.length > 0)).toBe(true)
+  })
+
+  it('normalizes glued punctuation, camelCase, tech compounds, versions, and acronyms for English TTS', () => {
+    const sample =
+      '更新 my-whale 到 v0.1.26：通过 (API) 调用 DeepSeek，修复 useEffect 与 JSON/TTS 问题。'
+    const normalized = normalizeEnglishForSpeech(sample)
+    expect(normalized).toContain('my whale')
+    expect(normalized).toContain('v 0 点 1 点 26')
+    expect(normalized).toContain('A P I')
+    expect(normalized).toContain('Deep Seek')
+    expect(normalized).toContain('use Effect')
+    expect(normalized).toContain('J S O N')
+    expect(normalized).toContain('T T S')
+    expect(normalized).not.toContain('(API)')
+    // Pronounceable ALL-CAPS words like OK / AI / RAM stay intact
+    expect(normalizeEnglishForSpeech('OK，AI 和 RAM 都正常')).toContain('OK，AI 和 RAM')
   })
 })

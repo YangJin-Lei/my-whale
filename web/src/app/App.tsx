@@ -28,6 +28,7 @@ import { Toast } from '../components/base/Toast.js'
 import { showToast } from '../components/base/toastState.js'
 import { onUploadNotice } from '../services/attachments.js'
 import { Button } from '../components/base/Button.js'
+import { prewarmLocalTts } from '../services/speech/localTts.js'
 import { stopReadAloud } from '../services/speech/readAloud.js'
 import { CollapsedSider } from '../components/sider/CollapsedSider.js'
 import { closeMobileSider } from '../components/sider/mobileSiderState.js'
@@ -126,6 +127,15 @@ export const App = () => {
       }
     })
     void checkForUpdates(false)
+    const prewarmTimer = window.setTimeout(() => {
+      const { voiceEnabled, ttsEngine, localTtsVoiceId } = useSettings.getState()
+      if (voiceEnabled && ttsEngine === 'local-sherpa') {
+        void prewarmLocalTts(localTtsVoiceId)
+      }
+    }, 800)
+    return () => {
+      window.clearTimeout(prewarmTimer)
+    }
   }, [])
 
   return (

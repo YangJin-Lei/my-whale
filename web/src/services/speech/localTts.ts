@@ -17,6 +17,7 @@ export type LocalTtsSynthesisResult = {
 
 interface LocalTtsCapacitorPlugin {
   getStatus: () => Promise<LocalTtsStatus>
+  prewarm: (opts: { modelId: string }) => Promise<{ ok: boolean; modelId: string }>
   synthesize: (opts: {
     text: string
     modelId: string
@@ -51,6 +52,32 @@ const getTauriInvoke = (): TauriInternals['invoke'] | null => {
 
 export const hasNativeLocalTts = (): boolean =>
   capacitorLocalTts !== null || getTauriInvoke() !== null
+
+let lastPrewarmedModel = ''
+
+/** 在空闲时后台静默加载本地语音模型，消除首次点击朗读的冷启卡顿 */
+export const prewarmLocalTts = async (modelId?: string): Promise<void> => {
+  if (!hasNativeLocalTts()) {
+    return
+  }
+  const resolvedId = (modelId || useSettings.getState().localTtsVoiceId || 'default-zh').trim()
+  if (!resolvedId || lastPrewarmedModel === resolvedId) {
+    return
+  }
+  lastPrewarmedModel = resolvedId
+  try {
+    if (capacitorLocalTts) {
+      await capacitorLocalTts.prewarm({ modelId: resolvedId })
+      return
+    }
+    const tauriInvoke = getTauriInvoke()
+    if (tauriInvoke) {
+      await tauriInvoke('tts_prewarm', { modelId: resolvedId })
+    }
+  } catch {
+    lastPrewarmedModel = ''
+  }
+}
 
 export const getLocalTtsStatus = async (): Promise<LocalTtsStatus> => {
   if (capacitorLocalTts) {
@@ -162,26 +189,103 @@ export const deleteLocalVoicePack = async (modelId: string): Promise<string[]> =
   return []
 }
 
-/** 清理 Markdown 标记、代码块与链接，使朗读文本自然连贯 */
-export const stripSpeechMarkdown = (input: string): string =>
-  input
+const COMPOUND_TECH_REPLACEMENTS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/\bDeepSeek\b/gi, 'Deep Seek'],
+  [/\bGitHub\b/gi, 'Git Hub'],
+  [/\bGitLab\b/gi, 'Git Lab'],
+  [/\bChatGPT\b/gi, 'Chat G P T'],
+  [/\bOpenAI\b/gi, 'Open A I'],
+  [/\bTypeScript\b/gi, 'Type Script'],
+  [/\bJavaScript\b/gi, 'Java Script'],
+  [/\bWebView\b/gi, 'Web View'],
+  [/\bMeloTTS\b/gi, 'Melo T T S'],
+  [/\bNekoSpeak\b/gi, 'Neko Speak'],
+  [/\bONNX\b/gi, 'O N N X'],
+  [/\bmy-whale\b/gi, 'my whale'],
+  [/\biPhone\b/g, 'i Phone'],
+  [/\biPad\b/g, 'i Pad'],
+  [/\bmacOS\b/gi, 'mac O S'],
+  [/\biOS\b/g, 'i O S'],
+  [/\bWi-?Fi\b/gi, 'Wi Fi'],
+]
+
+const PRONOUNCEABLE_UPPER_WORDS = new Set([
+  'OK',
+  'AI',
+  'RAM',
+  'ZIP',
+  'APP',
+  'MAC',
+  'MAX',
+  'MIN',
+  'PRO',
+  'WEB',
+  'JAVA',
+  'RUST',
+  'LINUX',
+  'WORD',
+])
+
+/**
+ * 规整英文品牌词、全大写缩写、驼峰命名与粘连标点，防止 Kokoro / MeloTTS 词典查不到而整词静音跳过。
+ */
+export const normalizeEnglishForSpeech = (input: string): string => {
+  let out = input
+  for (const [pattern, replacement] of COMPOUND_TECH_REPLACEMENTS) {
+    out = out.replace(pattern, replacement)
+  }
+  out = out.replace(/\b([vV])(\d+(?:\.\d+)+)\b/g, (_m, prefix: string, ver: string) => {
+    return `${prefix} ${ver.split('.').join(' 点 ')}`
+  })
+  out = out
+    .replace(/([A-Za-z0-9])[_/\\|@+=]+([A-Za-z0-9])/g, '$1 $2')
+    .replace(/([A-Za-z])-([A-Za-z])/g, '$1 $2')
+    .replace(/[()[\]{}"'<>「」『』【】]/g, ' ')
+  out = out
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([A-Za-z])(\d)/g, '$1 $2')
+    .replace(/(\d)([A-Za-z])/g, '$1 $2')
+  out = out.replace(/\b[A-Z]{2,8}\b/g, (token) =>
+    PRONOUNCEABLE_UPPER_WORDS.has(token) ? token : token.split('').join(' ')
+  )
+  return out
+}
+
+/** 清理 Markdown 标记、代码块与链接，并对英文与符号做分词规整 */
+export const stripSpeechMarkdown = (input: string): string => {
+  const withoutMarkdown = input
     .replace(/```[\s\S]*?```/g, ' 代码块已略过。 ')
-    .replace(/`([^`]+)`/g, '$1')
+    .replace(/`([^`]+)`/g, ' $1 ')
     .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/https?:\/\/\S+/g, '')
     .replace(/^#{1,6}\s+/gm, '')
     .replace(/^>\s?/gm, '')
     .replace(/^\s*[-*+]\s+/gm, '')
-    .replace(/[*_~]+/g, '')
+    .replace(/[*_~]+/g, ' ')
     .replace(/\|/g, '，')
     .replace(/\n{2,}/g, '。')
     .replace(/\n/g, '，')
+
+  return normalizeEnglishForSpeech(withoutMarkdown)
     .replace(/\s{2,}/g, ' ')
     .trim()
+}
 
-/** 将长正文切分为自然短句，确保首句几十毫秒内即可开播且不卡顿 */
-export const splitSpeechSentences = (rawText: string, maxChunkChars = 90): string[] => {
+const joinSpeechChunk = (left: string, right: string): string => {
+  if (!left) {
+    return right
+  }
+  const sep = /[A-Za-z0-9]$/.test(left) && /^[A-Za-z0-9]/.test(right) ? ' ' : ''
+  return `${left}${sep}${right}`
+}
+
+/** 将长正文切分为自然短句：首片更短以便秒开播，后续切片适中避免频繁切换 */
+export const splitSpeechSentences = (
+  rawText: string,
+  maxChunkChars = 72,
+  firstChunkMaxChars = 22
+): string[] => {
   const cleaned = stripSpeechMarkdown(rawText)
   if (!cleaned) {
     return []
@@ -193,8 +297,11 @@ export const splitSpeechSentences = (rawText: string, maxChunkChars = 90): strin
 
   const out: string[] = []
   let buf = ''
+  const currentLimit = () => (out.length === 0 ? firstChunkMaxChars : maxChunkChars)
+
   for (const part of rawParts) {
-    if (part.length > maxChunkChars) {
+    const limit = currentLimit()
+    if (part.length > limit) {
       if (buf) {
         out.push(buf)
         buf = ''
@@ -204,20 +311,26 @@ export const splitSpeechSentences = (rawText: string, maxChunkChars = 90): strin
         .map((s) => s.trim())
         .filter(Boolean)
       for (const sub of subParts) {
-        if (buf.length + sub.length > maxChunkChars && buf) {
+        const subLimit = currentLimit()
+        if (sub.length > subLimit && out.length === 0 && !buf) {
+          out.push(sub.slice(0, subLimit).trim())
+          buf = sub.slice(subLimit).trim()
+          continue
+        }
+        if (buf.length + sub.length > subLimit && buf) {
           out.push(buf)
           buf = sub
         } else {
-          buf = `${buf}${sub}`
+          buf = joinSpeechChunk(buf, sub)
         }
       }
       continue
     }
-    if (buf.length + part.length > maxChunkChars && buf) {
+    if (buf.length + part.length > limit && buf) {
       out.push(buf)
       buf = part
     } else {
-      buf = `${buf}${part}`
+      buf = joinSpeechChunk(buf, part)
     }
   }
   if (buf) {

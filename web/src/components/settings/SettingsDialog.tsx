@@ -79,6 +79,7 @@ import {
   downloadLocalVoicePack,
   getLocalTtsStatus,
   hasNativeLocalTts,
+  prewarmLocalTts,
 } from '../../services/speech/localTts.js'
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
 import { Button } from '../base/Button.js'
@@ -776,6 +777,8 @@ const VoiceModeSetting = () => {
               const next = event.target.checked
               if (!next) {
                 stopReadAloud()
+              } else if (useSettings.getState().ttsEngine === 'local-sherpa') {
+                void prewarmLocalTts(useSettings.getState().localTtsVoiceId)
               }
               setVoiceEnabled(next)
             }}
@@ -1051,7 +1054,12 @@ const TtsEngineSetting = () => {
             label: isEn ? engine.labelEn : engine.labelZh,
             disabled: !engine.available,
           }))}
-          onChange={setTtsEngine}
+          onChange={(next) => {
+            setTtsEngine(next)
+            if (next === 'local-sherpa') {
+              void prewarmLocalTts(useSettings.getState().localTtsVoiceId)
+            }
+          }}
         />
       }
     />
@@ -1103,6 +1111,7 @@ const LocalTtsVoiceSetting = () => {
       const next = await downloadLocalVoicePack(packId)
       setInstalledIds(next)
       setLocalTtsVoiceId(packId)
+      void prewarmLocalTts(packId)
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       setErrorMsg(msg)
@@ -1189,7 +1198,10 @@ const LocalTtsVoiceSetting = () => {
                       size="s"
                       variant={selected ? 'primary' : 'outlined'}
                       disabled={selected}
-                      onClick={() => setLocalTtsVoiceId(pack.id)}
+                      onClick={() => {
+                        setLocalTtsVoiceId(pack.id)
+                        void prewarmLocalTts(pack.id)
+                      }}
                     >
                       {selected ? t('settingsTtsActiveTag') : t('settingsTtsUse')}
                     </Button>

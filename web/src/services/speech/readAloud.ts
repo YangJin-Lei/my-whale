@@ -206,7 +206,7 @@ export const toggleReadAloud = (
 
   if (effectiveEngine === 'local-sherpa') {
     void (async () => {
-      const sentences = splitSpeechSentences(cleanText, 90)
+      const sentences = splitSpeechSentences(cleanText)
       if (sentences.length === 0) {
         finish(controller)
         return
@@ -214,28 +214,31 @@ export const toggleReadAloud = (
       let nextTime = 0
       let lastSource: AudioBufferSourceNode | null = null
       let activePack = findLocalVoicePack(localTtsVoiceId)
+      const synthesizeChunk = async (chunk: string) => {
+        try {
+          const activeSid = resolveLocalVoiceSpeakerId(activePack, localTtsSpeakerId)
+          return await synthesizeWithLocalTts(chunk, activePack.id, 1.0, activeSid)
+        } catch (err) {
+          if (activePack.id !== DEFAULT_LOCAL_VOICE_ID) {
+            activePack = findLocalVoicePack(DEFAULT_LOCAL_VOICE_ID)
+            return await synthesizeWithLocalTts(chunk, activePack.id, 1.0, activePack.defaultSid)
+          }
+          throw err
+        }
+      }
       try {
-        for (const sentence of sentences) {
-          if (controller.signal.aborted) {
+        // 1-ahead 流水线预合成：播当前句的同时后台已经开始合成下一句
+        let pendingAudio: Promise<{ samples: Float32Array; sampleRate: number }> | null =
+          synthesizeChunk(sentences[0])
+        for (let i = 0; i < sentences.length; i += 1) {
+          if (controller.signal.aborted || !pendingAudio) {
             return
           }
-          let audio: { samples: Float32Array; sampleRate: number }
-          try {
-            const activeSid = resolveLocalVoiceSpeakerId(activePack, localTtsSpeakerId)
-            audio = await synthesizeWithLocalTts(sentence, activePack.id, 1.0, activeSid)
-          } catch (err) {
-            if (activePack.id !== DEFAULT_LOCAL_VOICE_ID) {
-              activePack = findLocalVoicePack(DEFAULT_LOCAL_VOICE_ID)
-              audio = await synthesizeWithLocalTts(
-                sentence,
-                activePack.id,
-                1.0,
-                activePack.defaultSid
-              )
-            } else {
-              throw err
-            }
-          }
+          const audio = await pendingAudio
+          pendingAudio =
+            i + 1 < sentences.length && !controller.signal.aborted
+              ? synthesizeChunk(sentences[i + 1])
+              : null
           if (controller.signal.aborted) {
             return
           }

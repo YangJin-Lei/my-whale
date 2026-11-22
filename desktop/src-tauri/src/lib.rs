@@ -257,6 +257,7 @@ pub fn run() {
             local_cache::stop_cache_server,
             local_cache::get_cache_server_status,
             local_tts::tts_get_status,
+            local_tts::tts_prewarm,
             local_tts::tts_synthesize,
             local_tts::tts_download_model,
             local_tts::tts_delete_model
