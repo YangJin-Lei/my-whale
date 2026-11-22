@@ -14,14 +14,25 @@ import {
   PLATFORM_TOP_UP_URL,
   PLATFORM_USAGE_URL,
 } from '../../services/links.js'
-import { setApiKey, useSettings } from '../../services/settings.js'
+import { ApiError, verifyCustomApi } from '../../services/api/client.js'
+import {
+  setApiKey,
+  setApiProvider,
+  setCustomApiConfig,
+  useSettings,
+  type CustomApiProtocol,
+} from '../../services/settings.js'
 import { Button } from '../base/Button.js'
 import { IconDownloadOutline16, IconUploadOutline14 } from '../base/icons.js'
 import { Modal } from '../base/Modal.js'
 import { showToast } from '../base/toastState.js'
-import { openSettings } from '../settings/settingsDialogState.js'
 import { useApiKeyForm } from '../settings/useApiKeyForm.js'
-import { closeOnboarding, useOnboarding } from './onboardingState.js'
+import {
+  clearOnboardingSkipped,
+  closeOnboarding,
+  markOnboardingSkipped,
+  useOnboarding,
+} from './onboardingState.js'
 import styles from './Onboarding.module.css'
 
 export const Onboarding = () => {
@@ -32,9 +43,22 @@ export const Onboarding = () => {
 const OnboardingContent = () => {
   const t = useTranslate()
   const apiKey = useSettings((state) => state.apiKey)
+  const apiProvider = useSettings((state) => state.apiProvider)
+  const customApiUrl = useSettings((state) => state.customApiUrl)
+  const customApiKey = useSettings((state) => state.customApiKey)
+  const customApiModel = useSettings((state) => state.customApiModel)
+  const customApiProtocol = useSettings((state) => state.customApiProtocol)
   const sessionsCount = useChatStore((state) => state.sessions.length)
   const importingHistory = useChatStore((state) => state.importingHistory)
   const balance = useBalance()
+
+  const [providerTab, setProviderTab] = useState<'official' | 'custom'>(apiProvider)
+  const [urlDraft, setUrlDraft] = useState(customApiUrl)
+  const [customKeyDraft, setCustomKeyDraft] = useState('')
+  const [modelDraft, setModelDraft] = useState(customApiModel)
+  const [protocolDraft, setProtocolDraft] = useState<CustomApiProtocol>(customApiProtocol)
+  const [customVerifying, setCustomVerifying] = useState(false)
+  const [customError, setCustomError] = useState<string | null>(null)
 
   const [awaitingKey, setAwaitingKey] = useState(false)
   const [detected, setDetected] = useState(false)
@@ -48,8 +72,44 @@ const OnboardingContent = () => {
   const form = useApiKeyForm(() => {
     setAwaitingKey(false)
     setDetected(false)
+    clearOnboardingSkipped()
     void refreshBalance()
   })
+
+  const handleDismiss = () => {
+    markOnboardingSkipped()
+    closeOnboarding()
+  }
+
+  const handleCustomSubmit = async () => {
+    const url = urlDraft.trim().replace(/\/+$/, '')
+    const model = modelDraft.trim()
+    const key = customKeyDraft.trim() || customApiKey?.trim() || ''
+    if (!url || !key || !model) {
+      setCustomError(t('customApiMissingFields'))
+      return
+    }
+    setCustomVerifying(true)
+    setCustomError(null)
+    try {
+      await verifyCustomApi({ url, apiKey: key, model, protocol: protocolDraft })
+      setCustomApiConfig({ url, apiKey: key, model, protocol: protocolDraft })
+      setApiProvider('custom')
+      clearOnboardingSkipped()
+      closeOnboarding()
+      showToast({ key: 'customApiSavedToast' })
+    } catch (error) {
+      setCustomError(
+        error instanceof ApiError && error.localMessage
+          ? t(error.localMessage.key, error.localMessage.params)
+          : error instanceof Error
+            ? error.message
+            : String(error)
+      )
+    } finally {
+      setCustomVerifying(false)
+    }
+  }
 
   const tryAutoDetectClipboard = useCallback(async () => {
     if (!awaitingKey || apiKey) {
@@ -152,8 +212,6 @@ const OnboardingContent = () => {
     }
   }
 
-  const canClose = Boolean(apiKey)
-
   return (
     <>
       <Modal
@@ -163,18 +221,116 @@ const OnboardingContent = () => {
             <span>{t('onboardingTitle')}</span>
           </div>
         }
-        closable={canClose}
+        closable
         className={styles.modal}
         mainClassName={styles.main}
-        onClose={() => {
-          if (canClose) {
-            closeOnboarding()
-          }
-        }}
+        onClose={handleDismiss}
       >
         <p className={styles.desc}>{t('onboardingDesc')}</p>
 
-        {!apiKey ? (
+        <div className={styles.providerTabs}>
+          <button
+            type="button"
+            className={clsx(
+              styles.providerTab,
+              providerTab === 'official' && styles.providerTabActive
+            )}
+            onClick={() => setProviderTab('official')}
+          >
+            {t('apiProviderOfficial')}
+          </button>
+          <button
+            type="button"
+            className={clsx(
+              styles.providerTab,
+              providerTab === 'custom' && styles.providerTabActive
+            )}
+            onClick={() => setProviderTab('custom')}
+          >
+            {t('apiProviderCustom')}
+          </button>
+        </div>
+
+        {providerTab === 'custom' ? (
+          <div className={styles.customBox}>
+            <div className={styles.customField}>
+              <span className={styles.customLabel}>{t('customApiProtocol')}</span>
+              <div className={styles.protocolRow}>
+                <button
+                  type="button"
+                  className={clsx(
+                    styles.protocolChip,
+                    protocolDraft === 'openai' && styles.protocolChipActive
+                  )}
+                  onClick={() => setProtocolDraft('openai')}
+                >
+                  {t('customApiProtocolOpenAi')}
+                </button>
+                <button
+                  type="button"
+                  className={clsx(
+                    styles.protocolChip,
+                    protocolDraft === 'anthropic' && styles.protocolChipActive
+                  )}
+                  onClick={() => setProtocolDraft('anthropic')}
+                >
+                  {t('customApiProtocolAnthropic')}
+                </button>
+              </div>
+            </div>
+            <div className={styles.customField}>
+              <label className={styles.customLabel} htmlFor="onboarding-custom-url">
+                {t('customApiUrlLabel')}
+              </label>
+              <input
+                id="onboarding-custom-url"
+                type="url"
+                className={styles.input}
+                placeholder={t('customApiUrlPlaceholder')}
+                value={urlDraft}
+                onChange={(e) => setUrlDraft(e.target.value)}
+              />
+            </div>
+            <div className={styles.customField}>
+              <label className={styles.customLabel} htmlFor="onboarding-custom-key">
+                {t('customApiKeyLabel')}
+              </label>
+              <input
+                id="onboarding-custom-key"
+                type="password"
+                className={styles.input}
+                placeholder={
+                  customApiKey ? t('customApiKeySavedPlaceholder') : t('customApiKeyPlaceholder')
+                }
+                value={customKeyDraft}
+                onChange={(e) => setCustomKeyDraft(e.target.value)}
+              />
+            </div>
+            <div className={styles.customField}>
+              <label className={styles.customLabel} htmlFor="onboarding-custom-model">
+                {t('customApiModelLabel')}
+              </label>
+              <input
+                id="onboarding-custom-model"
+                type="text"
+                className={styles.input}
+                placeholder={t('customApiModelPlaceholder')}
+                value={modelDraft}
+                onChange={(e) => setModelDraft(e.target.value)}
+              />
+            </div>
+            {customError ? <div className={styles.error}>{customError}</div> : null}
+            <Button
+              variant="primary"
+              size="l"
+              block
+              disabled={customVerifying}
+              onClick={() => void handleCustomSubmit()}
+            >
+              {customVerifying ? t('apiKeyVerifying') : t('customApiSaveAndUse')}
+            </Button>
+          </div>
+        ) : !apiKey ? (
           <div className={styles.steps}>
             <div className={styles.step}>
               <span className={styles.stepNum}>1</span>
@@ -245,18 +401,6 @@ const OnboardingContent = () => {
                 {form.error ? <div className={styles.error}>{form.error}</div> : null}
               </div>
             </div>
-
-            <Button
-              variant="outlined"
-              size="m"
-              block
-              onClick={() => {
-                closeOnboarding()
-                openSettings('data')
-              }}
-            >
-              {t('apiProviderCustom')}
-            </Button>
           </div>
         ) : (
           <div className={styles.verifiedBox}>
@@ -345,6 +489,12 @@ const OnboardingContent = () => {
             </div>
           </div>
         )}
+
+        {!apiKey ? (
+          <Button variant="outlined" size="m" block onClick={handleDismiss}>
+            {t('onboardingSkip')}
+          </Button>
+        ) : null}
 
         <div className={styles.historyBox}>
           <div className={styles.historyTitle}>{t('onboardingHistoryTitle')}</div>

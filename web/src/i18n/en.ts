@@ -576,4 +576,8 @@ export const en = {
   petRoomDebugTest: 'Test',
   petRoomDebugTestOk: 'Connection OK',
   petRoomDebugCacheStats: 'KV cached {cached} ({pct}%) · Output {out} tokens',
+  petRoomSpeakBuzz: 'Random / Buzz',
+  petRoomSpeakSeq: 'Sequential',
+  petRoomChaosLabel: 'Mischief {pct}%',
+  onboardingSkip: 'Skip for now, enter main page',
 } satisfies Record<keyof typeof zh, string>

@@ -553,4 +553,8 @@ export const zh = {
   petRoomDebugTest: '测试连接',
   petRoomDebugTestOk: '连接测试成功',
   petRoomDebugCacheStats: 'KV缓存命中 {cached} ({pct}%) · 输出 {out} tokens',
+  petRoomSpeakBuzz: '随机抢答',
+  petRoomSpeakSeq: '轮流发言',
+  petRoomChaosLabel: '搞怪 {pct}%',
+  onboardingSkip: '暂不填写，直接进入主页',
 } as const

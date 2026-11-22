@@ -20,6 +20,7 @@ import { MobileHeader } from '../components/session/MobileHeader.js'
 import { Welcome } from '../components/session/Welcome.js'
 import { ensureApiKey } from '../components/settings/settingsDialogState.js'
 import { Onboarding } from '../components/onboarding/Onboarding.js'
+import { hasSkippedOnboarding } from '../components/onboarding/onboardingState.js'
 import { SettingsDialog } from '../components/settings/SettingsDialog.js'
 import { bindBalanceAutoRefresh } from '../services/balance.js'
 import { checkForUpdates } from '../services/update.js'
@@ -120,7 +121,9 @@ export const App = () => {
     void initChat()
     // 原生端先等待 Android Keystore 读取/迁移 API Key 完成，再判断是否需要弹出引导
     void waitForApiKeyHydration().then(() => {
-      ensureApiKey()
+      if (!hasSkippedOnboarding()) {
+        ensureApiKey()
+      }
     })
     void checkForUpdates(false)
   }, [])
