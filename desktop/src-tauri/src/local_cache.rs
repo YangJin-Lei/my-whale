@@ -978,3 +978,47 @@ pub fn get_cache_server_status(holder: tauri::State<'_, CacheServerHolder>) -> C
         prefix_input_tokens: holder.cache.prefix_input_tokens.load(Ordering::Relaxed),
     }
 }
+
+#[cfg(test)]
+mod proxy_tests {
+    use super::*;
+
+    fn spawn_builtin_proxy() -> u16 {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+        let client = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(15))
+            .timeout(Duration::from_secs(60))
+            .build()
+            .expect("client");
+        let cache = Arc::new(MemoryToolCache::default());
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let c = client.clone();
+                let ca = cache.clone();
+                std::thread::spawn(move || handle_tcp_client(stream, c, ca));
+            }
+        });
+        port
+    }
+
+    #[test]
+    #[ignore = "requires network access to open.bigmodel.cn"]
+    fn proxy_relays_real_https_upstream_with_cors() {
+        let port = spawn_builtin_proxy();
+        let body = r#"{"model":"glm-4-flash","messages":[{"role":"user","content":"hi"}],"max_tokens":16}"#;
+        let req = format!(
+            "POST /api/proxy HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Target-Url: https://open.bigmodel.cn/api/paas/v4/chat/completions\r\nAuthorization: Bearer fake-key-123\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        let mut s = TcpStream::connect(("127.0.0.1", port)).expect("connect");
+        s.set_read_timeout(Some(Duration::from_secs(40))).ok();
+        s.write_all(req.as_bytes()).expect("write");
+        let mut resp = String::new();
+        let _ = s.read_to_string(&mut resp);
+        println!("{resp}");
+        assert!(resp.contains("Access-Control-Allow-Origin: *"), "missing CORS header");
+        assert!(resp.starts_with("HTTP/1.1 401"), "expected upstream 401 passthrough");
+    }
+}
