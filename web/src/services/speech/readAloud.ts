@@ -4,7 +4,11 @@ import { ApiError } from '../api/client.js'
 import { classifyApiError } from '../api/errors.js'
 import { synthesize, TTS_SAMPLE_RATE } from '../api/speech.js'
 import { useSettings } from '../settings.js'
-import { DEFAULT_LOCAL_VOICE_ID, findLocalVoicePack } from './engines.js'
+import {
+  DEFAULT_LOCAL_VOICE_ID,
+  findLocalVoicePack,
+  resolveLocalVoiceSpeakerId,
+} from './engines.js'
 import { hasNativeLocalTts, splitSpeechSentences, synthesizeWithLocalTts } from './localTts.js'
 
 /**
@@ -180,7 +184,7 @@ export const toggleReadAloud = (
   current = { controller }
   useReadAloud.setState({ messageId, status: 'loading' })
   // 引擎与音色在开始朗读时读取，设置中切换后下一次朗读生效
-  const { apiKey, ttsVoice, ttsEngine, localTtsVoiceId } = useSettings.getState()
+  const { apiKey, ttsVoice, ttsEngine, localTtsVoiceId, localTtsSpeakerId } = useSettings.getState()
   const effectiveEngine = ttsEngine === 'nekospeak' ? 'local-sherpa' : ttsEngine
 
   if (
@@ -217,12 +221,8 @@ export const toggleReadAloud = (
           }
           let audio: { samples: Float32Array; sampleRate: number }
           try {
-            audio = await synthesizeWithLocalTts(
-              sentence,
-              activePack.id,
-              1.0,
-              activePack.defaultSid
-            )
+            const activeSid = resolveLocalVoiceSpeakerId(activePack, localTtsSpeakerId)
+            audio = await synthesizeWithLocalTts(sentence, activePack.id, 1.0, activeSid)
           } catch (err) {
             if (activePack.id !== DEFAULT_LOCAL_VOICE_ID) {
               activePack = findLocalVoicePack(DEFAULT_LOCAL_VOICE_ID)

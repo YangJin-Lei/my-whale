@@ -94,6 +94,7 @@ export const zh = {
   settingsTtsVoiceTide: '暗潮（男声）',
   settingsTtsEngine: '朗读引擎',
   settingsTtsLocalVoice: '本地音色包',
+  settingsTtsSpeaker: '说话人音色',
   settingsTtsBuiltInTag: '内置默认',
   settingsTtsInstalledTag: '已安装',
   settingsTtsActiveTag: '使用中',

@@ -5,6 +5,7 @@ import {
   TTS_ENGINES,
   buildVoicePackDownloadCandidates,
   findLocalVoicePack,
+  resolveLocalVoiceSpeakerId,
 } from '../engines.js'
 import { splitSpeechSentences, stripSpeechMarkdown } from '../localTts.js'
 
@@ -19,6 +20,16 @@ describe('speech engines & local voice packs', () => {
     const builtIn = findLocalVoicePack(DEFAULT_LOCAL_VOICE_ID)
     expect(builtIn.builtIn).toBe(true)
     expect(builtIn.id).toBe('default-zh')
+    expect(builtIn.format).toBe('kokoro')
+    expect(builtIn.defaultSid).toBe(3)
+    expect(resolveLocalVoiceSpeakerId(builtIn, 58)).toBe(58)
+    expect(resolveLocalVoiceSpeakerId(builtIn, 9999)).toBe(3)
+
+    const v10 = findLocalVoicePack('kokoro-v1_0')
+    expect(v10.id).toBe('kokoro-v1_0')
+    expect(v10.sizeMb).toBe(126.2)
+    expect(v10.defaultSid).toBe(47)
+    expect(v10.speakers?.some((s) => s.sid === 37)).toBe(true)
   })
 
   it('builds deduplicated multi-mirror + direct GitHub download candidates', () => {

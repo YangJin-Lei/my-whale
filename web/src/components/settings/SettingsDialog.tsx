@@ -51,6 +51,7 @@ import {
   setChatBgPreset,
   setFontFollowSystem,
   setFontScale,
+  setLocalTtsSpeakerId,
   setLocalTtsVoiceId,
   setLocale,
   setLocation,
@@ -70,6 +71,8 @@ import {
   DEFAULT_LOCAL_VOICE_ID,
   LOCAL_VOICE_PACKS,
   TTS_ENGINES,
+  findLocalVoicePack,
+  resolveLocalVoiceSpeakerId,
 } from '../../services/speech/engines.js'
 import {
   deleteLocalVoicePack,
@@ -1059,11 +1062,14 @@ const LocalTtsVoiceSetting = () => {
   const t = useTranslate()
   const locale = useSettings((state) => state.locale)
   const localTtsVoiceId = useSettings((state) => state.localTtsVoiceId)
+  const localTtsSpeakerId = useSettings((state) => state.localTtsSpeakerId)
   const isEn = locale === 'en-US'
   const nativeSupported = hasNativeLocalTts()
   const [installedIds, setInstalledIds] = useState<string[]>([DEFAULT_LOCAL_VOICE_ID])
   const [busyId, setBusyId] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const activePack = findLocalVoicePack(localTtsVoiceId)
+  const activeSpeakerId = resolveLocalVoiceSpeakerId(activePack, localTtsSpeakerId)
 
   useEffect(() => {
     if (!nativeSupported) {
@@ -1128,68 +1134,92 @@ const LocalTtsVoiceSetting = () => {
   }
 
   return (
-    <div className={styles.cell}>
-      <div className={styles.text}>
-        <span>{t('settingsTtsLocalVoice')}</span>
-        {!nativeSupported ? (
-          <div className={styles.description}>{t('settingsTtsBrowserHint')}</div>
-        ) : null}
-        {errorMsg ? <div className={styles.error}>{errorMsg}</div> : null}
-      </div>
-      <div className={styles.ttsPackList}>
-        {LOCAL_VOICE_PACKS.map((pack) => {
-          const installed = pack.builtIn || installedIds.includes(pack.id)
-          const selected = localTtsVoiceId === pack.id && installed
-          const downloading = busyId === pack.id
-          return (
-            <div key={pack.id} className={styles.ttsPackItem}>
-              <div className={styles.ttsPackInfo}>
-                <span className={styles.ttsPackName}>{isEn ? pack.nameEn : pack.nameZh}</span>
-                <span className={styles.ttsPackMeta}>
-                  {pack.sizeMb} MB ·{' '}
-                  {pack.builtIn
-                    ? t('settingsTtsBuiltInTag')
-                    : installed
-                      ? t('settingsTtsInstalledTag')
-                      : t('settingsTtsDownload')}
-                </span>
+    <>
+      {activePack.speakers && activePack.speakers.length > 0 ? (
+        <SettingCell
+          label={t('settingsTtsSpeaker')}
+          status={null}
+          action={
+            <Select
+              ariaLabel={t('settingsTtsSpeaker')}
+              value={String(activeSpeakerId)}
+              options={activePack.speakers.map((sp) => ({
+                value: String(sp.sid),
+                label: isEn ? sp.labelEn : sp.labelZh,
+              }))}
+              onChange={(val) => {
+                const sid = Number(val)
+                if (Number.isInteger(sid)) {
+                  setLocalTtsSpeakerId(sid)
+                }
+              }}
+            />
+          }
+        />
+      ) : null}
+      <div className={styles.cell}>
+        <div className={styles.text}>
+          <span>{t('settingsTtsLocalVoice')}</span>
+          {!nativeSupported ? (
+            <div className={styles.description}>{t('settingsTtsBrowserHint')}</div>
+          ) : null}
+          {errorMsg ? <div className={styles.error}>{errorMsg}</div> : null}
+        </div>
+        <div className={styles.ttsPackList}>
+          {LOCAL_VOICE_PACKS.map((pack) => {
+            const installed = pack.builtIn || installedIds.includes(pack.id)
+            const selected = localTtsVoiceId === pack.id && installed
+            const downloading = busyId === pack.id
+            return (
+              <div key={pack.id} className={styles.ttsPackItem}>
+                <div className={styles.ttsPackInfo}>
+                  <span className={styles.ttsPackName}>{isEn ? pack.nameEn : pack.nameZh}</span>
+                  <span className={styles.ttsPackMeta}>
+                    {pack.sizeMb} MB ·{' '}
+                    {pack.builtIn
+                      ? t('settingsTtsBuiltInTag')
+                      : installed
+                        ? t('settingsTtsInstalledTag')
+                        : t('settingsTtsDownload')}
+                  </span>
+                </div>
+                <div className={styles.ttsPackActions}>
+                  {installed ? (
+                    <Button
+                      size="s"
+                      variant={selected ? 'primary' : 'outlined'}
+                      disabled={selected}
+                      onClick={() => setLocalTtsVoiceId(pack.id)}
+                    >
+                      {selected ? t('settingsTtsActiveTag') : t('settingsTtsUse')}
+                    </Button>
+                  ) : (
+                    <Button
+                      size="s"
+                      variant="outlined"
+                      disabled={!nativeSupported || Boolean(busyId)}
+                      onClick={() => void handleDownload(pack.id)}
+                    >
+                      {downloading ? t('settingsTtsDownloading') : t('settingsTtsDownload')}
+                    </Button>
+                  )}
+                  {!pack.builtIn && installed ? (
+                    <Button
+                      size="s"
+                      variant="outlined"
+                      disabled={Boolean(busyId)}
+                      onClick={() => void handleDelete(pack.id)}
+                    >
+                      {t('settingsTtsDelete')}
+                    </Button>
+                  ) : null}
+                </div>
               </div>
-              <div className={styles.ttsPackActions}>
-                {installed ? (
-                  <Button
-                    size="s"
-                    variant={selected ? 'primary' : 'outlined'}
-                    disabled={selected}
-                    onClick={() => setLocalTtsVoiceId(pack.id)}
-                  >
-                    {selected ? t('settingsTtsActiveTag') : t('settingsTtsUse')}
-                  </Button>
-                ) : (
-                  <Button
-                    size="s"
-                    variant="outlined"
-                    disabled={!nativeSupported || Boolean(busyId)}
-                    onClick={() => void handleDownload(pack.id)}
-                  >
-                    {downloading ? t('settingsTtsDownloading') : t('settingsTtsDownload')}
-                  </Button>
-                )}
-                {!pack.builtIn && installed ? (
-                  <Button
-                    size="s"
-                    variant="outlined"
-                    disabled={Boolean(busyId)}
-                    onClick={() => void handleDelete(pack.id)}
-                  >
-                    {t('settingsTtsDelete')}
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 

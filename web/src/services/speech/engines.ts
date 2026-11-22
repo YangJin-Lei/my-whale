@@ -2,6 +2,12 @@ export type TtsEngineId = 'local-sherpa' | 'official' | 'system' | 'nekospeak'
 
 export type LocalVoiceModelFormat = 'vits-piper' | 'vits-melo' | 'kokoro'
 
+export type LocalVoiceSpeaker = {
+  sid: number
+  labelZh: string
+  labelEn: string
+}
+
 export type LocalVoicePack = {
   id: string
   nameZh: string
@@ -12,6 +18,7 @@ export type LocalVoicePack = {
   archiveUrl: string
   archiveName: string
   defaultSid: number
+  speakers?: ReadonlyArray<LocalVoiceSpeaker>
 }
 
 /**
@@ -71,26 +78,84 @@ export const DEFAULT_LOCAL_VOICE_ID = 'default-zh'
 export const LOCAL_VOICE_PACKS: ReadonlyArray<LocalVoicePack> = [
   {
     id: 'default-zh',
-    nameZh: '小雅 · 轻量中文女声（内置默认）',
-    nameEn: 'XiaoYa · Lightweight Chinese (Built-in)',
-    sizeMb: 13.4,
+    nameZh: 'Kokoro v1.1 · 中英自然多音色（内置默认）',
+    nameEn: 'Kokoro v1.1 · EN/ZH Natural Multi-Voice (Built-in)',
+    sizeMb: 140.2,
     builtIn: true,
-    format: 'vits-piper',
+    format: 'kokoro',
     archiveUrl:
-      'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-zh_CN-xiao_ya-medium-int8.tar.bz2',
-    archiveName: 'vits-piper-zh_CN-xiao_ya-medium-int8.tar.bz2',
-    defaultSid: 0,
+      'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-int8-multi-lang-v1_1.tar.bz2',
+    archiveName: 'kokoro-int8-multi-lang-v1_1.tar.bz2',
+    defaultSid: 3,
+    speakers: [
+      {
+        sid: 3,
+        labelZh: '中文女声 · zf_001（默认清晰女声）',
+        labelEn: 'ZH Female · zf_001 (Default)',
+      },
+      { sid: 4, labelZh: '中文女声 · zf_002（温柔女声）', labelEn: 'ZH Female · zf_002 (Warm)' },
+      { sid: 5, labelZh: '中文女声 · zf_003（明亮女声）', labelEn: 'ZH Female · zf_003 (Bright)' },
+      { sid: 6, labelZh: '中文女声 · zf_004（知性女声）', labelEn: 'ZH Female · zf_004 (Calm)' },
+      { sid: 8, labelZh: '中文女声 · zf_006（清甜女声）', labelEn: 'ZH Female · zf_006 (Sweet)' },
+      { sid: 10, labelZh: '中文女声 · zf_008（沉稳女声）', labelEn: 'ZH Female · zf_008 (Steady)' },
+      { sid: 14, labelZh: '中文女声 · zf_021（柔和女声）', labelEn: 'ZH Female · zf_021 (Soft)' },
+      { sid: 58, labelZh: '中文男声 · zm_009（醇厚男声）', labelEn: 'ZH Male · zm_009 (Deep)' },
+      { sid: 59, labelZh: '中文男声 · zm_010（清晰男声）', labelEn: 'ZH Male · zm_010 (Clear)' },
+      { sid: 60, labelZh: '中文男声 · zm_011（沉稳男声）', labelEn: 'ZH Male · zm_011 (Steady)' },
+      { sid: 63, labelZh: '中文男声 · zm_014（青年男声）', labelEn: 'ZH Male · zm_014 (Youth)' },
+      { sid: 0, labelZh: '英文女声 · Maple (af_maple)', labelEn: 'EN Female · Maple (af_maple)' },
+      { sid: 1, labelZh: '英文女声 · Sol (af_sol)', labelEn: 'EN Female · Sol (af_sol)' },
+      { sid: 2, labelZh: '英文女声 · Vale (bf_vale)', labelEn: 'EN Female · Vale (bf_vale)' },
+    ],
+  },
+  {
+    id: 'kokoro-v1_0',
+    nameZh: 'Kokoro v1.0 · 八语种多音色（中/英/日/法等）',
+    nameEn: 'Kokoro v1.0 · 8-Language Multi-Voice (ZH/EN/JA/FR...)',
+    sizeMb: 126.2,
+    builtIn: false,
+    format: 'kokoro',
+    archiveUrl:
+      'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-int8-multi-lang-v1_0.tar.bz2',
+    archiveName: 'kokoro-int8-multi-lang-v1_0.tar.bz2',
+    defaultSid: 47,
+    speakers: [
+      { sid: 47, labelZh: '中文女声 · 小晓 (zf_xiaoxiao)', labelEn: 'ZH Female · zf_xiaoxiao' },
+      { sid: 45, labelZh: '中文女声 · 小贝 (zf_xiaobei)', labelEn: 'ZH Female · zf_xiaobei' },
+      { sid: 46, labelZh: '中文女声 · 小妮 (zf_xiaoni)', labelEn: 'ZH Female · zf_xiaoni' },
+      { sid: 48, labelZh: '中文女声 · 小艺 (zf_xiaoyi)', labelEn: 'ZH Female · zf_xiaoyi' },
+      { sid: 50, labelZh: '中文男声 · 云希 (zm_yunxi)', labelEn: 'ZH Male · zm_yunxi' },
+      { sid: 49, labelZh: '中文男声 · 云健 (zm_yunjian)', labelEn: 'ZH Male · zm_yunjian' },
+      { sid: 52, labelZh: '中文男声 · 云扬 (zm_yunyang)', labelEn: 'ZH Male · zm_yunyang' },
+      { sid: 3, labelZh: '英文女声 · Heart (af_heart)', labelEn: 'EN Female · Heart (af_heart)' },
+      { sid: 11, labelZh: '英文男声 · Adam (am_adam)', labelEn: 'EN Male · Adam (am_adam)' },
+      { sid: 37, labelZh: '日语女声 · Alpha (jf_alpha)', labelEn: 'JA Female · Alpha (jf_alpha)' },
+      { sid: 41, labelZh: '日语男声 · Kumo (jm_kumo)', labelEn: 'JA Male · Kumo (jm_kumo)' },
+      { sid: 30, labelZh: '法语女声 · Siwis (ff_siwis)', labelEn: 'FR Female · Siwis (ff_siwis)' },
+    ],
   },
   {
     id: 'chaowen-int8',
-    nameZh: '超文 · 轻量中文男声',
-    nameEn: 'Chaowen · Lightweight Chinese Male',
+    nameZh: '超文 · 极轻量中文男声',
+    nameEn: 'Chaowen · Ultra-Light Chinese Male',
     sizeMb: 13.4,
     builtIn: false,
     format: 'vits-piper',
     archiveUrl:
       'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-zh_CN-chaowen-medium-int8.tar.bz2',
     archiveName: 'vits-piper-zh_CN-chaowen-medium-int8.tar.bz2',
+    defaultSid: 0,
+  },
+  {
+    id: 'xiao_ya-int8',
+    nameZh: '小雅 · 极轻量中文女声',
+    nameEn: 'XiaoYa · Ultra-Light Chinese Female',
+    sizeMb: 13.4,
+    builtIn: false,
+    format: 'vits-piper',
+    archiveUrl:
+      'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-zh_CN-xiao_ya-medium-int8.tar.bz2',
+    archiveName: 'vits-piper-zh_CN-xiao_ya-medium-int8.tar.bz2',
     defaultSid: 0,
   },
   {
@@ -117,22 +182,24 @@ export const LOCAL_VOICE_PACKS: ReadonlyArray<LocalVoicePack> = [
     archiveName: 'vits-melo-tts-zh_en.tar.bz2',
     defaultSid: 0,
   },
-  {
-    id: 'kokoro-multi',
-    nameZh: 'Kokoro · 多语种多音色（int8）',
-    nameEn: 'Kokoro · Multi-Lang & Multi-Speaker (int8)',
-    sizeMb: 140.2,
-    builtIn: false,
-    format: 'kokoro',
-    archiveUrl:
-      'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-int8-multi-lang-v1_1.tar.bz2',
-    archiveName: 'kokoro-int8-multi-lang-v1_1.tar.bz2',
-    defaultSid: 0,
-  },
 ]
 
 export const findLocalVoicePack = (id?: string | null): LocalVoicePack =>
   LOCAL_VOICE_PACKS.find((pack) => pack.id === id) ?? LOCAL_VOICE_PACKS[0]
+
+export const resolveLocalVoiceSpeakerId = (
+  pack: LocalVoicePack,
+  speakerId?: number | null
+): number => {
+  if (
+    typeof speakerId === 'number' &&
+    Number.isInteger(speakerId) &&
+    pack.speakers?.some((speaker) => speaker.sid === speakerId)
+  ) {
+    return speakerId
+  }
+  return pack.defaultSid
+}
 
 const FALLBACK_MIRRORS = [
   'https://ghfast.top/',

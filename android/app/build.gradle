@@ -46,8 +46,8 @@ android {
         applicationId "com.mywhale.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode ((project.findProperty('MYWHALE_VERSION_CODE') ?: 125).toString().toInteger())
-        versionName ((project.findProperty('MYWHALE_VERSION_NAME') ?: "0.1.25").toString())
+        versionCode ((project.findProperty('MYWHALE_VERSION_CODE') ?: 126).toString().toInteger())
+        versionName ((project.findProperty('MYWHALE_VERSION_NAME') ?: "0.1.26").toString())
         buildConfigField "String", "GIT_COMMIT_SHA", "\"${resolveGitSha()}\""
         buildConfigField "String", "BUILD_TIME_UTC", "\"${resolveBuildTimeUtc()}\""
         buildConfigField "String", "RELEASE_CERT_SHA256", "\"49defdc7e1aebdb8d57bdea20b4f5fceac22db53cb121cbaec60b3706e272063\""
@@ -129,19 +129,28 @@ def ensureSherpaOnnxAssets = tasks.register('ensureSherpaOnnxAssets') {
         }
 
         def ttsTargetDir = file('src/main/assets/tts/default-zh')
-        def markerOnnx = new File(ttsTargetDir, 'zh_CN-xiao_ya-medium.onnx')
+        def markerOnnx = new File(ttsTargetDir, 'model.int8.onnx')
+        def staleXiaoYa = new File(ttsTargetDir, 'zh_CN-xiao_ya-medium.onnx')
+        def bloatEspeak = new File(ttsTargetDir, 'espeak-ng-data')
+        if (staleXiaoYa.exists() || bloatEspeak.exists()) {
+            ttsTargetDir.deleteDir()
+        }
         if (!markerOnnx.exists()) {
-            def localUnpacked = new File(prebuiltDir, 'unpacked/vits-piper-zh_CN-xiao_ya-medium-int8')
+            def localUnpacked = new File(prebuiltDir, 'unpacked/kokoro-int8-multi-lang-v1_1')
             if (localUnpacked.exists()) {
                 copy {
-                    from localUnpacked
+                    from(localUnpacked) {
+                        exclude 'espeak-ng-data/**'
+                        exclude 'dict/**'
+                        exclude 'lexicon-gb-en.txt'
+                    }
                     into ttsTargetDir
                 }
             } else {
-                def tmpArchive = new File(buildDir, 'tmp/vits-piper-zh_CN-xiao_ya-medium-int8.tar.bz2')
+                def tmpArchive = new File(buildDir, 'tmp/kokoro-int8-multi-lang-v1_1.tar.bz2')
                 tmpArchive.parentFile.mkdirs()
-                def modelUrl = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-zh_CN-xiao_ya-medium-int8.tar.bz2'
-                logger.lifecycle("Downloading default Chinese TTS pack from ${modelUrl}")
+                def modelUrl = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-int8-multi-lang-v1_1.tar.bz2'
+                logger.lifecycle("Downloading default Kokoro v1.1 INT8 TTS pack from ${modelUrl}")
                 new URL(modelUrl).withInputStream { ins -> tmpArchive.withOutputStream { outs -> outs << ins } }
                 ttsTargetDir.mkdirs()
                 def proc = ['tar', '-xjf', tmpArchive.absolutePath, '--strip-components=1', '-C', ttsTargetDir.absolutePath].execute()
@@ -149,6 +158,9 @@ def ensureSherpaOnnxAssets = tasks.register('ensureSherpaOnnxAssets') {
                 if (proc.exitValue() != 0) {
                     throw new GradleException("Failed to extract default-zh TTS pack: ${proc.err.text}")
                 }
+                new File(ttsTargetDir, 'espeak-ng-data').deleteDir()
+                new File(ttsTargetDir, 'dict').deleteDir()
+                new File(ttsTargetDir, 'lexicon-gb-en.txt').delete()
             }
         }
     }

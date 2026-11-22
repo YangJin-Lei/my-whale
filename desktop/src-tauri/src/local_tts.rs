@@ -183,6 +183,7 @@ struct SherpaOnnxGeneratedAudio {
 type FnCreateOfflineTts = unsafe extern "C" fn(*const SherpaOnnxOfflineTtsConfig) -> *const c_void;
 type FnDestroyOfflineTts = unsafe extern "C" fn(*const c_void);
 type FnOfflineTtsSampleRate = unsafe extern "C" fn(*const c_void) -> i32;
+type FnOfflineTtsNumSpeakers = unsafe extern "C" fn(*const c_void) -> i32;
 type FnOfflineTtsGenerate =
     unsafe extern "C" fn(*const c_void, *const c_char, i32, f32) -> *const SherpaOnnxGeneratedAudio;
 type FnDestroyGeneratedAudio = unsafe extern "C" fn(*const SherpaOnnxGeneratedAudio);
@@ -294,8 +295,23 @@ impl SherpaApi {
         }
     }
 
+    fn num_speakers(&self, tts: *const c_void) -> i32 {
+        unsafe {
+            self.c_api
+                .get::<FnOfflineTtsNumSpeakers>(b"SherpaOnnxOfflineTtsNumSpeakers\0")
+                .map(|f| f(tts))
+                .unwrap_or(1)
+        }
+    }
+
     fn generate(&self, tts: *const c_void, text: &str, sid: i32, speed: f32) -> Result<(Vec<i16>, i32), String> {
         let c_text = CString::new(text).map_err(|_| "Text contains interior null byte".to_string())?;
+        let total_speakers = self.num_speakers(tts);
+        let safe_sid = if total_speakers > 0 && (sid < 0 || sid >= total_speakers) {
+            0
+        } else {
+            sid
+        };
         unsafe {
             let f_gen = self
                 .c_api
@@ -306,7 +322,7 @@ impl SherpaApi {
                 .get::<FnDestroyGeneratedAudio>(b"SherpaOnnxDestroyOfflineTtsGeneratedAudio\0")
                 .map_err(|e| e.to_string())?;
 
-            let audio_ptr = f_gen(tts, c_text.as_ptr(), sid, speed);
+            let audio_ptr = f_gen(tts, c_text.as_ptr(), safe_sid, speed);
             if audio_ptr.is_null() {
                 return Err("SherpaOnnxOfflineTtsGenerate returned null".to_string());
             }
@@ -484,6 +500,12 @@ fn collect_lexicons(dir: &Path) -> Vec<PathBuf> {
             }
         }
     }
+    let has_us_en = out
+        .iter()
+        .any(|p| p.file_name().and_then(|n| n.to_str()) == Some("lexicon-us-en.txt"));
+    if has_us_en {
+        out.retain(|p| p.file_name().and_then(|n| n.to_str()) != Some("lexicon-gb-en.txt"));
+    }
     out.sort();
     out
 }
@@ -540,11 +562,20 @@ fn create_tts_from_dir(api: &Arc<SherpaApi>, model_dir: &Path) -> Result<*const 
     let lexicons = collect_lexicons(model_dir);
 
     let mut fsts = Vec::new();
-    for name in ["phone.fst", "date.fst", "number.fst", "new_heteronym.fst"] {
+    for name in [
+        "phone-zh.fst",
+        "date-zh.fst",
+        "number-zh.fst",
+        "phone.fst",
+        "date.fst",
+        "number.fst",
+        "new_heteronym.fst",
+    ] {
         if let Some(p) = find_named_file(model_dir, name) {
             fsts.push(p);
         }
     }
+    let rule_far = find_named_file(model_dir, "rule.far");
 
     let mut keep_alive: Vec<CString> = Vec::new();
     let mut push_str = |s: &str| -> Result<*const c_char, String> {
@@ -567,13 +598,20 @@ fn create_tts_from_dir(api: &Arc<SherpaApi>, model_dir: &Path) -> Result<*const 
     let c_empty = push_str("")?;
     let c_provider = push_str("cpu")?;
     let c_fsts = push_str(&join_cstrings(&fsts))?;
+    let c_rule_fars = push_str(
+        rule_far
+            .as_ref()
+            .map(|p| p.to_string_lossy().into_owned())
+            .as_deref()
+            .unwrap_or(""),
+    )?;
 
     let mut model_cfg = SherpaOnnxOfflineTtsModelConfig {
         vits: SherpaOnnxOfflineTtsVitsModelConfig {
             dict_dir: c_empty,
             ..Default::default()
         },
-        num_threads: 2,
+        num_threads: 4,
         debug: 0,
         provider: c_provider,
         matcha: SherpaOnnxOfflineTtsMatchaModelConfig::default(),
@@ -589,7 +627,7 @@ fn create_tts_from_dir(api: &Arc<SherpaApi>, model_dir: &Path) -> Result<*const 
         model_cfg.kokoro.model = c_onnx;
         model_cfg.kokoro.voices = c_voices;
         model_cfg.kokoro.tokens = c_tokens;
-        model_cfg.kokoro.data_dir = c_data_dir;
+        model_cfg.kokoro.data_dir = c_empty;
         model_cfg.kokoro.lexicon = c_lexicon;
         model_cfg.kokoro.dict_dir = c_empty;
         model_cfg.kokoro.lang = c_empty;
@@ -605,7 +643,7 @@ fn create_tts_from_dir(api: &Arc<SherpaApi>, model_dir: &Path) -> Result<*const 
         model: model_cfg,
         rule_fsts: c_fsts,
         max_num_sentences: 1,
-        rule_fars: c_empty,
+        rule_fars: c_rule_fars,
         silence_scale: 0.2,
     };
 
@@ -935,7 +973,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn synthesizes_chinese_speech_with_bundled_xiao_ya_model() {
+    fn synthesizes_chinese_speech_with_bundled_default_model() {
         let res_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("resources")
             .join("tts");
@@ -951,13 +989,17 @@ mod tests {
             &res_dir,
             &tmp_data,
             DEFAULT_MODEL_ID,
-            "你好，我是本地轻量中文语音助手。",
-            0,
+            "你好 my-whale，我是 Kokoro 本地离线中英双语语音助手。",
+            3,
             1.0,
         )
         .expect("sherpa-onnx synthesis should succeed");
 
-        assert_eq!(result.sample_rate, 22050);
+        assert!(
+            result.sample_rate >= 22050,
+            "expected >=22050Hz sample rate, got {}",
+            result.sample_rate
+        );
         let pcm_bytes = BASE64_STANDARD
             .decode(result.pcm_base64.as_bytes())
             .expect("valid base64 pcm");

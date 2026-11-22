@@ -105,7 +105,12 @@ public class LocalTtsPlugin extends Plugin {
                 GeneratedAudio audio;
                 synchronized (ttsLock) {
                     OfflineTts tts = ensureLoadedLocked(cleanModelId);
-                    audio = tts.generate(text, sid, safeSpeed);
+                    int numSpeakers = tts.numSpeakers();
+                    int safeSid = sid;
+                    if (numSpeakers > 0 && (safeSid < 0 || safeSid >= numSpeakers)) {
+                        safeSid = 0;
+                    }
+                    audio = tts.generate(text, safeSid, safeSpeed);
                 }
                 float[] samples = audio.getSamples();
                 int sampleRate = audio.getSampleRate();
@@ -285,25 +290,91 @@ public class LocalTtsPlugin extends Plugin {
         if (!hasBuiltInAssets()) {
             throw new IOException("Built-in default-zh TTS assets missing");
         }
-        OfflineTtsVitsModelConfig vits = new OfflineTtsVitsModelConfig();
-        vits.setModel(ASSET_DEFAULT_DIR + "/zh_CN-xiao_ya-medium.onnx");
-        vits.setLexicon(ASSET_DEFAULT_DIR + "/lexicon.txt");
-        vits.setTokens(ASSET_DEFAULT_DIR + "/tokens.txt");
-        vits.setDataDir("");
+        String[] rawEntries = assets.list(ASSET_DEFAULT_DIR);
+        if (rawEntries == null) {
+            throw new IOException("Empty built-in default-zh assets");
+        }
+        List<String> entries = new ArrayList<>();
+        Collections.addAll(entries, rawEntries);
+        Collections.sort(entries);
+
+        String onnxName = null;
+        boolean hasVoices = false;
+        boolean hasUsEnLexicon = entries.contains("lexicon-us-en.txt");
+        List<String> lexicons = new ArrayList<>();
+        for (String name : entries) {
+            if (onnxName == null && name.endsWith(".onnx")) {
+                onnxName = name;
+            } else if ("voices.bin".equals(name)) {
+                hasVoices = true;
+            } else if ("lexicon.txt".equals(name) || (name.startsWith("lexicon-") && name.endsWith(".txt"))) {
+                if (hasUsEnLexicon && "lexicon-gb-en.txt".equals(name)) {
+                    continue;
+                }
+                lexicons.add(ASSET_DEFAULT_DIR + "/" + name);
+            }
+        }
+        if (onnxName == null) {
+            throw new IOException("Missing .onnx in built-in default-zh assets");
+        }
+
+        StringBuilder lexiconJoined = new StringBuilder();
+        for (String lex : lexicons) {
+            if (lexiconJoined.length() > 0) {
+                lexiconJoined.append(',');
+            }
+            lexiconJoined.append(lex);
+        }
+
+        String[] fstCandidates = {
+            "phone-zh.fst",
+            "date-zh.fst",
+            "number-zh.fst",
+            "phone.fst",
+            "date.fst",
+            "number.fst",
+            "new_heteronym.fst",
+        };
+        StringBuilder fstsJoined = new StringBuilder();
+        for (String fst : fstCandidates) {
+            if (entries.contains(fst)) {
+                if (fstsJoined.length() > 0) {
+                    fstsJoined.append(',');
+                }
+                fstsJoined.append(ASSET_DEFAULT_DIR).append('/').append(fst);
+            }
+        }
 
         OfflineTtsModelConfig modelConfig = new OfflineTtsModelConfig();
-        modelConfig.setVits(vits);
         modelConfig.setNumThreads(numThreads);
         modelConfig.setDebug(false);
         modelConfig.setProvider("cpu");
 
+        if (hasVoices) {
+            OfflineTtsKokoroModelConfig kokoro = new OfflineTtsKokoroModelConfig();
+            kokoro.setModel(ASSET_DEFAULT_DIR + "/" + onnxName);
+            kokoro.setVoices(ASSET_DEFAULT_DIR + "/voices.bin");
+            kokoro.setTokens(ASSET_DEFAULT_DIR + "/tokens.txt");
+            kokoro.setDataDir("");
+            kokoro.setLexicon(lexiconJoined.toString());
+            kokoro.setLang("");
+            kokoro.setDictDir("");
+            modelConfig.setKokoro(kokoro);
+        } else {
+            OfflineTtsVitsModelConfig vits = new OfflineTtsVitsModelConfig();
+            vits.setModel(ASSET_DEFAULT_DIR + "/" + onnxName);
+            vits.setLexicon(lexiconJoined.toString());
+            vits.setTokens(ASSET_DEFAULT_DIR + "/tokens.txt");
+            vits.setDataDir("");
+            modelConfig.setVits(vits);
+        }
+
         OfflineTtsConfig config = new OfflineTtsConfig();
         config.setModel(modelConfig);
-        config.setRuleFsts(
-            ASSET_DEFAULT_DIR + "/date.fst,"
-                + ASSET_DEFAULT_DIR + "/number.fst,"
-                + ASSET_DEFAULT_DIR + "/phone.fst"
-        );
+        config.setRuleFsts(fstsJoined.toString());
+        if (entries.contains("rule.far")) {
+            config.setRuleFars(ASSET_DEFAULT_DIR + "/rule.far");
+        }
         config.setMaxNumSentences(1);
         return new OfflineTts(assets, config);
     }
@@ -316,9 +387,13 @@ public class LocalTtsPlugin extends Plugin {
         }
         File voicesFile = findNamedFile(dir, "voices.bin");
         File espeakDir = findNamedDir(dir, "espeak-ng-data");
+        File ruleFar = findNamedFile(dir, "rule.far");
         List<File> lexicons = collectLexicons(dir);
         String lexiconJoined = joinPaths(lexicons);
         String fstsJoined = joinExistingPaths(
+            findNamedFile(dir, "phone-zh.fst"),
+            findNamedFile(dir, "date-zh.fst"),
+            findNamedFile(dir, "number-zh.fst"),
             findNamedFile(dir, "phone.fst"),
             findNamedFile(dir, "date.fst"),
             findNamedFile(dir, "number.fst"),
@@ -337,6 +412,8 @@ public class LocalTtsPlugin extends Plugin {
             kokoro.setTokens(tokensFile.getAbsolutePath());
             kokoro.setDataDir(espeakDir != null ? espeakDir.getAbsolutePath() : "");
             kokoro.setLexicon(lexiconJoined);
+            kokoro.setLang("");
+            kokoro.setDictDir("");
             modelConfig.setKokoro(kokoro);
         } else {
             OfflineTtsVitsModelConfig vits = new OfflineTtsVitsModelConfig();
@@ -350,6 +427,9 @@ public class LocalTtsPlugin extends Plugin {
         OfflineTtsConfig config = new OfflineTtsConfig();
         config.setModel(modelConfig);
         config.setRuleFsts(fstsJoined);
+        if (ruleFar != null) {
+            config.setRuleFars(ruleFar.getAbsolutePath());
+        }
         config.setMaxNumSentences(1);
         return new OfflineTts(null, config);
     }
@@ -363,7 +443,7 @@ public class LocalTtsPlugin extends Plugin {
             boolean hasOnnx = false;
             boolean hasTokens = false;
             for (String entry : entries) {
-                if ("zh_CN-xiao_ya-medium.onnx".equals(entry)) {
+                if (entry.endsWith(".onnx")) {
                     hasOnnx = true;
                 } else if ("tokens.txt".equals(entry)) {
                     hasTokens = true;
@@ -410,8 +490,22 @@ public class LocalTtsPlugin extends Plugin {
     }
 
     private static void downloadToFile(String initialUrl, File outFile) throws IOException {
+        IOException lastIo = null;
+        for (int attempt = 0; attempt < 2; attempt++) {
+            try {
+                downloadToFileOnce(initialUrl, outFile);
+                return;
+            } catch (IOException err) {
+                lastIo = err;
+            }
+        }
+        throw lastIo != null ? lastIo : new IOException("Download failed");
+    }
+
+    private static void downloadToFileOnce(String initialUrl, File outFile) throws IOException {
         String currentUrl = initialUrl;
         HttpURLConnection conn = null;
+        long existingBytes = outFile.exists() ? outFile.length() : 0L;
         for (int hops = 0; hops <= 6; hops++) {
             URL url = new URL(currentUrl);
             conn = (HttpURLConnection) url.openConnection();
@@ -419,6 +513,9 @@ public class LocalTtsPlugin extends Plugin {
             conn.setConnectTimeout(15000);
             conn.setReadTimeout(45000);
             conn.setRequestProperty("User-Agent", "my-whale-tts-downloader");
+            if (existingBytes > 0) {
+                conn.setRequestProperty("Range", "bytes=" + existingBytes + "-");
+            }
             int status = conn.getResponseCode();
             if (status >= 300 && status < 400) {
                 String location = conn.getHeaderField("Location");
@@ -429,7 +526,8 @@ public class LocalTtsPlugin extends Plugin {
                 currentUrl = new URL(url, location).toString();
                 continue;
             }
-            if (status != HttpURLConnection.HTTP_OK) {
+            boolean appendMode = status == HttpURLConnection.HTTP_PARTIAL && existingBytes > 0;
+            if (!appendMode && status != HttpURLConnection.HTTP_OK) {
                 conn.disconnect();
                 throw new IOException("HTTP " + status + " from " + currentUrl);
             }
@@ -444,7 +542,7 @@ public class LocalTtsPlugin extends Plugin {
             long expectedLength = conn.getContentLengthLong();
             long written = 0;
             try (InputStream in = conn.getInputStream();
-                 FileOutputStream out = new FileOutputStream(outFile)) {
+                 FileOutputStream out = new FileOutputStream(outFile, appendMode)) {
                 byte[] buf = new byte[32768];
                 int read;
                 while ((read = in.read(buf)) != -1) {
@@ -587,6 +685,16 @@ public class LocalTtsPlugin extends Plugin {
                     out.add(f);
                 }
             }
+        }
+        boolean hasUsEn = false;
+        for (File f : out) {
+            if ("lexicon-us-en.txt".equals(f.getName())) {
+                hasUsEn = true;
+                break;
+            }
+        }
+        if (hasUsEn) {
+            out.removeIf(f -> "lexicon-gb-en.txt".equals(f.getName()));
         }
         Collections.sort(out, (a, b) -> a.getName().compareTo(b.getName()));
         return out;

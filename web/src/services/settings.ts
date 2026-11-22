@@ -36,6 +36,7 @@ type Settings = {
   voiceAutoPlay: boolean
   ttsEngine: TtsEngineId
   localTtsVoiceId: string
+  localTtsSpeakerId: number | null
   ttsVoice: TtsVoice
   fontFollowSystem: boolean
   fontScale: number
@@ -78,6 +79,7 @@ const KEYS = {
   voiceAutoPlay: 'chat-demo:voice-auto-play',
   ttsEngine: 'chat-demo:tts-engine',
   localTtsVoiceId: 'chat-demo:local-tts-voice-id',
+  localTtsSpeakerId: 'chat-demo:local-tts-speaker-id',
   ttsVoice: 'chat-demo:tts-voice',
   fontFollowSystem: 'chat-demo:font-follow-system',
   fontScale: 'chat-demo:font-scale',
@@ -167,6 +169,15 @@ const initialTtsEngine = (): TtsEngineId => {
     return saved
   }
   return 'local-sherpa'
+}
+
+const initialLocalTtsSpeakerId = (): number | null => {
+  const raw = read(KEYS.localTtsSpeakerId)
+  if (raw === null || raw === '') {
+    return null
+  }
+  const parsed = Number(raw)
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null
 }
 
 /** 未保存过时使用服务端默认音色 stella（海星） */
@@ -269,6 +280,7 @@ export const useSettings = create<Settings>(() => ({
   voiceAutoPlay: read(KEYS.voiceAutoPlay) === 'true',
   ttsEngine: initialTtsEngine(),
   localTtsVoiceId: read(KEYS.localTtsVoiceId) || DEFAULT_LOCAL_VOICE_ID,
+  localTtsSpeakerId: initialLocalTtsSpeakerId(),
   ttsVoice: initialTtsVoice(),
   fontFollowSystem: read(KEYS.fontFollowSystem) !== 'false',
   fontScale: initialFontScale(),
@@ -338,8 +350,25 @@ export const setTtsEngine = (ttsEngine: TtsEngineId) => {
 
 export const setLocalTtsVoiceId = (localTtsVoiceId: string) => {
   const next = localTtsVoiceId.trim() || DEFAULT_LOCAL_VOICE_ID
+  const prev = useSettings.getState().localTtsVoiceId
   write(KEYS.localTtsVoiceId, next)
-  useSettings.setState({ localTtsVoiceId: next })
+  if (prev !== next) {
+    write(KEYS.localTtsSpeakerId, null)
+    useSettings.setState({ localTtsVoiceId: next, localTtsSpeakerId: null })
+  } else {
+    useSettings.setState({ localTtsVoiceId: next })
+  }
+}
+
+export const setLocalTtsSpeakerId = (localTtsSpeakerId: number | null) => {
+  const next =
+    typeof localTtsSpeakerId === 'number' &&
+    Number.isInteger(localTtsSpeakerId) &&
+    localTtsSpeakerId >= 0
+      ? localTtsSpeakerId
+      : null
+  write(KEYS.localTtsSpeakerId, next === null ? null : String(next))
+  useSettings.setState({ localTtsSpeakerId: next })
 }
 
 export const setTtsVoice = (ttsVoice: TtsVoice) => {
@@ -575,6 +604,9 @@ export const applySettingsSnapshot = (raw: Partial<SettingsSnapshot>) => {
   }
   if (typeof raw.localTtsVoiceId === 'string' && raw.localTtsVoiceId.trim()) {
     setLocalTtsVoiceId(raw.localTtsVoiceId)
+  }
+  if (raw.localTtsSpeakerId === null || typeof raw.localTtsSpeakerId === 'number') {
+    setLocalTtsSpeakerId(raw.localTtsSpeakerId)
   }
   if (raw.ttsVoice === 'stella' || raw.ttsVoice === 'tide') {
     setTtsVoice(raw.ttsVoice)

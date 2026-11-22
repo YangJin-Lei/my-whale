@@ -99,6 +99,7 @@ export const en = {
   settingsTtsVoiceTide: 'Tide (male)',
   settingsTtsEngine: 'Read-aloud engine',
   settingsTtsLocalVoice: 'Local voice packs',
+  settingsTtsSpeaker: 'Speaker voice',
   settingsTtsBuiltInTag: 'Built-in',
   settingsTtsInstalledTag: 'Installed',
   settingsTtsActiveTag: 'Active',
