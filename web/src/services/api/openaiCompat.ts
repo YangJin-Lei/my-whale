@@ -1,3 +1,4 @@
+import { fetchWithProxyFallback } from '../cacheBackend.js'
 import type { CustomApiProtocol } from '../settings.js'
 import { readServerSentEvents } from './sse.js'
 import type {
@@ -179,7 +180,7 @@ const doCustomFetch = async (
 ): Promise<Response> => {
   let response: Response
   try {
-    response = await fetch(endpoint, {
+    response = await fetchWithProxyFallback(endpoint, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
@@ -451,7 +452,7 @@ export const verifyCustomApiEndpoint = async (
     safety_check: { level: 'high' },
   }
   if (config.protocol === 'openai') {
-    await createCustomOpenAiMessage(config, testBody, signal, 4)
+    await createCustomOpenAiMessage(config, testBody, signal, 16)
     return
   }
   await doCustomFetch(
@@ -463,7 +464,7 @@ export const verifyCustomApiEndpoint = async (
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
-    buildCustomAnthropicPayload(testBody, config.model, false, 4),
+    buildCustomAnthropicPayload(testBody, config.model, false, 16),
     signal
   )
 }

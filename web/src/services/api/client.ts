@@ -1,6 +1,7 @@
 import { translate, type TranslationMessage } from '../../i18n/index.js'
 import {
   ensureNativeCacheStarted,
+  fetchWithProxyFallback,
   normalizeCacheBackendUrl,
   resolveEffectiveOrigin,
 } from '../cacheBackend.js'
@@ -79,6 +80,22 @@ const readErrorResponse = async (
     // 非 JSON 响应体直接展示原文
   }
   return new ApiError(kind, message, response.status)
+}
+
+const requestCustomProxy = async (url: string, init: RequestInit): Promise<Response> => {
+  let response: Response
+  try {
+    response = await fetchWithProxyFallback(url, init)
+  } catch (error) {
+    if (init.signal?.aborted) {
+      throw error
+    }
+    throw new ApiError('network', error instanceof Error ? error.message : String(error))
+  }
+  if (!response.ok) {
+    throw await readErrorResponse(response)
+  }
+  return response
 }
 
 export const request = async (url: string, init: RequestInit): Promise<Response> => {
@@ -223,7 +240,7 @@ export const createMessage = async (
         )
       }
       const endpoint = normalizeCustomEndpoint(customUrl, 'anthropic')
-      const response = await request(endpoint, {
+      const response = await requestCustomProxy(endpoint, {
         method: 'POST',
         headers: {
           'x-api-key': customKey,
@@ -328,7 +345,7 @@ export async function* streamMessage(
       }
     }
     const endpoint = normalizeCustomEndpoint(customUrl, 'anthropic')
-    const response = await request(endpoint, {
+    const response = await requestCustomProxy(endpoint, {
       method: 'POST',
       headers: {
         'x-api-key': customKey,

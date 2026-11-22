@@ -100,9 +100,12 @@ let nativeStartPromise: Promise<void> | null = null
 let nativeStartFailedAt = 0
 const NATIVE_RETRY_COOLDOWN_MS = 60_000
 
-export const ensureNativeCacheStarted = async (): Promise<void> => {
+export const ensureNativeCacheStarted = async (forceRetry = false): Promise<void> => {
   if (!nativeController) {
     return
+  }
+  if (forceRetry) {
+    nativeStartFailedAt = 0
   }
   // 启动失败后冷却一段时间，避免每次发消息都卡在 start + 2.5s 健康探测上
   if (!nativeStartPromise && Date.now() - nativeStartFailedAt < NATIVE_RETRY_COOLDOWN_MS) {
@@ -135,4 +138,46 @@ export const clearRemoteCacheBackend = async (rawUrl?: string): Promise<boolean>
   const base = normalizeCacheBackendUrl(rawUrl ?? useSettings.getState().cacheBackendUrl)
   const res = await fetch(`${base}/api/cache/clear`, { method: 'POST' })
   return res.ok
+}
+
+const buildProxyHeaders = (rawHeaders: HeadersInit | undefined, targetUrl: string): Headers => {
+  const headers = new Headers(rawHeaders)
+  headers.set('X-Target-Url', targetUrl)
+  return headers
+}
+
+export const fetchWithProxyFallback = async (
+  targetUrl: string,
+  init: RequestInit
+): Promise<Response> => {
+  const base = normalizeCacheBackendUrl(useSettings.getState().cacheBackendUrl)
+  if (nativeController) {
+    await ensureNativeCacheStarted(true)
+    try {
+      return await fetch(`${base}/api/proxy`, {
+        ...init,
+        headers: buildProxyHeaders(init.headers, targetUrl),
+      })
+    } catch (proxyError) {
+      if (init.signal?.aborted) {
+        throw proxyError
+      }
+      return await fetch(targetUrl, init)
+    }
+  }
+  try {
+    return await fetch(targetUrl, init)
+  } catch (directError) {
+    if (init.signal?.aborted) {
+      throw directError
+    }
+    const stats = await pingCacheBackend(base).catch(() => ({ online: false }))
+    if (stats.online) {
+      return await fetch(`${base}/api/proxy`, {
+        ...init,
+        headers: buildProxyHeaders(init.headers, targetUrl),
+      })
+    }
+    throw directError
+  }
 }
