@@ -1,5 +1,5 @@
 import { fetchWithProxyFallback } from '../cacheBackend.js'
-import type { CustomApiProtocol } from '../settings.js'
+import { useSettings, type CustomApiProtocol } from '../settings.js'
 import { readServerSentEvents } from './sse.js'
 import type {
   AssistantBlockParam,
@@ -85,16 +85,41 @@ const convertUserBlocksToOpenAi = (
   return parts
 }
 
-const buildOpenAiMessages = (body: CreateMessageRequest): OpenAiChatMessage[] => {
-  const messages: OpenAiChatMessage[] = []
+const resolveCustomSystemPrompt = (body: CreateMessageRequest): string => {
   const systemParts: string[] = body.system.trim() ? [body.system.trim()] : []
+  let hasChineseReminder = false
   for (const msg of body.messages) {
-    if (msg.role === 'latest_reminder' && msg.content.trim()) {
-      systemParts.push(msg.content.trim())
+    if (msg.role !== 'latest_reminder') {
+      continue
+    }
+    const content = msg.content.trim()
+    if (!content) {
+      continue
+    }
+    if (content.endsWith(',中文')) {
+      hasChineseReminder = true
+      systemParts.push(`当前上下文信息：${content}`)
+    } else if (content.startsWith('[')) {
+      systemParts.push(content)
+    } else {
+      systemParts.push(`Context: ${content}`)
     }
   }
-  if (systemParts.length > 0) {
-    messages.push({ role: 'system', content: systemParts.join('\n\n') })
+  const locale = useSettings.getState().locale
+  if (
+    (hasChineseReminder || (systemParts.length > 0 && locale === 'zh-CN')) &&
+    locale === 'zh-CN'
+  ) {
+    systemParts.push('请始终使用中文进行思考和回复（除非用户明确要求使用其他语言）。')
+  }
+  return systemParts.join('\n\n')
+}
+
+const buildOpenAiMessages = (body: CreateMessageRequest): OpenAiChatMessage[] => {
+  const messages: OpenAiChatMessage[] = []
+  const systemPrompt = resolveCustomSystemPrompt(body)
+  if (systemPrompt) {
+    messages.push({ role: 'system', content: systemPrompt })
   }
   for (const msg of body.messages) {
     if (msg.role === 'latest_reminder') {
@@ -145,13 +170,16 @@ export const buildCustomAnthropicPayload = (
   model: string,
   stream: boolean,
   maxTokens?: number
-) => ({
-  model: model.trim() || body.model,
-  ...(body.system.trim() ? { system: body.system } : {}),
-  messages: sanitizeAnthropicMessages(body.messages),
-  max_tokens: maxTokens ?? 4096,
-  stream,
-})
+) => {
+  const systemPrompt = resolveCustomSystemPrompt(body)
+  return {
+    model: model.trim() || body.model,
+    ...(systemPrompt ? { system: systemPrompt } : {}),
+    messages: sanitizeAnthropicMessages(body.messages),
+    max_tokens: maxTokens ?? 4096,
+    stream,
+  }
+}
 
 const readCustomErrorMessage = async (response: Response): Promise<string> => {
   const text = await response.text().catch(() => '')
@@ -224,20 +252,74 @@ const toMessageUsage = (raw: unknown): MessageUsage | undefined => {
   }
 }
 
+const THINK_OPEN = '<think>'
+const THINK_CLOSE = '</think>'
+
+type ThinkParseState = {
+  buffer: string
+  inThink: boolean
+}
+
+const trailingTagPrefixLen = (lowerText: string, tag: string): number => {
+  const maxLen = Math.min(lowerText.length, tag.length - 1)
+  for (let len = maxLen; len >= 1; len -= 1) {
+    if (lowerText.endsWith(tag.slice(0, len))) {
+      return len
+    }
+  }
+  return 0
+}
+
+const consumeThinkTags = (
+  state: ThinkParseState,
+  chunk: string
+): Array<{ kind: 'thinking' | 'text'; text: string }> => {
+  state.buffer += chunk
+  const segments: Array<{ kind: 'thinking' | 'text'; text: string }> = []
+  while (state.buffer.length > 0) {
+    const lower = state.buffer.toLowerCase()
+    const targetTag = state.inThink ? THINK_CLOSE : THINK_OPEN
+    const kind = state.inThink ? 'thinking' : 'text'
+    const idx = lower.indexOf(targetTag)
+    if (idx !== -1) {
+      if (idx > 0) {
+        segments.push({ kind, text: state.buffer.slice(0, idx) })
+      }
+      state.buffer = state.buffer.slice(idx + targetTag.length)
+      state.inThink = !state.inThink
+      continue
+    }
+    const hold = trailingTagPrefixLen(lower, targetTag)
+    const emitLen = state.buffer.length - hold
+    if (emitLen > 0) {
+      segments.push({ kind, text: state.buffer.slice(0, emitLen) })
+    }
+    state.buffer = hold > 0 ? state.buffer.slice(emitLen) : ''
+    break
+  }
+  return segments
+}
+
+const stripInlineThinkTags = (text: string): string => {
+  const cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
+  return cleaned || text
+}
+
 export const extractOpenAiCompletionText = (raw: unknown): string => {
   const root = readRecord(raw)
   const choices = Array.isArray(root?.choices) ? root.choices : []
   const first = readRecord(choices[0])
   const message = readRecord(first?.message)
   if (typeof message?.content === 'string') {
-    return message.content
+    return stripInlineThinkTags(message.content)
   }
   if (Array.isArray(message?.content)) {
-    return message.content
+    const joined = message.content
       .map((part) => readRecord(part))
       .filter((part): part is Record<string, unknown> => part !== null && part.type === 'text')
       .map((part) => (typeof part.text === 'string' ? part.text : ''))
       .join('')
+    return stripInlineThinkTags(joined)
   }
   return ''
 }
@@ -326,6 +408,7 @@ export async function* streamCustomOpenAiMessage(
   let activeBlockType: 'thinking' | 'text' | null = null
   let stopReason: StopReason = 'end_turn'
   let latestUsage: MessageUsage | undefined
+  const thinkState: ThinkParseState = { buffer: '', inThink: false }
 
   const ensureMessageStarted = async function* (id: string, modelName: string) {
     if (!started) {
@@ -413,12 +496,30 @@ export async function* streamCustomOpenAiMessage(
       }
     }
     if (typeof delta.content === 'string' && delta.content) {
-      yield* switchBlock('text')
-      yield {
-        type: 'content_block_delta',
-        index: blockIndex,
-        delta: { type: 'text_delta', text: delta.content },
+      for (const segment of consumeThinkTags(thinkState, delta.content)) {
+        yield* switchBlock(segment.kind)
+        yield {
+          type: 'content_block_delta',
+          index: blockIndex,
+          delta:
+            segment.kind === 'thinking'
+              ? { type: 'thinking_delta', thinking: segment.text }
+              : { type: 'text_delta', text: segment.text },
+        }
       }
+    }
+  }
+
+  if (thinkState.buffer) {
+    const kind = thinkState.inThink ? 'thinking' : 'text'
+    yield* switchBlock(kind)
+    yield {
+      type: 'content_block_delta',
+      index: blockIndex,
+      delta:
+        kind === 'thinking'
+          ? { type: 'thinking_delta', thinking: thinkState.buffer }
+          : { type: 'text_delta', text: thinkState.buffer },
     }
   }
 
