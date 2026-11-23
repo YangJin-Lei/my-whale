@@ -2,12 +2,15 @@ import { create } from 'zustand'
 import {
   API_KEY_SECRET_ID,
   CUSTOM_API_KEY_SECRET_ID,
+  IFLYTEK_API_KEY_SECRET_ID,
+  IFLYTEK_API_SECRET_ID,
   hasNativeSecureStorage,
   loadSecureSecret,
   saveSecureSecret,
 } from './secureStorage.js'
 import type { TtsVoice } from './api/speech.js'
 import { DEFAULT_LOCAL_VOICE_ID, type TtsEngineId } from './speech/engines.js'
+import type { IflytekVoiceId } from './speech/iflytekTts.js'
 import { normalizeLocation, type UserLocation } from './location.js'
 
 export type Locale = 'zh-CN' | 'en-US'
@@ -38,6 +41,10 @@ type Settings = {
   localTtsVoiceId: string
   localTtsSpeakerId: number | null
   ttsVoice: TtsVoice
+  iflytekAppId: string
+  iflytekApiKey: string
+  iflytekApiSecret: string
+  iflytekVoice: IflytekVoiceId
   fontFollowSystem: boolean
   fontScale: number
   chatBgPreset: ChatBgPreset
@@ -81,6 +88,10 @@ const KEYS = {
   localTtsVoiceId: 'chat-demo:local-tts-voice-id',
   localTtsSpeakerId: 'chat-demo:local-tts-speaker-id',
   ttsVoice: 'chat-demo:tts-voice',
+  iflytekAppId: 'chat-demo:iflytek-app-id',
+  iflytekApiKey: 'chat-demo:iflytek-api-key',
+  iflytekApiSecret: 'chat-demo:iflytek-api-secret',
+  iflytekVoice: 'chat-demo:iflytek-voice',
   fontFollowSystem: 'chat-demo:font-follow-system',
   fontScale: 'chat-demo:font-scale',
   chatBgPreset: 'chat-demo:chat-bg-preset',
@@ -162,24 +173,42 @@ const initialThemePreference = (): ThemePreference => {
   return saved === 'light' || saved === 'dark' ? saved : 'system'
 }
 
-/** 默认使用内置离线语音引擎（sherpa-onnx）；屏蔽暂未开放的 nekospeak */
+/** 默认使用系统零体积朗读；用户配置讯飞后自动优先用讯飞，或按需下载本地语音包 */
 const initialTtsEngine = (): TtsEngineId => {
   const saved = read(KEYS.ttsEngine)
-  if (saved === 'official' || saved === 'system' || saved === 'local-sherpa') {
+  if (
+    saved === 'iflytek' ||
+    saved === 'official' ||
+    saved === 'system' ||
+    saved === 'local-sherpa'
+  ) {
     return saved
   }
-  return 'local-sherpa'
+  return 'system'
 }
 
 const initialLocalTtsVoiceId = (): string => {
   const saved = read(KEYS.localTtsVoiceId)
-  if (!saved || saved === 'melo-zh-en') {
+  if (!saved || saved === 'default-zh' || saved === 'melo-zh-en') {
     return DEFAULT_LOCAL_VOICE_ID
   }
   if (saved === 'kokoro-multi') {
     return 'kokoro-v1_1'
   }
   return saved
+}
+
+const initialIflytekVoice = (): IflytekVoiceId => {
+  const saved = read(KEYS.iflytekVoice)
+  if (
+    saved === 'aisjiuxu' ||
+    saved === 'aisxping' ||
+    saved === 'aisjinger' ||
+    saved === 'aisbabyxu'
+  ) {
+    return saved
+  }
+  return 'xiaoyan'
 }
 
 const initialLocalTtsSpeakerId = (): number | null => {
@@ -293,6 +322,10 @@ export const useSettings = create<Settings>(() => ({
   localTtsVoiceId: initialLocalTtsVoiceId(),
   localTtsSpeakerId: initialLocalTtsSpeakerId(),
   ttsVoice: initialTtsVoice(),
+  iflytekAppId: read(KEYS.iflytekAppId) ?? '',
+  iflytekApiKey: read(KEYS.iflytekApiKey) ?? '',
+  iflytekApiSecret: read(KEYS.iflytekApiSecret) ?? '',
+  iflytekVoice: initialIflytekVoice(),
   fontFollowSystem: read(KEYS.fontFollowSystem) !== 'false',
   fontScale: initialFontScale(),
   chatBgPreset: initialChatBgPreset(),
@@ -386,6 +419,48 @@ export const setTtsVoice = (ttsVoice: TtsVoice) => {
   write(KEYS.ttsVoice, ttsVoice)
   useSettings.setState({ ttsVoice })
 }
+
+export const setIflytekVoice = (iflytekVoice: IflytekVoiceId) => {
+  write(KEYS.iflytekVoice, iflytekVoice)
+  useSettings.setState({ iflytekVoice })
+}
+
+export const setIflytekCredentials = (creds: {
+  appId: string
+  apiKey?: string
+  apiSecret?: string
+}) => {
+  const cleanAppId = creds.appId.trim()
+  write(KEYS.iflytekAppId, cleanAppId || null)
+  const patch: Partial<Settings> = { iflytekAppId: cleanAppId }
+
+  if (creds.apiKey !== undefined) {
+    const cleanKey = creds.apiKey.trim()
+    if (hasNativeSecureStorage()) {
+      write(KEYS.iflytekApiKey, null)
+      void saveSecureSecret(IFLYTEK_API_KEY_SECRET_ID, cleanKey || null)
+    } else {
+      write(KEYS.iflytekApiKey, cleanKey || null)
+    }
+    patch.iflytekApiKey = cleanKey
+  }
+
+  if (creds.apiSecret !== undefined) {
+    const cleanSecret = creds.apiSecret.trim()
+    if (hasNativeSecureStorage()) {
+      write(KEYS.iflytekApiSecret, null)
+      void saveSecureSecret(IFLYTEK_API_SECRET_ID, cleanSecret || null)
+    } else {
+      write(KEYS.iflytekApiSecret, cleanSecret || null)
+    }
+    patch.iflytekApiSecret = cleanSecret
+  }
+
+  useSettings.setState(patch)
+}
+
+export const isIflytekConfigured = (state: Settings = useSettings.getState()): boolean =>
+  Boolean(state.iflytekAppId.trim() && state.iflytekApiKey.trim() && state.iflytekApiSecret.trim())
 
 export const applyFontScale = (scale: number) => {
   if (typeof document === 'undefined') {
@@ -556,9 +631,11 @@ export const hydrateNativeApiKey = (): Promise<void> => {
     return apiKeyHydrationTask
   }
   apiKeyHydrationTask = (async () => {
-    const [officialKey, customKey] = await Promise.all([
+    const [officialKey, customKey, iflyKey, iflySecret] = await Promise.all([
       hydrateSingleSecret(API_KEY_SECRET_ID, KEYS.apiKey),
       hydrateSingleSecret(CUSTOM_API_KEY_SECRET_ID, KEYS.customApiKey),
+      hydrateSingleSecret(IFLYTEK_API_KEY_SECRET_ID, KEYS.iflytekApiKey),
+      hydrateSingleSecret(IFLYTEK_API_SECRET_ID, KEYS.iflytekApiSecret),
     ])
     const patch: Partial<Settings> = {}
     if (officialKey) {
@@ -566,6 +643,12 @@ export const hydrateNativeApiKey = (): Promise<void> => {
     }
     if (customKey) {
       patch.customApiKey = customKey
+    }
+    if (iflyKey) {
+      patch.iflytekApiKey = iflyKey
+    }
+    if (iflySecret) {
+      patch.iflytekApiSecret = iflySecret
     }
     if (Object.keys(patch).length > 0) {
       useSettings.setState(patch)
@@ -577,12 +660,21 @@ export const hydrateNativeApiKey = (): Promise<void> => {
 export const waitForApiKeyHydration = (): Promise<void> =>
   apiKeyHydrationTask ?? hydrateNativeApiKey()
 
-export type SettingsSnapshot = Omit<Settings, 'apiKey' | 'customApiKey'>
+export type SettingsSnapshot = Omit<
+  Settings,
+  'apiKey' | 'customApiKey' | 'iflytekApiKey' | 'iflytekApiSecret'
+>
 
 export const exportSettingsSnapshot = (): SettingsSnapshot => {
   const state = useSettings.getState()
   return Object.fromEntries(
-    Object.entries(state).filter(([key]) => key !== 'apiKey' && key !== 'customApiKey')
+    Object.entries(state).filter(
+      ([key]) =>
+        key !== 'apiKey' &&
+        key !== 'customApiKey' &&
+        key !== 'iflytekApiKey' &&
+        key !== 'iflytekApiSecret'
+    )
   ) as SettingsSnapshot
 }
 
@@ -607,11 +699,24 @@ export const applySettingsSnapshot = (raw: Partial<SettingsSnapshot>) => {
     setVoiceAutoPlay(raw.voiceAutoPlay)
   }
   if (
+    raw.ttsEngine === 'iflytek' ||
     raw.ttsEngine === 'local-sherpa' ||
     raw.ttsEngine === 'official' ||
     raw.ttsEngine === 'system'
   ) {
     setTtsEngine(raw.ttsEngine)
+  }
+  if (typeof raw.iflytekAppId === 'string') {
+    setIflytekCredentials({ appId: raw.iflytekAppId })
+  }
+  if (
+    raw.iflytekVoice === 'xiaoyan' ||
+    raw.iflytekVoice === 'aisjiuxu' ||
+    raw.iflytekVoice === 'aisxping' ||
+    raw.iflytekVoice === 'aisjinger' ||
+    raw.iflytekVoice === 'aisbabyxu'
+  ) {
+    setIflytekVoice(raw.iflytekVoice)
   }
   if (typeof raw.localTtsVoiceId === 'string' && raw.localTtsVoiceId.trim()) {
     setLocalTtsVoiceId(raw.localTtsVoiceId)

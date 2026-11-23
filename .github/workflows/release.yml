@@ -132,15 +132,13 @@ jobs:
           pnpm --dir web install
           pnpm --dir desktop install
 
-      - name: Prepare sherpa-onnx TTS runtime and built-in voice pack
+      - name: Prepare sherpa-onnx TTS runtime libraries
         shell: bash
         run: |
           set -euo pipefail
           RES_ROOT="desktop/src-tauri/resources/tts"
-          mkdir -p "$RES_ROOT/lib" "$RES_ROOT/default-zh"
-          curl -fSL --retry 3 "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-melo-tts-zh_en.tar.bz2" -o default-zh.tar.bz2
-          tar -xjf default-zh.tar.bz2 --strip-components=1 -C "$RES_ROOT/default-zh"
-          rm -rf default-zh.tar.bz2 "$RES_ROOT/default-zh/dict" "$RES_ROOT/default-zh/model.int8.onnx"
+          rm -rf "$RES_ROOT/default-zh"
+          mkdir -p "$RES_ROOT/lib"
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             LIB_ARCHIVE="sherpa-onnx-v2.0.2-win-x64-shared-MD-MinSizeRel-lib.tar.bz2"
             EXT="dll"

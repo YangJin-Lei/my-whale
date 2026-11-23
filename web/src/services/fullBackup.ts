@@ -33,6 +33,7 @@ import {
   exportSettingsSnapshot,
   setApiKey,
   setCustomApiConfig,
+  setIflytekCredentials,
   useSettings,
   type SettingsSnapshot,
 } from './settings.js'
@@ -159,6 +160,8 @@ const deriveAesKey = async (
 type EncryptedSecretsPayload = {
   apiKey: string | null
   customApiKey?: string | null
+  iflytekApiKey?: string | null
+  iflytekApiSecret?: string | null
   petApiSecrets?: Record<string, string>
 }
 
@@ -203,6 +206,8 @@ const decryptSecrets = async (
     const parsed = JSON.parse(new TextDecoder().decode(plainBuf)) as {
       apiKey?: unknown
       customApiKey?: unknown
+      iflytekApiKey?: unknown
+      iflytekApiSecret?: unknown
       petApiSecrets?: unknown
     }
     const petApiSecrets: Record<string, string> = {}
@@ -219,6 +224,14 @@ const decryptSecrets = async (
       customApiKey:
         typeof parsed.customApiKey === 'string' && parsed.customApiKey.trim()
           ? parsed.customApiKey.trim()
+          : null,
+      iflytekApiKey:
+        typeof parsed.iflytekApiKey === 'string' && parsed.iflytekApiKey.trim()
+          ? parsed.iflytekApiKey.trim()
+          : null,
+      iflytekApiSecret:
+        typeof parsed.iflytekApiSecret === 'string' && parsed.iflytekApiSecret.trim()
+          ? parsed.iflytekApiSecret.trim()
           : null,
       petApiSecrets,
     }
@@ -344,9 +357,16 @@ export const exportFullBackup = async (options?: {
   const settingsState = useSettings.getState()
   const apiKey = settingsState.apiKey?.trim() ?? ''
   const customApiKey = settingsState.customApiKey?.trim() ?? ''
+  const iflytekApiKey = settingsState.iflytekApiKey?.trim() ?? ''
+  const iflytekApiSecret = settingsState.iflytekApiSecret?.trim() ?? ''
   const petApiSecrets = exportPetApiSecretsMap()
   const hasSecrets = Boolean(
-    password && (apiKey || customApiKey || Object.keys(petApiSecrets).length > 0)
+    password &&
+    (apiKey ||
+      customApiKey ||
+      iflytekApiKey ||
+      iflytekApiSecret ||
+      Object.keys(petApiSecrets).length > 0)
   )
 
   const attachmentsMeta: AttachmentMetaEntry[] = []
@@ -419,6 +439,8 @@ export const exportFullBackup = async (options?: {
         {
           apiKey: apiKey || null,
           customApiKey: customApiKey || null,
+          iflytekApiKey: iflytekApiKey || null,
+          iflytekApiSecret: iflytekApiSecret || null,
           petApiSecrets,
         },
         password
@@ -591,6 +613,8 @@ export const restoreFullBackup = async (
 
   let recoveredApiKey: string | null = null
   let recoveredCustomApiKey: string | null = null
+  let recoveredIflytekApiKey: string | null = null
+  let recoveredIflytekApiSecret: string | null = null
   let recoveredPetApiSecrets: Record<string, string> | null = null
   if (secretsBlob && !options.skipSecrets) {
     options.onProgress?.({ phase: 'decrypting', current: 1, total: 3 })
@@ -601,6 +625,8 @@ export const restoreFullBackup = async (
     const decrypted = await decryptSecrets(secretsBlob, pw, manifest.encryption.iterations)
     recoveredApiKey = decrypted.apiKey
     recoveredCustomApiKey = decrypted.customApiKey ?? null
+    recoveredIflytekApiKey = decrypted.iflytekApiKey ?? null
+    recoveredIflytekApiSecret = decrypted.iflytekApiSecret ?? null
     recoveredPetApiSecrets = decrypted.petApiSecrets ?? null
   }
 
@@ -656,6 +682,14 @@ export const restoreFullBackup = async (
       apiKey: recoveredCustomApiKey,
       model: cur.customApiModel,
       protocol: cur.customApiProtocol,
+    })
+  }
+  if (recoveredIflytekApiKey || recoveredIflytekApiSecret) {
+    const cur = useSettings.getState()
+    setIflytekCredentials({
+      appId: cur.iflytekAppId,
+      apiKey: recoveredIflytekApiKey ?? undefined,
+      apiSecret: recoveredIflytekApiSecret ?? undefined,
     })
   }
 

@@ -1,6 +1,5 @@
 package com.mywhale.app;
 
-import android.content.res.AssetManager;
 import android.util.Base64;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -37,8 +36,7 @@ import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
 
 @CapacitorPlugin(name = "LocalTts")
 public class LocalTtsPlugin extends Plugin {
-    private static final String DEFAULT_MODEL_ID = "default-zh";
-    private static final String ASSET_DEFAULT_DIR = "tts/default-zh";
+    private static final String DEFAULT_MODEL_ID = "melo-zh-en";
     private static final Pattern SAFE_MODEL_ID = Pattern.compile("^[a-zA-Z0-9_-]{1,64}$");
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -66,11 +64,10 @@ public class LocalTtsPlugin extends Plugin {
     public void getStatus(PluginCall call) {
         executor.execute(() -> {
             try {
-                boolean builtInReady = hasBuiltInAssets();
-                JSArray ids = buildInstalledIdsArray(builtInReady);
+                JSArray ids = buildInstalledIdsArray();
                 JSObject result = new JSObject();
                 result.put("nativeSupported", true);
-                result.put("builtInReady", builtInReady);
+                result.put("builtInReady", false);
                 result.put("installedIds", ids);
                 result.put("activeModelId", activeModelId);
                 call.resolve(result);
@@ -164,7 +161,7 @@ public class LocalTtsPlugin extends Plugin {
     public void downloadModel(PluginCall call) {
         String modelId = call.getString("modelId", "");
         JSArray urlsJson = call.getArray("urls");
-        if (!isSafeModelId(modelId) || DEFAULT_MODEL_ID.equals(modelId)) {
+        if (!isSafeModelId(modelId)) {
             call.reject("Invalid downloadable model id");
             return;
         }
@@ -225,7 +222,7 @@ public class LocalTtsPlugin extends Plugin {
                     }
                     JSObject result = new JSObject();
                     result.put("ok", true);
-                    result.put("installedIds", buildInstalledIdsArray(hasBuiltInAssets()));
+                    result.put("installedIds", buildInstalledIdsArray());
                     call.resolve(result);
                     return;
                 } catch (Throwable t) {
@@ -245,8 +242,8 @@ public class LocalTtsPlugin extends Plugin {
     @PluginMethod
     public void deleteModel(PluginCall call) {
         String modelId = call.getString("modelId", "");
-        if (!isSafeModelId(modelId) || DEFAULT_MODEL_ID.equals(modelId)) {
-            call.reject("Built-in model cannot be deleted");
+        if (!isSafeModelId(modelId)) {
+            call.reject("Invalid model id");
             return;
         }
         executor.execute(() -> {
@@ -263,7 +260,7 @@ public class LocalTtsPlugin extends Plugin {
             deleteRecursive(new File(getModelsRootDir(), modelId));
             JSObject result = new JSObject();
             result.put("ok", true);
-            result.put("installedIds", buildInstalledIdsArray(hasBuiltInAssets()));
+            result.put("installedIds", buildInstalledIdsArray());
             call.resolve(result);
         });
     }
@@ -272,18 +269,11 @@ public class LocalTtsPlugin extends Plugin {
         if (activeTts != null && modelId.equals(activeModelId)) {
             return activeTts;
         }
-        String resolvedId = modelId;
-        File externalDir = new File(getModelsRootDir(), resolvedId);
-        boolean useExternal = !DEFAULT_MODEL_ID.equals(resolvedId)
-            && externalDir.isDirectory()
-            && findFirstBySuffix(externalDir, ".onnx") != null
-            && findNamedFile(externalDir, "tokens.txt") != null;
-
-        if (!useExternal) {
-            resolvedId = DEFAULT_MODEL_ID;
-            if (activeTts != null && DEFAULT_MODEL_ID.equals(activeModelId)) {
-                return activeTts;
-            }
+        File externalDir = new File(getModelsRootDir(), modelId);
+        if (!externalDir.isDirectory()
+            || findFirstBySuffix(externalDir, ".onnx") == null
+            || findNamedFile(externalDir, "tokens.txt") == null) {
+            throw new IOException("Local voice pack not installed: " + modelId);
         }
 
         if (activeTts != null) {
@@ -296,109 +286,9 @@ public class LocalTtsPlugin extends Plugin {
         }
 
         int numThreads = Math.min(4, Math.max(2, Runtime.getRuntime().availableProcessors() / 2));
-        OfflineTts nextTts;
-        if (useExternal) {
-            nextTts = createExternalTts(externalDir, numThreads);
-        } else {
-            nextTts = createBuiltInTts(numThreads);
-        }
-        activeTts = nextTts;
-        activeModelId = resolvedId;
+        activeTts = createExternalTts(externalDir, numThreads);
+        activeModelId = modelId;
         return activeTts;
-    }
-
-    private OfflineTts createBuiltInTts(int numThreads) throws IOException {
-        AssetManager assets = getContext().getAssets();
-        if (!hasBuiltInAssets()) {
-            throw new IOException("Built-in default-zh TTS assets missing");
-        }
-        String[] rawEntries = assets.list(ASSET_DEFAULT_DIR);
-        if (rawEntries == null) {
-            throw new IOException("Empty built-in default-zh assets");
-        }
-        List<String> entries = new ArrayList<>();
-        Collections.addAll(entries, rawEntries);
-        Collections.sort(entries);
-
-        String onnxName = null;
-        boolean hasVoices = false;
-        boolean hasUsEnLexicon = entries.contains("lexicon-us-en.txt");
-        List<String> lexicons = new ArrayList<>();
-        for (String name : entries) {
-            if (onnxName == null && name.endsWith(".onnx")) {
-                onnxName = name;
-            } else if ("voices.bin".equals(name)) {
-                hasVoices = true;
-            } else if ("lexicon.txt".equals(name) || (name.startsWith("lexicon-") && name.endsWith(".txt"))) {
-                if (hasUsEnLexicon && "lexicon-gb-en.txt".equals(name)) {
-                    continue;
-                }
-                lexicons.add(ASSET_DEFAULT_DIR + "/" + name);
-            }
-        }
-        if (onnxName == null) {
-            throw new IOException("Missing .onnx in built-in default-zh assets");
-        }
-
-        StringBuilder lexiconJoined = new StringBuilder();
-        for (String lex : lexicons) {
-            if (lexiconJoined.length() > 0) {
-                lexiconJoined.append(',');
-            }
-            lexiconJoined.append(lex);
-        }
-
-        String[] fstCandidates = {
-            "phone-zh.fst",
-            "date-zh.fst",
-            "number-zh.fst",
-            "phone.fst",
-            "date.fst",
-            "number.fst",
-            "new_heteronym.fst",
-        };
-        StringBuilder fstsJoined = new StringBuilder();
-        for (String fst : fstCandidates) {
-            if (entries.contains(fst)) {
-                if (fstsJoined.length() > 0) {
-                    fstsJoined.append(',');
-                }
-                fstsJoined.append(ASSET_DEFAULT_DIR).append('/').append(fst);
-            }
-        }
-
-        OfflineTtsModelConfig modelConfig = new OfflineTtsModelConfig();
-        modelConfig.setNumThreads(numThreads);
-        modelConfig.setDebug(false);
-        modelConfig.setProvider("cpu");
-
-        if (hasVoices) {
-            OfflineTtsKokoroModelConfig kokoro = new OfflineTtsKokoroModelConfig();
-            kokoro.setModel(ASSET_DEFAULT_DIR + "/" + onnxName);
-            kokoro.setVoices(ASSET_DEFAULT_DIR + "/voices.bin");
-            kokoro.setTokens(ASSET_DEFAULT_DIR + "/tokens.txt");
-            kokoro.setDataDir("");
-            kokoro.setLexicon(lexiconJoined.toString());
-            kokoro.setLang("");
-            kokoro.setDictDir("");
-            modelConfig.setKokoro(kokoro);
-        } else {
-            OfflineTtsVitsModelConfig vits = new OfflineTtsVitsModelConfig();
-            vits.setModel(ASSET_DEFAULT_DIR + "/" + onnxName);
-            vits.setLexicon(lexiconJoined.toString());
-            vits.setTokens(ASSET_DEFAULT_DIR + "/tokens.txt");
-            vits.setDataDir("");
-            modelConfig.setVits(vits);
-        }
-
-        OfflineTtsConfig config = new OfflineTtsConfig();
-        config.setModel(modelConfig);
-        config.setRuleFsts(fstsJoined.toString());
-        if (entries.contains("rule.far")) {
-            config.setRuleFars(ASSET_DEFAULT_DIR + "/rule.far");
-        }
-        config.setMaxNumSentences(1);
-        return new OfflineTts(assets, config);
     }
 
     private OfflineTts createExternalTts(File dir, int numThreads) throws IOException {
@@ -456,39 +346,15 @@ public class LocalTtsPlugin extends Plugin {
         return new OfflineTts(null, config);
     }
 
-    private boolean hasBuiltInAssets() {
-        try {
-            String[] entries = getContext().getAssets().list(ASSET_DEFAULT_DIR);
-            if (entries == null) {
-                return false;
-            }
-            boolean hasOnnx = false;
-            boolean hasTokens = false;
-            for (String entry : entries) {
-                if (entry.endsWith(".onnx")) {
-                    hasOnnx = true;
-                } else if ("tokens.txt".equals(entry)) {
-                    hasTokens = true;
-                }
-            }
-            return hasOnnx && hasTokens;
-        } catch (IOException ignored) {
-            return false;
-        }
-    }
-
-    private JSArray buildInstalledIdsArray(boolean builtInReady) {
+    private JSArray buildInstalledIdsArray() {
         JSArray ids = new JSArray();
-        if (builtInReady) {
-            ids.put(DEFAULT_MODEL_ID);
-        }
         File root = getModelsRootDir();
         File[] children = root.listFiles();
         if (children != null) {
             List<String> names = new ArrayList<>();
             for (File child : children) {
                 String name = child.getName();
-                if (child.isDirectory() && isSafeModelId(name) && !DEFAULT_MODEL_ID.equals(name)) {
+                if (child.isDirectory() && isSafeModelId(name)) {
                     if (findFirstBySuffix(child, ".onnx") != null
                         && findNamedFile(child, "tokens.txt") != null) {
                         names.add(name);

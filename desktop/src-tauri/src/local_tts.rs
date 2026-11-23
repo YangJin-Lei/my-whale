@@ -11,8 +11,6 @@ use std::time::Duration;
 use tar::Archive;
 use tauri::Manager;
 
-const DEFAULT_MODEL_ID: &str = "default-zh";
-
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct SherpaOnnxOfflineTtsVitsModelConfig {
@@ -436,7 +434,7 @@ fn resolve_tts_resources_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
     }
     candidates
         .into_iter()
-        .find(|p| p.join("default-zh").join("tokens.txt").exists() && p.join("lib").is_dir())
+        .find(|p| p.join("lib").is_dir())
 }
 
 fn resolve_models_data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -520,16 +518,8 @@ fn join_cstrings(paths: &[PathBuf]) -> String {
         .join(",")
 }
 
-fn collect_installed_ids(res_dir: Option<&Path>, data_dir: Option<&Path>) -> Vec<String> {
+fn collect_installed_ids(_res_dir: Option<&Path>, data_dir: Option<&Path>) -> Vec<String> {
     let mut out = Vec::new();
-    if let Some(r) = res_dir {
-        let built_in = r.join(DEFAULT_MODEL_ID);
-        if find_first_by_ext(&built_in, "onnx").is_some()
-            && find_named_file(&built_in, "tokens.txt").is_some()
-        {
-            out.push(DEFAULT_MODEL_ID.to_string());
-        }
-    }
     if let Some(d) = data_dir {
         if let Ok(entries) = fs::read_dir(d) {
             let mut extra = Vec::new();
@@ -538,7 +528,6 @@ fn collect_installed_ids(res_dir: Option<&Path>, data_dir: Option<&Path>) -> Vec
                 if path.is_dir() {
                     let name = entry.file_name().to_string_lossy().to_string();
                     if is_safe_model_id(&name)
-                        && name != DEFAULT_MODEL_ID
                         && find_first_by_ext(&path, "onnx").is_some()
                         && find_named_file(&path, "tokens.txt").is_some()
                     {
@@ -666,24 +655,19 @@ fn synthesize_blocking(
     let lib_dir = res_dir.join("lib");
     let api = get_or_load_api(&lib_dir)?;
 
-    let mut candidate_id = if is_safe_model_id(requested_model_id) {
+    let candidate_id = if is_safe_model_id(requested_model_id) {
         requested_model_id.to_string()
     } else {
-        DEFAULT_MODEL_ID.to_string()
+        return Err("Invalid model id".to_string());
     };
 
-    let external_dir = data_dir.join(&candidate_id);
-    let use_external = candidate_id != DEFAULT_MODEL_ID
-        && external_dir.is_dir()
-        && find_first_by_ext(&external_dir, "onnx").is_some()
-        && find_named_file(&external_dir, "tokens.txt").is_some();
-
-    let model_dir = if use_external {
-        external_dir
-    } else {
-        candidate_id = DEFAULT_MODEL_ID.to_string();
-        res_dir.join(DEFAULT_MODEL_ID)
-    };
+    let model_dir = data_dir.join(&candidate_id);
+    if !model_dir.is_dir()
+        || find_first_by_ext(&model_dir, "onnx").is_none()
+        || find_named_file(&model_dir, "tokens.txt").is_none()
+    {
+        return Err(format!("Local voice pack not installed: {candidate_id}"));
+    }
 
     let mut guard = holder
         .lock()
@@ -781,7 +765,6 @@ pub fn tts_get_status(app: tauri::AppHandle, state: tauri::State<'_, LocalTtsHol
     let res_dir = resolve_tts_resources_dir(&app);
     let data_dir = resolve_models_data_dir(&app).ok();
     let installed_ids = collect_installed_ids(res_dir.as_deref(), data_dir.as_deref());
-    let built_in_ready = installed_ids.iter().any(|id| id == DEFAULT_MODEL_ID);
     let native_supported = res_dir
         .as_ref()
         .map(|d| get_or_load_api(&d.join("lib")).is_ok())
@@ -792,9 +775,7 @@ pub fn tts_get_status(app: tauri::AppHandle, state: tauri::State<'_, LocalTtsHol
         .ok()
         .and_then(|g| g.active.as_ref().map(|a| a.model_id.clone()))
         .unwrap_or_default();
-    let error = if !built_in_ready {
-        Some("Built-in default-zh TTS pack not found".to_string())
-    } else if !native_supported {
+    let error = if !native_supported {
         Some("sherpa-onnx runtime library failed to load".to_string())
     } else {
         None
@@ -802,7 +783,7 @@ pub fn tts_get_status(app: tauri::AppHandle, state: tauri::State<'_, LocalTtsHol
 
     LocalTtsStatus {
         native_supported,
-        built_in_ready,
+        built_in_ready: false,
         installed_ids,
         active_model_id,
         error,
@@ -821,34 +802,28 @@ pub async fn tts_prewarm(
     let data_dir = resolve_models_data_dir(&app)?;
     let holder = state.0.clone();
     tauri::async_runtime::spawn_blocking(move || {
+        if !is_safe_model_id(&model_id) {
+            return false;
+        }
         let lib_dir = res_dir.join("lib");
         let api = match get_or_load_api(&lib_dir) {
             Ok(a) => a,
             Err(_) => return false,
         };
-        let mut candidate_id = if is_safe_model_id(&model_id) {
-            model_id
-        } else {
-            DEFAULT_MODEL_ID.to_string()
-        };
-        let external_dir = data_dir.join(&candidate_id);
-        let use_external = candidate_id != DEFAULT_MODEL_ID
-            && external_dir.is_dir()
-            && find_first_by_ext(&external_dir, "onnx").is_some()
-            && find_named_file(&external_dir, "tokens.txt").is_some();
-        let model_dir = if use_external {
-            external_dir
-        } else {
-            candidate_id = DEFAULT_MODEL_ID.to_string();
-            res_dir.join(DEFAULT_MODEL_ID)
-        };
+        let model_dir = data_dir.join(&model_id);
+        if !model_dir.is_dir()
+            || find_first_by_ext(&model_dir, "onnx").is_none()
+            || find_named_file(&model_dir, "tokens.txt").is_none()
+        {
+            return false;
+        }
         let Ok(mut guard) = holder.lock() else {
             return false;
         };
         if guard
             .active
             .as_ref()
-            .map(|inst| inst.model_id == candidate_id)
+            .map(|inst| inst.model_id == model_id)
             .unwrap_or(false)
         {
             return true;
@@ -857,7 +832,7 @@ pub async fn tts_prewarm(
         match create_tts_from_dir(&api, &model_dir) {
             Ok(ptr) => {
                 guard.active = Some(LoadedTtsInstance {
-                    model_id: candidate_id,
+                    model_id,
                     ptr,
                     api,
                 });
@@ -901,7 +876,7 @@ pub async fn tts_download_model(
     model_id: String,
     urls: Vec<String>,
 ) -> Result<LocalTtsPackResult, String> {
-    if !is_safe_model_id(&model_id) || model_id == DEFAULT_MODEL_ID {
+    if !is_safe_model_id(&model_id) {
         return Err("Invalid downloadable model id".to_string());
     }
     let valid_urls: Vec<String> = urls
@@ -1005,8 +980,8 @@ pub fn tts_delete_model(
     state: tauri::State<'_, LocalTtsHolder>,
     model_id: String,
 ) -> Result<LocalTtsPackResult, String> {
-    if !is_safe_model_id(&model_id) || model_id == DEFAULT_MODEL_ID {
-        return Err("Built-in model cannot be deleted".to_string());
+    if !is_safe_model_id(&model_id) {
+        return Err("Invalid model id".to_string());
     }
     if let Ok(mut guard) = state.0.lock() {
         if guard
@@ -1036,40 +1011,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn synthesizes_chinese_speech_with_bundled_default_model() {
+    fn validates_model_ids_and_loads_runtime_library() {
+        assert!(is_safe_model_id("melo-zh-en"));
+        assert!(!is_safe_model_id("../etc"));
+        assert!(!is_safe_model_id(""));
+
         let res_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("resources")
             .join("tts");
-        if !res_dir.join("default-zh").join("tokens.txt").exists() {
-            panic!("Missing resources/tts/default-zh in test environment");
+        let lib_dir = res_dir.join("lib");
+        if lib_dir.is_dir() {
+            let api = get_or_load_api(&lib_dir).expect("sherpa-onnx C API library should load");
+            let prebuilt_melo = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .and_then(|p| p.parent())
+                .map(|p| p.join("vender/sherpa-onnx-prebuilt/unpacked/vits-melo-tts-zh_en"));
+            if let Some(melo_dir) = prebuilt_melo.filter(|d| d.is_dir()) {
+                let ptr = create_tts_from_dir(&api, &melo_dir)
+                    .expect("MeloTTS model should load cleanly");
+                let (pcm, sr) = api
+                    .generate(ptr, "你好 my whale，测试按需模型。", 0, 1.0)
+                    .expect("MeloTTS synthesis should succeed");
+                api.destroy_tts(ptr);
+                assert!(sr >= 16000);
+                assert!(pcm.len() > 4000);
+            }
         }
-        let holder = Arc::new(Mutex::new(LocalTtsState::default()));
-        let tmp_data = std::env::temp_dir().join("my-whale-tts-unit-test");
-        let _ = fs::create_dir_all(&tmp_data);
-
-        let result = synthesize_blocking(
-            &holder,
-            &res_dir,
-            &tmp_data,
-            DEFAULT_MODEL_ID,
-            "你好 my whale，通过 A P I 调用 Deep Seek，版本号 v 0 点 1 点 28。",
-            0,
-            1.0,
-        )
-        .expect("sherpa-onnx synthesis should succeed");
-
-        assert!(
-            result.sample_rate >= 22050,
-            "expected >=22050Hz sample rate, got {}",
-            result.sample_rate
-        );
-        let pcm_bytes = BASE64_STANDARD
-            .decode(result.pcm_base64.as_bytes())
-            .expect("valid base64 pcm");
-        assert!(
-            pcm_bytes.len() > 8000,
-            "expected non-trivial audio output, got {} bytes",
-            pcm_bytes.len()
-        );
     }
 }

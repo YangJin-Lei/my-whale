@@ -1,4 +1,4 @@
-export type TtsEngineId = 'local-sherpa' | 'official' | 'system' | 'nekospeak'
+export type TtsEngineId = 'iflytek' | 'system' | 'local-sherpa' | 'official' | 'nekospeak'
 
 export type LocalVoiceModelFormat = 'vits-piper' | 'vits-melo' | 'kokoro'
 
@@ -46,22 +46,28 @@ export type TtsEngineMeta = {
 
 export const TTS_ENGINES: ReadonlyArray<TtsEngineMeta> = [
   {
+    id: 'iflytek',
+    available: true,
+    labelZh: '科大讯飞在线语音（免费日 500 次 · 推荐）',
+    labelEn: 'iFlytek Online TTS (500 Free/Day)',
+  },
+  {
+    id: 'system',
+    available: true,
+    labelZh: '系统 / 浏览器朗读（零体积即时可用）',
+    labelEn: 'System / Browser Speech (Zero Footprint)',
+  },
+  {
     id: 'local-sherpa',
     available: true,
-    labelZh: '本地轻量语音（sherpa-onnx 离线免费）',
-    labelEn: 'Local Offline TTS (sherpa-onnx, Free)',
+    labelZh: '本地离线语音（sherpa-onnx · 按需下载包）',
+    labelEn: 'Local Offline TTS (sherpa-onnx · On-Demand)',
   },
   {
     id: 'official',
     available: true,
     labelZh: 'DeepSeek 官方语音（按量计费）',
     labelEn: 'DeepSeek Official TTS (Metered)',
-  },
-  {
-    id: 'system',
-    available: true,
-    labelZh: '系统 / 浏览器朗读（零额外体积）',
-    labelEn: 'System / Browser Speech (Zero Footprint)',
   },
   {
     id: 'nekospeak',
@@ -73,15 +79,15 @@ export const TTS_ENGINES: ReadonlyArray<TtsEngineMeta> = [
   },
 ]
 
-export const DEFAULT_LOCAL_VOICE_ID = 'default-zh'
+export const DEFAULT_LOCAL_VOICE_ID = 'melo-zh-en'
 
 export const LOCAL_VOICE_PACKS: ReadonlyArray<LocalVoicePack> = [
   {
-    id: 'default-zh',
-    nameZh: 'MeloTTS · 中英混读自然女声（内置默认）',
-    nameEn: 'MeloTTS · EN/ZH Natural Voice (Built-in)',
+    id: 'melo-zh-en',
+    nameZh: 'MeloTTS · 中英混读自然女声',
+    nameEn: 'MeloTTS · EN/ZH Natural Voice',
     sizeMb: 159.3,
-    builtIn: true,
+    builtIn: false,
     format: 'vits-melo',
     archiveUrl:
       'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-melo-tts-zh_en.tar.bz2',
@@ -147,15 +153,15 @@ export const LOCAL_VOICE_PACKS: ReadonlyArray<LocalVoicePack> = [
     ],
   },
   {
-    id: 'chaowen-int8',
-    nameZh: '超文 · 极轻量中文男声',
-    nameEn: 'Chaowen · Ultra-Light Chinese Male',
-    sizeMb: 13.4,
+    id: 'huayan-medium',
+    nameZh: '华研 · 清晰中文女声',
+    nameEn: 'Huayan · Clear Chinese Female',
+    sizeMb: 64.1,
     builtIn: false,
     format: 'vits-piper',
     archiveUrl:
-      'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-zh_CN-chaowen-medium-int8.tar.bz2',
-    archiveName: 'vits-piper-zh_CN-chaowen-medium-int8.tar.bz2',
+      'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-zh_CN-huayan-medium.tar.bz2',
+    archiveName: 'vits-piper-zh_CN-huayan-medium.tar.bz2',
     defaultSid: 0,
   },
   {
@@ -171,15 +177,15 @@ export const LOCAL_VOICE_PACKS: ReadonlyArray<LocalVoicePack> = [
     defaultSid: 0,
   },
   {
-    id: 'huayan-medium',
-    nameZh: '华研 · 清晰中文女声',
-    nameEn: 'Huayan · Clear Chinese Female',
-    sizeMb: 64.1,
+    id: 'chaowen-int8',
+    nameZh: '超文 · 极轻量中文男声',
+    nameEn: 'Chaowen · Ultra-Light Chinese Male',
+    sizeMb: 13.4,
     builtIn: false,
     format: 'vits-piper',
     archiveUrl:
-      'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-zh_CN-huayan-medium.tar.bz2',
-    archiveName: 'vits-piper-zh_CN-huayan-medium.tar.bz2',
+      'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-zh_CN-chaowen-medium-int8.tar.bz2',
+    archiveName: 'vits-piper-zh_CN-chaowen-medium-int8.tar.bz2',
     defaultSid: 0,
   },
 ]

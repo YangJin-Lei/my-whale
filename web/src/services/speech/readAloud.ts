@@ -4,12 +4,15 @@ import { ApiError } from '../api/client.js'
 import { classifyApiError } from '../api/errors.js'
 import { synthesize, TTS_SAMPLE_RATE } from '../api/speech.js'
 import { useSettings } from '../settings.js'
+import { findLocalVoicePack, resolveLocalVoiceSpeakerId } from './engines.js'
+import { splitIflytekTextChunks, synthesizeWithIflytek } from './iflytekTts.js'
 import {
-  DEFAULT_LOCAL_VOICE_ID,
-  findLocalVoicePack,
-  resolveLocalVoiceSpeakerId,
-} from './engines.js'
-import { hasNativeLocalTts, splitSpeechSentences, synthesizeWithLocalTts } from './localTts.js'
+  getLocalTtsStatus,
+  hasNativeLocalTts,
+  splitSpeechSentences,
+  stripBasicSpeechMarkdown,
+  synthesizeWithLocalTts,
+} from './localTts.js'
 
 /**
  * 朗读：同一时间只读一条回复。
@@ -107,6 +110,13 @@ export const describeReadAloudError = (error: unknown): TranslationMessage | str
   if (error instanceof ApiError && error.status === 400) {
     return { key: 'ttsUnavailable' }
   }
+  if (
+    error instanceof Error &&
+    /[\u4e00-\u9fff]/.test(error.message) &&
+    error.message.trim().length > 0
+  ) {
+    return error.message
+  }
   switch (classifyApiError(error)) {
     case 'unauthorized':
       return { key: 'apiKeyInvalidRetry' }
@@ -125,7 +135,14 @@ const speakWithSystemSpeech = async (text: string, controller: AbortController):
   }
   const synth = window.speechSynthesis
   synth.cancel()
-  const chunks = splitSpeechSentences(text, 120)
+  const cleaned = stripBasicSpeechMarkdown(text)
+  if (!cleaned) {
+    return
+  }
+  const chunks = cleaned
+    .split(/(?<=[。！？!?；;])/)
+    .map((p) => p.trim())
+    .filter(Boolean)
   if (chunks.length === 0) {
     return
   }
@@ -184,8 +201,18 @@ export const toggleReadAloud = (
   current = { controller }
   useReadAloud.setState({ messageId, status: 'loading' })
   // 引擎与音色在开始朗读时读取，设置中切换后下一次朗读生效
-  const { apiKey, ttsVoice, ttsEngine, localTtsVoiceId, localTtsSpeakerId } = useSettings.getState()
-  const effectiveEngine = ttsEngine === 'nekospeak' ? 'local-sherpa' : ttsEngine
+  const {
+    apiKey,
+    ttsVoice,
+    ttsEngine,
+    localTtsVoiceId,
+    localTtsSpeakerId,
+    iflytekAppId,
+    iflytekApiKey,
+    iflytekApiSecret,
+    iflytekVoice,
+  } = useSettings.getState()
+  const effectiveEngine = ttsEngine === 'nekospeak' ? 'system' : ttsEngine
 
   if (
     effectiveEngine === 'system' ||
@@ -204,6 +231,76 @@ export const toggleReadAloud = (
 
   const context = ensureAudioContext()
 
+  const scheduleSamples = (
+    samples: Float32Array,
+    sampleRate: number,
+    state: { nextTime: number; lastSource: AudioBufferSourceNode | null }
+  ) => {
+    const buffer = context.createBuffer(1, samples.length, sampleRate)
+    const channelSamples = new Float32Array(samples.length)
+    channelSamples.set(samples)
+    buffer.copyToChannel(channelSamples, 0)
+    const source = context.createBufferSource()
+    source.buffer = buffer
+    source.connect(context.destination)
+    state.nextTime = Math.max(
+      state.nextTime,
+      context.currentTime + (state.lastSource ? 0 : START_DELAY)
+    )
+    source.start(state.nextTime)
+    state.nextTime += buffer.duration
+    state.lastSource = source
+    activeSources.push(source)
+    if (useReadAloud.getState().status === 'loading') {
+      useReadAloud.setState({ status: 'playing' })
+    }
+  }
+
+  if (effectiveEngine === 'iflytek') {
+    void (async () => {
+      const chunks = splitIflytekTextChunks(stripBasicSpeechMarkdown(cleanText))
+      if (chunks.length === 0) {
+        finish(controller)
+        return
+      }
+      const playState: { nextTime: number; lastSource: AudioBufferSourceNode | null } = {
+        nextTime: 0,
+        lastSource: null,
+      }
+      try {
+        for (const chunk of chunks) {
+          if (controller.signal.aborted) {
+            return
+          }
+          await synthesizeWithIflytek({
+            appId: iflytekAppId,
+            apiKey: iflytekApiKey,
+            apiSecret: iflytekApiSecret,
+            vcn: iflytekVoice,
+            text: chunk,
+            signal: controller.signal,
+            onChunk: (samples, sampleRate) => {
+              if (!controller.signal.aborted) {
+                scheduleSamples(samples, sampleRate, playState)
+              }
+            },
+          })
+        }
+        if (playState.lastSource) {
+          playState.lastSource.onended = () => finish(controller)
+        } else {
+          finish(controller)
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          finish(controller)
+          onError(error)
+        }
+      }
+    })()
+    return
+  }
+
   if (effectiveEngine === 'local-sherpa') {
     void (async () => {
       const sentences = splitSpeechSentences(cleanText)
@@ -211,23 +308,27 @@ export const toggleReadAloud = (
         finish(controller)
         return
       }
-      let nextTime = 0
-      let lastSource: AudioBufferSourceNode | null = null
-      let activePack = findLocalVoicePack(localTtsVoiceId)
+      const status = await getLocalTtsStatus()
+      if (controller.signal.aborted) {
+        return
+      }
+      if (status.installedIds.length === 0) {
+        finish(controller)
+        onError(new Error('尚未下载本地语音包，请先在设置中按需下载或改用讯飞/系统朗读'))
+        return
+      }
+      let activePack = status.installedIds.includes(localTtsVoiceId)
+        ? findLocalVoicePack(localTtsVoiceId)
+        : findLocalVoicePack(status.installedIds[0])
+      const playState: { nextTime: number; lastSource: AudioBufferSourceNode | null } = {
+        nextTime: 0,
+        lastSource: null,
+      }
       const synthesizeChunk = async (chunk: string) => {
-        try {
-          const activeSid = resolveLocalVoiceSpeakerId(activePack, localTtsSpeakerId)
-          return await synthesizeWithLocalTts(chunk, activePack.id, 1.0, activeSid)
-        } catch (err) {
-          if (activePack.id !== DEFAULT_LOCAL_VOICE_ID) {
-            activePack = findLocalVoicePack(DEFAULT_LOCAL_VOICE_ID)
-            return await synthesizeWithLocalTts(chunk, activePack.id, 1.0, activePack.defaultSid)
-          }
-          throw err
-        }
+        const activeSid = resolveLocalVoiceSpeakerId(activePack, localTtsSpeakerId)
+        return await synthesizeWithLocalTts(chunk, activePack.id, 1.0, activeSid)
       }
       try {
-        // 1-ahead 流水线预合成：播当前句的同时后台已经开始合成下一句
         let pendingAudio: Promise<{ samples: Float32Array; sampleRate: number }> | null =
           synthesizeChunk(sentences[0])
         for (let i = 0; i < sentences.length; i += 1) {
@@ -245,24 +346,10 @@ export const toggleReadAloud = (
           if (audio.samples.length === 0) {
             continue
           }
-          const buffer = context.createBuffer(1, audio.samples.length, audio.sampleRate)
-          const channelSamples = new Float32Array(audio.samples.length)
-          channelSamples.set(audio.samples)
-          buffer.copyToChannel(channelSamples, 0)
-          const source = context.createBufferSource()
-          source.buffer = buffer
-          source.connect(context.destination)
-          nextTime = Math.max(nextTime, context.currentTime + (lastSource ? 0 : START_DELAY))
-          source.start(nextTime)
-          nextTime += buffer.duration
-          lastSource = source
-          activeSources.push(source)
-          if (useReadAloud.getState().status === 'loading') {
-            useReadAloud.setState({ status: 'playing' })
-          }
+          scheduleSamples(audio.samples, audio.sampleRate, playState)
         }
-        if (lastSource) {
-          lastSource.onended = () => finish(controller)
+        if (playState.lastSource) {
+          playState.lastSource.onended = () => finish(controller)
         } else {
           finish(controller)
         }

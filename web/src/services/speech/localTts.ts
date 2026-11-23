@@ -251,9 +251,9 @@ export const normalizeEnglishForSpeech = (input: string): string => {
   return out
 }
 
-/** 清理 Markdown 标记、代码块与链接，并对英文与符号做分词规整 */
-export const stripSpeechMarkdown = (input: string): string => {
-  const withoutMarkdown = input
+/** 清理 Markdown 标记、代码块与链接（保留完整英文词汇，适合讯飞与系统朗读） */
+export const stripBasicSpeechMarkdown = (input: string): string =>
+  input
     .replace(/```[\s\S]*?```/g, ' 代码块已略过。 ')
     .replace(/`([^`]+)`/g, ' $1 ')
     .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
@@ -266,11 +266,14 @@ export const stripSpeechMarkdown = (input: string): string => {
     .replace(/\|/g, '，')
     .replace(/\n{2,}/g, '。')
     .replace(/\n/g, '，')
-
-  return normalizeEnglishForSpeech(withoutMarkdown)
     .replace(/\s{2,}/g, ' ')
     .trim()
-}
+
+/** 清理 Markdown 标记、代码块与链接，并对英文与符号做分词规整（用于 sherpa-onnx 本地模型） */
+export const stripSpeechMarkdown = (input: string): string =>
+  normalizeEnglishForSpeech(stripBasicSpeechMarkdown(input))
+    .replace(/\s{2,}/g, ' ')
+    .trim()
 
 const joinSpeechChunk = (left: string, right: string): string => {
   if (!left) {

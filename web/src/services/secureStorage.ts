@@ -9,6 +9,8 @@ let activeBackendName = 'browser-localstorage'
 
 export const API_KEY_SECRET_ID = 'api-key'
 export const CUSTOM_API_KEY_SECRET_ID = 'custom-api-key'
+export const IFLYTEK_API_KEY_SECRET_ID = 'iflytek-api-key'
+export const IFLYTEK_API_SECRET_ID = 'iflytek-api-secret'
 
 export const setNativeSecureStorage = (adapter: NativeSecureStorage) => {
   nativeSecureStorage = adapter

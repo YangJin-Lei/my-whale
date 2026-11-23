@@ -12,21 +12,25 @@ import {
   splitSpeechSentences,
   stripSpeechMarkdown,
 } from '../localTts.js'
+import { buildIflytekAuthUrl, splitIflytekTextChunks } from '../iflytekTts.js'
 
 describe('speech engines & local voice packs', () => {
   it('defaults to local-sherpa & keeps nekospeak reserved as unavailable', () => {
     const localEngine = TTS_ENGINES.find((item) => item.id === 'local-sherpa')
+    const iflyEngine = TTS_ENGINES.find((item) => item.id === 'iflytek')
     const nekoEngine = TTS_ENGINES.find((item) => item.id === 'nekospeak')
     expect(localEngine?.available).toBe(true)
+    expect(iflyEngine?.available).toBe(true)
     expect(nekoEngine?.available).toBe(false)
     expect(nekoEngine?.labelZh).toContain('暂未开放')
 
-    const builtIn = findLocalVoicePack(DEFAULT_LOCAL_VOICE_ID)
-    expect(builtIn.builtIn).toBe(true)
-    expect(builtIn.id).toBe('default-zh')
-    expect(builtIn.format).toBe('vits-melo')
-    expect(builtIn.defaultSid).toBe(0)
-    expect(findLocalVoicePack('melo-zh-en').id).toBe('default-zh')
+    expect(LOCAL_VOICE_PACKS.every((pack) => pack.builtIn === false)).toBe(true)
+    const melo = findLocalVoicePack(DEFAULT_LOCAL_VOICE_ID)
+    expect(melo.builtIn).toBe(false)
+    expect(melo.id).toBe('melo-zh-en')
+    expect(melo.format).toBe('vits-melo')
+    expect(melo.defaultSid).toBe(0)
+    expect(findLocalVoicePack('default-zh').id).toBe('melo-zh-en')
 
     const kokoro11 = findLocalVoicePack('kokoro-v1_1')
     expect(kokoro11.format).toBe('kokoro')
@@ -89,5 +93,33 @@ describe('speech engines & local voice packs', () => {
     expect(normalized).not.toContain('(API)')
     // Pronounceable ALL-CAPS words like OK / AI / RAM stay intact
     expect(normalizeEnglishForSpeech('OK，AI 和 RAM 都正常')).toContain('OK，AI 和 RAM')
+  })
+
+  it('builds signed iFlytek v2 WebSocket URL and splits long text while keeping typical messages in 1 call', async () => {
+    const authUrl = await buildIflytekAuthUrl({
+      apiKey: 'test-api-key',
+      apiSecret: 'test-api-secret',
+    })
+    const parsed = new URL(authUrl)
+    expect(parsed.protocol).toBe('wss:')
+    expect(parsed.hostname).toBe('tts-api.xfyun.cn')
+    expect(parsed.pathname).toBe('/v2/tts')
+    expect(parsed.searchParams.get('host')).toBe('tts-api.xfyun.cn')
+    expect(parsed.searchParams.get('date')).toMatch(/GMT$/)
+
+    const decodedAuth = atob(parsed.searchParams.get('authorization') ?? '')
+    expect(decodedAuth).toContain('api_key="test-api-key"')
+    expect(decodedAuth).toContain('algorithm="hmac-sha256"')
+    expect(decodedAuth).toContain('headers="host date request-line"')
+    expect(decodedAuth).toContain('signature="')
+
+    const normalChunks = splitIflytekTextChunks('你好，这是一段正常的测试回复。')
+    expect(normalChunks).toHaveLength(1)
+
+    const longText = '这是一句较长的中文测试句子用于验证超长文本分段。'.repeat(120)
+    const splitChunks = splitIflytekTextChunks(longText)
+    expect(splitChunks.length).toBeGreaterThan(1)
+    const encoder = new TextEncoder()
+    expect(splitChunks.every((chunk) => encoder.encode(chunk).length <= 2400)).toBe(true)
   })
 })

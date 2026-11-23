@@ -42,6 +42,7 @@ import {
 import {
   FONT_SCALE_STEPS,
   isChineseBrowser,
+  isIflytekConfigured,
   setCacheBackendUrl,
   setCacheModeEnabled,
   setCompactionEnabled,
@@ -51,6 +52,8 @@ import {
   setChatBgPreset,
   setFontFollowSystem,
   setFontScale,
+  setIflytekCredentials,
+  setIflytekVoice,
   setLocalTtsSpeakerId,
   setLocalTtsVoiceId,
   setLocale,
@@ -74,6 +77,11 @@ import {
   findLocalVoicePack,
   resolveLocalVoiceSpeakerId,
 } from '../../services/speech/engines.js'
+import {
+  IFLYTEK_CONSOLE_URL,
+  IFLYTEK_VOICES,
+  type IflytekVoiceId,
+} from '../../services/speech/iflytekTts.js'
 import {
   deleteLocalVoicePack,
   downloadLocalVoicePack,
@@ -808,6 +816,7 @@ const VoiceModeSetting = () => {
             }
           />
           <TtsEngineSetting />
+          {ttsEngine === 'iflytek' ? <IflytekTtsSetting /> : null}
           {ttsEngine === 'official' ? <TtsVoiceSetting /> : null}
           {ttsEngine === 'local-sherpa' ? <LocalTtsVoiceSetting /> : null}
         </>
@@ -1066,6 +1075,132 @@ const TtsEngineSetting = () => {
   )
 }
 
+const IflytekTtsSetting = () => {
+  const t = useTranslate()
+  const locale = useSettings((state) => state.locale)
+  const iflytekAppId = useSettings((state) => state.iflytekAppId)
+  const iflytekApiKey = useSettings((state) => state.iflytekApiKey)
+  const iflytekApiSecret = useSettings((state) => state.iflytekApiSecret)
+  const iflytekVoice = useSettings((state) => state.iflytekVoice)
+  const configured = isIflytekConfigured()
+  const isEn = locale === 'en-US'
+
+  const [appIdDraft, setAppIdDraft] = useState(iflytekAppId)
+  const [apiKeyDraft, setApiKeyDraft] = useState('')
+  const [apiSecretDraft, setApiSecretDraft] = useState('')
+
+  useEffect(() => {
+    setAppIdDraft(iflytekAppId)
+  }, [iflytekAppId])
+
+  const handleSave = () => {
+    const cleanAppId = appIdDraft.trim()
+    const cleanKey = apiKeyDraft.trim() || iflytekApiKey.trim()
+    const cleanSecret = apiSecretDraft.trim() || iflytekApiSecret.trim()
+    if (!cleanAppId || !cleanKey || !cleanSecret) {
+      showToast(t('customApiMissingFields'))
+      return
+    }
+    setIflytekCredentials({
+      appId: cleanAppId,
+      apiKey: cleanKey,
+      apiSecret: cleanSecret,
+    })
+    setApiKeyDraft('')
+    setApiSecretDraft('')
+    showToast({ key: 'settingsTtsIflytekSaved' })
+  }
+
+  return (
+    <>
+      <SettingCell
+        label={t('settingsTtsIflytekVoice')}
+        status={null}
+        action={
+          <Select
+            ariaLabel={t('settingsTtsIflytekVoice')}
+            value={iflytekVoice}
+            options={IFLYTEK_VOICES.map((voice) => ({
+              value: voice.id,
+              label: isEn ? voice.labelEn : voice.labelZh,
+            }))}
+            onChange={(val) => setIflytekVoice(val as IflytekVoiceId)}
+          />
+        }
+      />
+      <div className={styles.cell}>
+        <div className={styles.apiKeyHeader}>
+          <span className={configured ? styles.cacheOnlinePill : styles.cacheOfflinePill}>
+            {configured ? t('settingsTtsIflytekConfigured') : t('settingsTtsIflytekUnconfigured')}
+          </span>
+          <button
+            type="button"
+            className={styles.apiKeyGetLink}
+            onClick={() => openExternal(IFLYTEK_CONSOLE_URL)}
+          >
+            {t('settingsTtsIflytekOpenConsole')}
+          </button>
+        </div>
+        <div className={styles.exportGuide} style={{ marginTop: 6, marginBottom: 10 }}>
+          {t('settingsTtsIflytekGuide')}
+        </div>
+        <div className={styles.customApiForm}>
+          <div className={styles.customApiField}>
+            <label className={styles.customApiLabel} htmlFor="iflytek-app-id">
+              APPID
+            </label>
+            <input
+              id="iflytek-app-id"
+              type="text"
+              className={styles.mirrorInput}
+              value={appIdDraft}
+              placeholder="例如 5f3axxxx"
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => setAppIdDraft(e.target.value)}
+            />
+          </div>
+          <div className={styles.customApiField}>
+            <label className={styles.customApiLabel} htmlFor="iflytek-api-key">
+              APIKey
+            </label>
+            <input
+              id="iflytek-api-key"
+              type="password"
+              className={styles.mirrorInput}
+              value={apiKeyDraft}
+              placeholder={iflytekApiKey ? '已保存（留空保持不变）' : '请输入 APIKey'}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => setApiKeyDraft(e.target.value)}
+            />
+          </div>
+          <div className={styles.customApiField}>
+            <label className={styles.customApiLabel} htmlFor="iflytek-api-secret">
+              APISecret
+            </label>
+            <input
+              id="iflytek-api-secret"
+              type="password"
+              className={styles.mirrorInput}
+              value={apiSecretDraft}
+              placeholder={iflytekApiSecret ? '已保存（留空保持不变）' : '请输入 APISecret'}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => setApiSecretDraft(e.target.value)}
+            />
+          </div>
+          <div className={styles.cacheActionRow}>
+            <Button size="s" variant="primary" onClick={handleSave}>
+              {t('settingsTtsIflytekSave')}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
 const LocalTtsVoiceSetting = () => {
   const t = useTranslate()
   const locale = useSettings((state) => state.locale)
@@ -1073,10 +1208,11 @@ const LocalTtsVoiceSetting = () => {
   const localTtsSpeakerId = useSettings((state) => state.localTtsSpeakerId)
   const isEn = locale === 'en-US'
   const nativeSupported = hasNativeLocalTts()
-  const [installedIds, setInstalledIds] = useState<string[]>([DEFAULT_LOCAL_VOICE_ID])
+  const [installedIds, setInstalledIds] = useState<string[]>([])
   const [busyId, setBusyId] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const activePack = findLocalVoicePack(localTtsVoiceId)
+  const activeInstalled = installedIds.includes(activePack.id)
   const activeSpeakerId = resolveLocalVoiceSpeakerId(activePack, localTtsSpeakerId)
 
   useEffect(() => {
@@ -1088,10 +1224,7 @@ const LocalTtsVoiceSetting = () => {
       if (!active) {
         return
       }
-      const nextIds = status.installedIds.includes(DEFAULT_LOCAL_VOICE_ID)
-        ? status.installedIds
-        : [DEFAULT_LOCAL_VOICE_ID, ...status.installedIds]
-      setInstalledIds(nextIds)
+      setInstalledIds(status.installedIds)
       if (status.error) {
         setErrorMsg(status.error)
       }
@@ -1122,7 +1255,7 @@ const LocalTtsVoiceSetting = () => {
   }
 
   const handleDelete = async (packId: string) => {
-    if (busyId || packId === DEFAULT_LOCAL_VOICE_ID) {
+    if (busyId) {
       return
     }
     setBusyId(packId)
@@ -1131,7 +1264,7 @@ const LocalTtsVoiceSetting = () => {
       const next = await deleteLocalVoicePack(packId)
       setInstalledIds(next)
       if (localTtsVoiceId === packId) {
-        setLocalTtsVoiceId(DEFAULT_LOCAL_VOICE_ID)
+        setLocalTtsVoiceId(next[0] ?? DEFAULT_LOCAL_VOICE_ID)
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
@@ -1144,7 +1277,7 @@ const LocalTtsVoiceSetting = () => {
 
   return (
     <>
-      {activePack.speakers && activePack.speakers.length > 0 ? (
+      {activeInstalled && activePack.speakers && activePack.speakers.length > 0 ? (
         <SettingCell
           label={t('settingsTtsSpeaker')}
           status={null}
@@ -1176,7 +1309,7 @@ const LocalTtsVoiceSetting = () => {
         </div>
         <div className={styles.ttsPackList}>
           {LOCAL_VOICE_PACKS.map((pack) => {
-            const installed = pack.builtIn || installedIds.includes(pack.id)
+            const installed = installedIds.includes(pack.id)
             const selected = localTtsVoiceId === pack.id && installed
             const downloading = busyId === pack.id
             return (
@@ -1185,11 +1318,7 @@ const LocalTtsVoiceSetting = () => {
                   <span className={styles.ttsPackName}>{isEn ? pack.nameEn : pack.nameZh}</span>
                   <span className={styles.ttsPackMeta}>
                     {pack.sizeMb} MB ·{' '}
-                    {pack.builtIn
-                      ? t('settingsTtsBuiltInTag')
-                      : installed
-                        ? t('settingsTtsInstalledTag')
-                        : t('settingsTtsDownload')}
+                    {installed ? t('settingsTtsInstalledTag') : t('settingsTtsDownload')}
                   </span>
                 </div>
                 <div className={styles.ttsPackActions}>
@@ -1215,7 +1344,7 @@ const LocalTtsVoiceSetting = () => {
                       {downloading ? t('settingsTtsDownloading') : t('settingsTtsDownload')}
                     </Button>
                   )}
-                  {!pack.builtIn && installed ? (
+                  {installed ? (
                     <Button
                       size="s"
                       variant="outlined"
