@@ -134,6 +134,8 @@ export const createInitialWerewolfState = (playerCount: WerewolfPlayerCount = 6)
     witchPoisonLeft: 1,
     dayVotes: {},
     pendingVoteSeats: [],
+    pendingHunterSeat: null,
+    hunterFromPhase: null,
     publicLogs: [
       {
         day: 1,
@@ -218,8 +220,45 @@ export const resolveDawn = (state: WerewolfState): WerewolfState => {
       tonightSeerChecked: false,
       tonightHealed: false,
       tonightPoisonTarget: null,
+      pendingHunterSeat: null,
+      hunterFromPhase: null,
       publicLogs: [...logs, { day: state.day, kind: 'system', text: endNote }],
       winner,
+    }
+  }
+
+  // 若狼刀导致猎人出局（非女巫毒死），触发猎人开枪
+  const wolfVictimIdx =
+    state.tonightWolfTarget !== null &&
+    !state.tonightHealed &&
+    state.tonightPoisonTarget !== state.tonightWolfTarget
+      ? state.tonightWolfTarget
+      : null
+  const deadHunter =
+    wolfVictimIdx !== null
+      ? nextSeats.find((s) => s.seatIndex === wolfVictimIdx && s.role === 'hunter')
+      : undefined
+  if (deadHunter) {
+    return {
+      ...state,
+      phase: 'hunter_shoot',
+      seats: nextSeats,
+      pendingHunterSeat: deadHunter.seatIndex,
+      hunterFromPhase: 'dawn',
+      tonightWolfTarget: null,
+      tonightSeerChecked: false,
+      tonightHealed: false,
+      tonightPoisonTarget: null,
+      dayVotes: {},
+      pendingVoteSeats: [],
+      publicLogs: [
+        ...logs,
+        {
+          day: state.day,
+          kind: 'system',
+          text: `${deadHunter.seatIndex + 1}号【猎人】倒牌，可选择开枪带走一名玩家！`,
+        },
+      ],
     }
   }
 
@@ -236,6 +275,8 @@ export const resolveDawn = (state: WerewolfState): WerewolfState => {
     tonightPoisonTarget: null,
     dayVotes: {},
     pendingVoteSeats: [],
+    pendingHunterSeat: null,
+    hunterFromPhase: null,
     publicLogs: logs,
   }
 }
@@ -288,11 +329,89 @@ export const advanceSpeechTurn = (
   }
 }
 
+export const applyHunterShot = (state: WerewolfState, targetSeat: number | null): WerewolfState => {
+  const hunterIdx = state.pendingHunterSeat ?? -1
+  const fromPhase = state.hunterFromPhase ?? 'dawn'
+  let nextSeats = state.seats
+  const shotLogs = [...state.publicLogs]
+
+  if (targetSeat !== null) {
+    const validTarget = state.seats.find((s) => s.seatIndex === targetSeat && s.alive)
+    if (validTarget) {
+      nextSeats = state.seats.map((s) => (s.seatIndex === targetSeat ? { ...s, alive: false } : s))
+      shotLogs.push({
+        day: state.day,
+        kind: 'system',
+        text: `${hunterIdx + 1}号【猎人】发动技能开枪带走了 ${targetSeat + 1}号！`,
+      })
+    }
+  } else {
+    shotLogs.push({
+      day: state.day,
+      kind: 'system',
+      text: `${hunterIdx + 1}号【猎人】选择压枪不开枪。`,
+    })
+  }
+
+  const winner = checkWinner(nextSeats)
+  if (winner) {
+    const endNote =
+      winner === 'good' ? '所有狼人已被放逐，好人阵营获胜！' : '狼人数量占优，狼人阵营获胜！'
+    return {
+      ...state,
+      phase: 'finished',
+      seats: nextSeats,
+      pendingHunterSeat: null,
+      hunterFromPhase: null,
+      publicLogs: [...shotLogs, { day: state.day, kind: 'system', text: endNote }],
+      winner,
+    }
+  }
+
+  if (fromPhase === 'dawn') {
+    const aliveOrder = nextSeats.filter((s) => s.alive).map((s) => s.seatIndex)
+    return {
+      ...state,
+      phase: 'day_speech',
+      seats: nextSeats,
+      speechOrder: aliveOrder,
+      speechCursor: 0,
+      pendingHunterSeat: null,
+      hunterFromPhase: null,
+      publicLogs: shotLogs,
+    }
+  }
+
+  const nextDay = state.day + 1
+  return {
+    ...state,
+    day: nextDay,
+    phase: 'night_wolf',
+    seats: nextSeats.map((s) => ({ ...s, lastSpeech: '', lastThought: undefined })),
+    dayVotes: {},
+    pendingVoteSeats: [],
+    pendingHunterSeat: null,
+    hunterFromPhase: null,
+    publicLogs: [
+      ...shotLogs,
+      { day: nextDay, kind: 'system', text: `第 ${nextDay} 夜降临：天黑请闭眼…` },
+    ],
+  }
+}
+
 export const resolveVoteExile = (state: WerewolfState): WerewolfState => {
   const tally = new Map<number, number>()
-  for (const target of Object.values(state.dayVotes)) {
+  const voteDetails: string[] = []
+  const sortedVoters = Object.keys(state.dayVotes)
+    .map(Number)
+    .sort((a, b) => a - b)
+  for (const voterIdx of sortedVoters) {
+    const target = state.dayVotes[voterIdx]
     if (typeof target === 'number') {
       tally.set(target, (tally.get(target) ?? 0) + 1)
+      voteDetails.push(`${voterIdx + 1}号→${target + 1}号`)
+    } else {
+      voteDetails.push(`${voterIdx + 1}号弃票`)
     }
   }
 
@@ -312,10 +431,11 @@ export const resolveVoteExile = (state: WerewolfState): WerewolfState => {
     s.seatIndex === exiledSeat ? { ...s, alive: false } : s
   )
 
+  const detailPrefix = voteDetails.length > 0 ? `票型（${voteDetails.join('，')}）；` : ''
   const voteText =
     exiledSeat !== null
-      ? `投票结果：${exiledSeat + 1}号 以 ${topVotes} 票被放逐出局。`
-      : '投票结果：平票或全员弃票，无人出局。'
+      ? `${detailPrefix}${exiledSeat + 1}号 以 ${topVotes} 票被放逐出局。`
+      : `${detailPrefix}平票或全员弃票，无人出局。`
 
   const logs = [...state.publicLogs, { day: state.day, kind: 'vote' as const, text: voteText }]
   const winner = checkWinner(nextSeats)
@@ -326,8 +446,34 @@ export const resolveVoteExile = (state: WerewolfState): WerewolfState => {
       ...state,
       phase: 'finished',
       seats: nextSeats,
+      pendingHunterSeat: null,
+      hunterFromPhase: null,
       publicLogs: [...logs, { day: state.day, kind: 'system', text: endNote }],
       winner,
+    }
+  }
+
+  const exiledHunter =
+    exiledSeat !== null
+      ? nextSeats.find((s) => s.seatIndex === exiledSeat && s.role === 'hunter')
+      : undefined
+  if (exiledHunter) {
+    return {
+      ...state,
+      phase: 'hunter_shoot',
+      seats: nextSeats,
+      dayVotes: {},
+      pendingVoteSeats: [],
+      pendingHunterSeat: exiledHunter.seatIndex,
+      hunterFromPhase: 'vote',
+      publicLogs: [
+        ...logs,
+        {
+          day: state.day,
+          kind: 'system',
+          text: `${exiledHunter.seatIndex + 1}号【猎人】被放逐，可选择开枪带走一名玩家！`,
+        },
+      ],
     }
   }
 
@@ -339,6 +485,8 @@ export const resolveVoteExile = (state: WerewolfState): WerewolfState => {
     seats: nextSeats.map((s) => ({ ...s, lastSpeech: '', lastThought: undefined })),
     dayVotes: {},
     pendingVoteSeats: [],
+    pendingHunterSeat: null,
+    hunterFromPhase: null,
     publicLogs: [
       ...logs,
       { day: nextDay, kind: 'system', text: `第 ${nextDay} 夜降临：天黑请闭眼…` },

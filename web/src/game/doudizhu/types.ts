@@ -95,6 +95,8 @@ export type DoudizhuState = {
     hands: Record<DoudizhuSeatId, Card[]>
     bottomCards: Card[]
     currentTurn: DoudizhuSeatId
+    firstBidder: DoudizhuSeatId
+    bidTurnCount: number
     highestBid: 0 | 1 | 2 | 3
     highestBidder: DoudizhuSeatId | null
     landlordSeat: DoudizhuSeatId | null

@@ -6,6 +6,7 @@ export type WerewolfPhase =
   | 'night_wolf'
   | 'night_seer'
   | 'night_witch'
+  | 'hunter_shoot'
   | 'day_speech'
   | 'day_vote'
   | 'finished'
@@ -48,6 +49,9 @@ export type WerewolfState = {
   dayVotes: Record<number, number | null>
   /** 待轮流请求投票的 AI 队列 */
   pendingVoteSeats: number[]
+  /** 猎人出局触发开枪带人 */
+  pendingHunterSeat?: number | null
+  hunterFromPhase?: 'dawn' | 'vote' | null
   /** 公开日志（所有角色与玩家均可见） */
   publicLogs: WerewolfLogEntry[]
   winner: 'good' | 'wolf' | null

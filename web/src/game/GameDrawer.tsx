@@ -187,14 +187,16 @@ export const GameDrawer = () => {
       {plugin && gameState ? (
         <>
           <div className={styles.toolbar}>
-            <button
-              type="button"
-              className={clsx(styles.pillBtn, thinkingMode && styles.pillBtnActive)}
-              onClick={toggleGameThinkingMode}
-            >
-              <IconThinkOutline14 />
-              <span>{t('thinkingSwitch')}</span>
-            </button>
+            {!plugin.realtimeLocalAi ? (
+              <button
+                type="button"
+                className={clsx(styles.pillBtn, thinkingMode && styles.pillBtnActive)}
+                onClick={toggleGameThinkingMode}
+              >
+                <IconThinkOutline14 />
+                <span>{t('thinkingSwitch')}</span>
+              </button>
+            ) : null}
             <button
               type="button"
               className={clsx(styles.pillBtn, gameVoiceOn && styles.pillBtnActive)}
@@ -203,37 +205,43 @@ export const GameDrawer = () => {
               <IconPlayMediaOutline16 />
               <span>{gameVoiceOn ? t('gameVoiceOn') : t('gameVoiceOff')}</span>
             </button>
-            <button
-              type="button"
-              className={styles.pillBtn}
-              disabled={!canUndo}
-              onClick={undoGameRound}
-            >
-              {t('gameUndo')}
-            </button>
+            {!plugin.realtimeLocalAi ? (
+              <button
+                type="button"
+                className={styles.pillBtn}
+                disabled={!canUndo}
+                onClick={undoGameRound}
+              >
+                {t('gameUndo')}
+              </button>
+            ) : null}
             <button type="button" className={styles.pillBtn} onClick={restartCurrentGame}>
               {t('gameRestart')}
             </button>
-            <button
-              type="button"
-              className={clsx(styles.pillBtn, gameCacheEnabled && styles.pillBtnActive)}
-              onClick={() => setGameCacheEnabled(!gameCacheEnabled)}
-            >
-              {t('gameCachePill')}
-            </button>
-            <button
-              type="button"
-              className={clsx(
-                styles.pillBtn,
-                thoughtExpanded && thoughtText && styles.pillBtnActive
-              )}
-              disabled={!thoughtText}
-              onClick={() => setThoughtExpanded((prev) => !prev)}
-            >
-              <span>
-                {thoughtExpanded && thoughtText ? t('gameHideThought') : t('gameViewThought')}
-              </span>
-            </button>
+            {!plugin.realtimeLocalAi ? (
+              <>
+                <button
+                  type="button"
+                  className={clsx(styles.pillBtn, gameCacheEnabled && styles.pillBtnActive)}
+                  onClick={() => setGameCacheEnabled(!gameCacheEnabled)}
+                >
+                  {t('gameCachePill')}
+                </button>
+                <button
+                  type="button"
+                  className={clsx(
+                    styles.pillBtn,
+                    thoughtExpanded && thoughtText && styles.pillBtnActive
+                  )}
+                  disabled={!thoughtText}
+                  onClick={() => setThoughtExpanded((prev) => !prev)}
+                >
+                  <span>
+                    {thoughtExpanded && thoughtText ? t('gameHideThought') : t('gameViewThought')}
+                  </span>
+                </button>
+              </>
+            ) : null}
           </div>
 
           <div className={styles.bodyWrap}>
@@ -461,15 +469,6 @@ export const GameDrawer = () => {
                 <span className={styles.gameCardDesc}>{item.subtitle[locale]}</span>
               </button>
             ))}
-            <div className={clsx(styles.gameCard, styles.gameCardUpcoming)} aria-disabled="true">
-              <div className={styles.gameCardTop}>
-                <span className={styles.gameCardName}>{t('gameMahjongTitle')}</span>
-                <span className={clsx(styles.gameCardBadge, styles.gameCardBadgeMuted)}>
-                  {t('gameMahjongBadge')}
-                </span>
-              </div>
-              <span className={styles.gameCardDesc}>{t('gameMahjongSubtitle')}</span>
-            </div>
           </div>
 
           {historyRecords.length > 0 ? (

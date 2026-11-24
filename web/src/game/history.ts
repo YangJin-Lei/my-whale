@@ -154,14 +154,34 @@ export const formatGameScoreLabel = (
 
   if (gameId === 'doudizhu') {
     const hands = asRecord(obj.hands)
-    const humanCount = hands && Array.isArray(hands.human) ? hands.human.length : null
-    const aiCount = hands && Array.isArray(hands.ai) ? hands.ai.length : null
-    if (humanCount !== null && aiCount !== null) {
+    const pCount = hands && Array.isArray(hands.player) ? hands.player.length : null
+    const lCount = hands && Array.isArray(hands.ai_left) ? hands.ai_left.length : null
+    const rCount = hands && Array.isArray(hands.ai_right) ? hands.ai_right.length : null
+    if (pCount !== null && lCount !== null && rCount !== null) {
       return locale === 'zh-CN'
-        ? `${tag} · 剩牌 ${humanCount}:${aiCount}`
-        : `${tag} · Cards ${humanCount}:${aiCount}`
+        ? `${tag} · 剩牌 ${pCount}:${lCount}:${rCount}`
+        : `${tag} · Cards ${pCount}:${lCount}:${rCount}`
     }
     return tag
+  }
+
+  if (gameId === 'mahjong') {
+    const wall = Array.isArray(obj.wall) ? obj.wall.length : 0
+    const winResult = asRecord(obj.winResult)
+    const totalFan = winResult && typeof winResult.totalFan === 'number' ? winResult.totalFan : null
+    if (status !== 'playing' && totalFan !== null) {
+      return locale === 'zh-CN' ? `${tag} · ${totalFan}番` : `${tag} · ${totalFan} Fan`
+    }
+    return locale === 'zh-CN' ? `${tag} · 余牌 ${wall} 张` : `${tag} · Wall ${wall}`
+  }
+
+  if (gameId === 'tank_battle') {
+    const p = typeof obj.playerScore === 'number' ? obj.playerScore : 0
+    const a = typeof obj.aiScore === 'number' ? obj.aiScore : 0
+    const round = typeof obj.round === 'number' ? obj.round : 1
+    return locale === 'zh-CN'
+      ? `${tag} · 你 ${p} : AI ${a} (第${round}局)`
+      : `${tag} · You ${p} : AI ${a} (R${round})`
   }
 
   if (gameId === 'werewolf') {

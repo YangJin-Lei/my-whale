@@ -648,6 +648,38 @@ export const xiangqiRules: Omit<GamePlugin<XiangqiState, XiangqiMove>, 'BoardCom
     if (all.length === 0) {
       return null
     }
-    return all[Math.floor(Math.random() * all.length)]
+    const pieceValue: Record<XiangqiPieceType, number> = {
+      K: 1000,
+      R: 9,
+      C: 4.5,
+      H: 4,
+      E: 2,
+      A: 2,
+      P: 1,
+    }
+    let bestMove = all[0]
+    let bestScore = -Infinity
+
+    for (const move of all) {
+      const captured = state.board[move.to.row][move.to.col]
+      const mover = state.board[move.from.row][move.from.col]
+      let score = captured ? pieceValue[captured.type] * 10 : 0
+      const nextBoard = applyMoveOnBoard(state.board, move)
+      if (isSideInCheck(nextBoard, 'player')) {
+        score += 12
+      }
+      // 简单评估目标格是否直接受红方攻击
+      const moverVal = mover ? pieceValue[mover.type] : 1
+      const redMoves = getAllLegalMoves(nextBoard, 'player')
+      if (redMoves.some((rm) => rm.to.row === move.to.row && rm.to.col === move.to.col)) {
+        score -= moverVal * 4.5
+      }
+      score += Math.random() * 0.25
+      if (score > bestScore) {
+        bestScore = score
+        bestMove = move
+      }
+    }
+    return bestMove
   },
 }

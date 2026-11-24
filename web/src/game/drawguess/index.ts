@@ -1,5 +1,6 @@
 import type { GameOpponent, GamePlugin, GameSide, GameStatus } from '../types.js'
 import { DrawGuessBoard } from './DrawGuessBoard.js'
+export { isGuessMatch, sanitizeDrawingHtml } from './helpers.js'
 
 export type DrawGuessDrawer = 'player' | 'ai'
 
@@ -86,28 +87,6 @@ export const createInitialDrawGuessState = (): DrawGuessState => ({
   aiPuzzle: null,
   lastReveal: null,
 })
-
-const normalizeGuess = (raw: string): string =>
-  raw
-    .trim()
-    .toLowerCase()
-    .replace(/[《》「」"'`.,，。！？!?、\s]+/g, '')
-
-export const isGuessMatch = (guess: string, answer: string): boolean => {
-  const g = normalizeGuess(guess)
-  const a = normalizeGuess(answer)
-  if (!g || !a) {
-    return false
-  }
-  return g === a || (a.length >= 2 && (g.includes(a) || a.includes(g)))
-}
-
-/** 清理 AI 生成或用户输入的 HTML，移除脚本与内联事件确保沙箱安全 */
-export const sanitizeDrawingHtml = (raw: string): string =>
-  raw
-    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
-    .replace(/\son[a-z]+\s*=\s*(".*?"|'.*?'|[^\s>]+)/gi, '')
-    .trim()
 
 export const drawGuessGame: GamePlugin<DrawGuessState, DrawGuessMove> = {
   id: 'draw_guess',

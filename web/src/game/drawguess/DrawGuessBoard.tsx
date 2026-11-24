@@ -275,8 +275,6 @@ export const DrawGuessBoard = ({
 
   const STREAM_IDLE_TIMEOUT_MS = 90_000
 
-  useEffect(() => () => abortRef.current?.abort(), [])
-
   const streamSingleJsonCall = async (
     apiKey: string,
     systemPrompt: string,
@@ -299,6 +297,7 @@ export const DrawGuessBoard = ({
 
     let text = ''
     let thought = ''
+    let lastThoughtEmit = 0
     try {
       const events = streamMessage(
         apiKey,
@@ -320,7 +319,11 @@ export const DrawGuessBoard = ({
           text += ev.delta.text
         } else if (ev.delta.type === 'thinking_delta') {
           thought += ev.delta.thinking
-          updateGameFeedback({ thoughtText: thought.trim() })
+          const now = Date.now()
+          if (now - lastThoughtEmit >= 400) {
+            lastThoughtEmit = now
+            updateGameFeedback({ thoughtText: thought.trim() })
+          }
         }
       }
       return { text, thought }

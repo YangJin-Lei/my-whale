@@ -219,6 +219,7 @@ const startTurnCountdown = (plugin: RegisteredGame, expectedEpoch: number) => {
       lastVoice: opponent.preferredVoice,
       moveEpoch: bumpedEpoch,
     })
+    syncActiveHistoryRecord(plugin)
     if (speech && useGameStore.getState().gameVoiceOn) {
       speakGameLine(speech, opponent.preferredVoice)
     }

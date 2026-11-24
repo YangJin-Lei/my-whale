@@ -277,7 +277,10 @@ export const detectCombo = (rawCards: readonly Card[]): DetectedCombo | null => 
     }
   }
   if (len === 6 && entries[0][1] === 4) {
-    return { kind: 'four_two_single', mainRank: entries[0][0], length: 6, cards }
+    const hasBothJokers = (counts.get(16) ?? 0) > 0 && (counts.get(17) ?? 0) > 0
+    if (!hasBothJokers) {
+      return { kind: 'four_two_single', mainRank: entries[0][0], length: 6, cards }
+    }
   }
 
   // 飞机带单翼（k >= 2 组连三 + k 张任意单翼，不可带双王炸作翼）
@@ -435,8 +438,27 @@ export const findBeatCandidates = (
 
   if (!target) {
     const leads: Card[][] = []
+    // 领出推荐：顺子 > 三张 > 对子 > 单张
+    for (let start = 3; start <= 10; start += 1) {
+      const seq: Card[] = []
+      let r = start
+      while (r <= 14 && byRank.get(r)?.[0]) {
+        const card = byRank.get(r)?.[0]
+        if (card) {
+          seq.push(card)
+        }
+        r += 1
+      }
+      if (seq.length >= 5) {
+        leads.push(seq)
+        break
+      }
+    }
     for (const r of sortedRanks) {
       const group = byRank.get(r) ?? []
+      if (group.length >= 3) {
+        leads.push(group.slice(0, 3))
+      }
       if (group.length >= 2) {
         leads.push(group.slice(0, 2))
       }
@@ -534,6 +556,113 @@ export const findBeatCandidates = (
         results.push(seq)
       }
     }
+  } else if (target.kind === 'airplane' && target.sequenceLength) {
+    const seqLen = target.sequenceLength
+    for (let start = target.mainRank + 1; start + seqLen - 1 <= 14; start += 1) {
+      const seq: Card[] = []
+      let ok = true
+      for (let r = start; r < start + seqLen; r += 1) {
+        const g = byRank.get(r)
+        if (!g || g.length < 3) {
+          ok = false
+          break
+        }
+        seq.push(g[0], g[1], g[2])
+      }
+      if (ok) {
+        pushIfBeats(seq)
+      }
+    }
+  } else if (target.kind === 'airplane_single' && target.sequenceLength) {
+    const seqLen = target.sequenceLength
+    for (let start = target.mainRank + 1; start + seqLen - 1 <= 14; start += 1) {
+      const body: Card[] = []
+      const bodyRanks = new Set<number>()
+      let ok = true
+      for (let r = start; r < start + seqLen; r += 1) {
+        const g = byRank.get(r)
+        if (!g || g.length < 3) {
+          ok = false
+          break
+        }
+        body.push(g[0], g[1], g[2])
+        bodyRanks.add(r)
+      }
+      if (!ok) {
+        continue
+      }
+      const wings = asc.filter((c) => !bodyRanks.has(c.rank))
+      if (wings.length >= seqLen) {
+        pushIfBeats([...body, ...wings.slice(0, seqLen)])
+      }
+    }
+  } else if (target.kind === 'airplane_pair' && target.sequenceLength) {
+    const seqLen = target.sequenceLength
+    for (let start = target.mainRank + 1; start + seqLen - 1 <= 14; start += 1) {
+      const body: Card[] = []
+      const bodyRanks = new Set<number>()
+      let ok = true
+      for (let r = start; r < start + seqLen; r += 1) {
+        const g = byRank.get(r)
+        if (!g || g.length < 3) {
+          ok = false
+          break
+        }
+        body.push(g[0], g[1], g[2])
+        bodyRanks.add(r)
+      }
+      if (!ok) {
+        continue
+      }
+      const pairWings: Card[] = []
+      for (const wr of sortedRanks) {
+        if (bodyRanks.has(wr)) {
+          continue
+        }
+        const wg = byRank.get(wr)
+        if (wg && wg.length >= 2) {
+          pairWings.push(wg[0], wg[1])
+          if (pairWings.length >= seqLen * 2) {
+            break
+          }
+        }
+      }
+      if (pairWings.length === seqLen * 2) {
+        pushIfBeats([...body, ...pairWings])
+      }
+    }
+  } else if (target.kind === 'four_two_single') {
+    for (const r of sortedRanks) {
+      const g = byRank.get(r)
+      if (r > target.mainRank && g && g.length === 4) {
+        const wings = asc.filter((c) => c.rank !== r)
+        if (wings.length >= 2) {
+          pushIfBeats([...g, wings[0], wings[1]])
+        }
+      }
+    }
+  } else if (target.kind === 'four_two_pair') {
+    for (const r of sortedRanks) {
+      const g = byRank.get(r)
+      if (r > target.mainRank && g && g.length === 4) {
+        const pairWings: Card[] = []
+        for (const wr of sortedRanks) {
+          if (wr === r) {
+            continue
+          }
+          const wg = byRank.get(wr)
+          if (wg && wg.length >= 2) {
+            pairWings.push(wg[0], wg[1])
+            if (pairWings.length >= 4) {
+              break
+            }
+          }
+        }
+        if (pairWings.length === 4) {
+          pushIfBeats([...g, ...pairWings])
+        }
+      }
+    }
   }
 
   // 普通炸弹兜底压制
@@ -563,6 +692,8 @@ const cloneUndoSnapshot = (state: DoudizhuState): DoudizhuState['undoStack'][num
   },
   bottomCards: [...state.bottomCards],
   currentTurn: state.currentTurn,
+  firstBidder: state.firstBidder,
+  bidTurnCount: state.bidTurnCount,
   highestBid: state.highestBid,
   highestBidder: state.highestBidder,
   landlordSeat: state.landlordSeat,
@@ -577,6 +708,33 @@ const cloneUndoSnapshot = (state: DoudizhuState): DoudizhuState['undoStack'][num
   cardCountBudgetLeft: state.cardCountBudgetLeft,
   recentHistory: [...state.recentHistory],
 })
+
+export const undoDoudizhuRound = (state: DoudizhuState): DoudizhuState => {
+  const snap = state.undoStack[state.undoStack.length - 1]
+  if (!snap) {
+    return state
+  }
+  return {
+    ...state,
+    phase: snap.phase,
+    hands: snap.hands,
+    bottomCards: snap.bottomCards,
+    currentTurn: snap.currentTurn,
+    firstBidder: snap.firstBidder,
+    bidTurnCount: snap.bidTurnCount,
+    highestBid: snap.highestBid,
+    highestBidder: snap.highestBidder,
+    landlordSeat: snap.landlordSeat,
+    tablePlay: snap.tablePlay,
+    passStreak: snap.passStreak,
+    seatDisplays: snap.seatDisplays,
+    playedCountByRank: snap.playedCountByRank,
+    cardCountBudgetLeft: snap.cardCountBudgetLeft,
+    recentHistory: snap.recentHistory,
+    winnerTeam: null,
+    undoStack: state.undoStack.slice(0, -1),
+  }
+}
 
 const pushHistory = (
   list: DoudizhuState['recentHistory'],
@@ -677,10 +835,24 @@ export const applyDoudizhuMove = (
           tablePlay: null,
           passStreak: 0,
           seatDisplays: {
-            ...nextDisplays,
-            player: { cards: [], pass: false, speech: '' },
-            ai_right: { cards: [], pass: false, speech: '' },
-            ai_left: { cards: [], pass: false, speech: '' },
+            player: {
+              cards: [],
+              pass: false,
+              bidLabel: nextBidder === 'player' ? nextDisplays.player.bidLabel : undefined,
+              speech: nextBidder === 'player' ? nextDisplays.player.speech : '',
+            },
+            ai_right: {
+              cards: [],
+              pass: false,
+              bidLabel: nextBidder === 'ai_right' ? nextDisplays.ai_right.bidLabel : undefined,
+              speech: nextBidder === 'ai_right' ? nextDisplays.ai_right.speech : '',
+            },
+            ai_left: {
+              cards: [],
+              pass: false,
+              bidLabel: nextBidder === 'ai_left' ? nextDisplays.ai_left.bidLabel : undefined,
+              speech: nextBidder === 'ai_left' ? nextDisplays.ai_left.speech : '',
+            },
           },
           recentHistory: nextHistory,
           undoStack: nextUndo,

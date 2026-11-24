@@ -90,6 +90,8 @@ export type GamePlugin<TState = unknown, TMove = unknown> = {
   firstTurn: GameSide
   /** 多人桌（如斗地主）直接在桌面渲染多席位桌宠与气泡，隐藏顶部单对手横条 */
   hideGenericOpponentHeader?: boolean
+  /** 实时动作小游戏（如坦克动荡）：由本地 60fps AI 驱动，隐藏思考/悔棋/缓存按钮且免 API Key */
+  realtimeLocalAi?: boolean
   /** 单手限时秒数（如斗地主 60 秒） */
   turnTimeoutSec?: number
   createInitialState: () => TState

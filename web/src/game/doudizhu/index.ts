@@ -10,6 +10,7 @@ import {
   findBeatCandidates,
   formatCardToken,
   resolveCardTokensFromHand,
+  undoDoudizhuRound,
 } from './engine.js'
 import { resolveDoudizhuSeatOpponent } from './seats.js'
 import type { DoudizhuMove, DoudizhuSeatId, DoudizhuState } from './types.js'
@@ -85,30 +86,7 @@ export const doudizhuGame: GamePlugin<DoudizhuState, DoudizhuMove> = {
 
   canUndo: (state) => state.undoStack.length > 0 && state.phase !== 'finished',
 
-  undoRound: (state) => {
-    const snap = state.undoStack[state.undoStack.length - 1]
-    if (!snap) {
-      return state
-    }
-    return {
-      ...state,
-      phase: snap.phase,
-      hands: snap.hands,
-      bottomCards: snap.bottomCards,
-      currentTurn: snap.currentTurn,
-      highestBid: snap.highestBid,
-      highestBidder: snap.highestBidder,
-      landlordSeat: snap.landlordSeat,
-      tablePlay: snap.tablePlay,
-      passStreak: snap.passStreak,
-      seatDisplays: snap.seatDisplays,
-      playedCountByRank: snap.playedCountByRank,
-      cardCountBudgetLeft: snap.cardCountBudgetLeft,
-      recentHistory: snap.recentHistory,
-      winnerTeam: null,
-      undoStack: state.undoStack.slice(0, -1),
-    }
-  },
+  undoRound: undoDoudizhuRound,
 
   resolveActiveOpponent: (state, _fallback, locale): GameOpponent => {
     const seat = state.currentTurn === 'ai_left' ? 'ai_left' : 'ai_right'
@@ -120,9 +98,9 @@ export const doudizhuGame: GamePlugin<DoudizhuState, DoudizhuMove> = {
 
   applyAiMove: (state, move, speech = '', locale = 'zh-CN') => {
     const seat = getActiveSeat(state)
-    const formattedSpeech = doudizhuGame.formatMoveSpeech
-      ? doudizhuGame.formatMoveSpeech(state, move, speech, locale)
-      : speech
+    const formattedSpeech =
+      speech ||
+      (doudizhuGame.formatMoveSpeech ? doudizhuGame.formatMoveSpeech(state, move, '', locale) : '')
     const result = applyDoudizhuMove(state, seat, move, formattedSpeech, locale, false)
     if ('error' in result) {
       return { nextState: state }
@@ -401,6 +379,8 @@ export const doudizhuGame: GamePlugin<DoudizhuState, DoudizhuMove> = {
     let tokens: unknown[] | null = null
     if (Array.isArray(rawMove)) {
       tokens = rawMove
+    } else if (typeof rawMove === 'number') {
+      tokens = [String(rawMove)]
     } else if (typeof rawMove === 'string') {
       tokens = rawMove
         .split(/[\s,，、]+/)

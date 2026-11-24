@@ -372,3 +372,22 @@
 .cardBlack {
   color: #0f172a;
 }
+
+.comboPreviewBadge,
+.noBeatBadge {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.comboPreviewBadge {
+  background: rgba(77, 107, 254, 0.28);
+  color: #dbeafe;
+  border: 1px solid rgba(147, 197, 253, 0.45);
+}
+
+.noBeatBadge {
+  background: rgba(245, 158, 11, 0.24);
+  color: #fde68a;
+}

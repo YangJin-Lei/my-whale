@@ -10,6 +10,7 @@ import type { BoardComponentProps } from '../types.js'
 import {
   advanceNightPhase,
   advanceSpeechTurn,
+  applyHunterShot,
   createInitialWerewolfState,
   resolveVoteExile,
   roleLabel,
@@ -51,7 +52,6 @@ export const WerewolfBoard = ({
 
   const [speechDraft, setSpeechDraft] = useState('')
   const [editingPetSeat, setEditingPetSeat] = useState<number | null>(null)
-  const [seerBanner, setSeerBanner] = useState<string | null>(null)
   const [retryCount, setRetryCount] = useState(0)
 
   const stateRef = useRef(state)
@@ -92,6 +92,7 @@ export const WerewolfBoard = ({
 
       let rawText = ''
       let rawThought = ''
+      let lastThoughtEmit = 0
       const events = streamMessage(
         apiKey,
         {
@@ -112,7 +113,11 @@ export const WerewolfBoard = ({
           rawText += ev.delta.text
         } else if (ev.delta.type === 'thinking_delta') {
           rawThought += ev.delta.thinking
-          updateGameFeedback({ thoughtText: rawThought.trim() })
+          const now = Date.now()
+          if (now - lastThoughtEmit >= 400) {
+            lastThoughtEmit = now
+            updateGameFeedback({ thoughtText: rawThought.trim() })
+          }
         }
       }
 
@@ -315,6 +320,26 @@ export const WerewolfBoard = ({
         updateGameFeedback({ aiThinking: false })
         onPlayerMove(nextPending.length === 0 ? resolveVoteExile(nextState) : nextState)
       }
+    } else if (
+      s.phase === 'hunter_shoot' &&
+      typeof s.pendingHunterSeat === 'number' &&
+      s.pendingHunterSeat > 0
+    ) {
+      const hunterIdx = s.pendingHunterSeat
+      stepKey = `${s.day}:hunter:${hunterIdx}:${retryCount}`
+      runner = async () => {
+        const aliveOthers = s.seats.filter((x) => x.alive && x.seatIndex !== hunterIdx)
+        const sys = `你在 ${s.playerCount} 人狼人杀中扮演 ${hunterIdx + 1}号【猎人】，刚刚出局发动开枪技能。请结合公开局势决定开枪带走一名最像狼的玩家或 0 不开枪。返回 JSON：{"target": <整数座位号 1~${s.playerCount} 或 0 不开枪>}。`
+        const usr = `可带走存活座位：${aliveOthers.map((x) => `${x.seatIndex + 1}号`).join('、')}。\n公开记录：\n${publicSummary}`
+        const { parsed } = await callAiWerewolf(hunterIdx, sys, usr)
+        const rawTarget = Number(parsed?.target)
+        const chosen =
+          rawTarget === 0
+            ? null
+            : (aliveOthers.find((x) => x.seatIndex === rawTarget - 1)?.seatIndex ?? null)
+        updateGameFeedback({ aiThinking: false })
+        onPlayerMove(applyHunterShot(stateRef.current, chosen))
+      }
     }
 
     if (!stepKey || !runner || inflightKeyRef.current === stepKey) {
@@ -343,6 +368,7 @@ export const WerewolfBoard = ({
     state.phase,
     state.speechCursor,
     state.pendingVoteSeats.length,
+    state.pendingHunterSeat,
     state.tonightSeerChecked,
     currentSpeakerIdx,
     currentVoterIdx,
@@ -361,7 +387,6 @@ export const WerewolfBoard = ({
   const switchPlayerCount = (count: WerewolfPlayerCount) => {
     abortRef.current?.abort()
     inflightKeyRef.current = null
-    setSeerBanner(null)
     updateGameFeedback({ aiThinking: false, errorText: null, thoughtText: '' })
     onPlayerMove(createInitialWerewolfState(count))
   }
@@ -375,6 +400,9 @@ export const WerewolfBoard = ({
     }
     if (state.phase === 'night_witch') {
       return `第 ${state.day} 夜 · 女巫用药`
+    }
+    if (state.phase === 'hunter_shoot') {
+      return `第 ${state.day} 天 · 猎人开枪`
     }
     if (state.phase === 'day_speech') {
       return `第 ${state.day} 天 · 轮流发言`
@@ -392,8 +420,18 @@ export const WerewolfBoard = ({
     humanSeat.alive &&
     humanSeat.role === 'seer' &&
     !state.tonightSeerChecked
+  const latestSeerCheck = state.seerHistory[state.seerHistory.length - 1]
+  const humanSeerCheckedBanner =
+    state.phase === 'night_seer' &&
+    humanSeat.alive &&
+    humanSeat.role === 'seer' &&
+    state.tonightSeerChecked &&
+    latestSeerCheck
+      ? `查验结果：${latestSeerCheck.targetSeat + 1}号 是【${latestSeerCheck.isWolf ? '狼人' : '好人'}】`
+      : null
   const humanWaitingWitch =
     state.phase === 'night_witch' && humanSeat.alive && humanSeat.role === 'witch'
+  const humanWaitingHunter = state.phase === 'hunter_shoot' && state.pendingHunterSeat === 0
   const humanWaitingSpeech = state.phase === 'day_speech' && currentSpeakerIdx === 0
   const humanWaitingVote =
     state.phase === 'day_vote' && humanSeat.alive && state.dayVotes[0] === undefined
@@ -552,9 +590,6 @@ export const WerewolfBoard = ({
                   className={styles.actionBtn}
                   onClick={() => {
                     const isWolf = x.role === 'wolf'
-                    setSeerBanner(
-                      `查验结果：${x.seatIndex + 1}号 是【${isWolf ? '狼人' : '好人'}】`
-                    )
                     onPlayerMove({
                       ...state,
                       tonightSeerChecked: true,
@@ -572,19 +607,43 @@ export const WerewolfBoard = ({
         </div>
       ) : null}
 
-      {seerBanner && state.phase === 'night_seer' && state.tonightSeerChecked ? (
+      {humanSeerCheckedBanner ? (
         <div className={styles.actionBox}>
-          <div className={styles.actionTitle}>{seerBanner}</div>
+          <div className={styles.actionTitle}>{humanSeerCheckedBanner}</div>
           <button
             type="button"
             className={styles.primaryBtn}
-            onClick={() => {
-              setSeerBanner(null)
-              onPlayerMove(advanceNightPhase(state))
-            }}
+            onClick={() => onPlayerMove(advanceNightPhase(state))}
           >
             确认，进入下一步
           </button>
+        </div>
+      ) : null}
+
+      {humanWaitingHunter ? (
+        <div className={styles.actionBox}>
+          <div className={styles.actionTitle}>你已出局，可发动【猎人】技能开枪带走一名玩家：</div>
+          <div className={styles.targetRow}>
+            {state.seats
+              .filter((x) => x.alive && !x.isHuman)
+              .map((x) => (
+                <button
+                  key={x.seatIndex}
+                  type="button"
+                  className={styles.actionBtn}
+                  onClick={() => onPlayerMove(applyHunterShot(state, x.seatIndex))}
+                >
+                  带走 {x.seatIndex + 1}号
+                </button>
+              ))}
+            <button
+              type="button"
+              className={styles.actionBtn}
+              onClick={() => onPlayerMove(applyHunterShot(state, null))}
+            >
+              压枪不开枪
+            </button>
+          </div>
         </div>
       ) : null}
 

@@ -168,6 +168,8 @@ export const XiangqiBoard = ({
               const isLegalTarget = legalTargets.has(key)
               const isLastFrom = lastMove?.from.row === row && lastMove?.from.col === col
               const isLastTo = lastMove?.to.row === row && lastMove?.to.col === col
+              const isKingChecked =
+                cell !== null && cell.type === 'K' && state.inCheck === cell.side
               const clickable =
                 canInteract && ((cell !== null && cell.side === 'player') || isLegalTarget)
 
@@ -191,7 +193,8 @@ export const XiangqiBoard = ({
                         styles.piece,
                         cell.side === 'player' ? styles.pieceRed : styles.pieceBlack,
                         isSelected && styles.pieceSelected,
-                        isLastTo && styles.pieceLast
+                        isLastTo && styles.pieceLast,
+                        isKingChecked && styles.pieceInCheck
                       )}
                     >
                       {PIECE_LABELS[cell.side][cell.type]}

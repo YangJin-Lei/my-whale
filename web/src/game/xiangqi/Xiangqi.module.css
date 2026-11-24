@@ -133,6 +133,13 @@
     0 4px 6px rgba(24, 14, 4, 0.34);
 }
 
+.pieceInCheck {
+  box-shadow:
+    0 0 0 2.5px #ef4444,
+    0 0 12px rgba(239, 68, 68, 0.72),
+    0 3px 0 #8f6030;
+}
+
 .originRing {
   position: absolute;
   width: 44%;

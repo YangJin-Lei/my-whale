@@ -274,10 +274,22 @@ const describeJumpPatterns = (board: GomokuCell[][], stone: 1 | 2, locale: Local
           if (!seen.has(sig)) {
             seen.add(sig)
             const total = leftCount + rightCount
+            const leftOpen = inGrid(lr, lc) && board[lr][lc] === 0
+            const rightOpen = inGrid(rr, rc) && board[rr][rc] === 0
+            const openHint =
+              leftOpen && rightOpen
+                ? locale === 'zh-CN'
+                  ? '（两翼均空）'
+                  : ' (both ends open)'
+                : leftOpen || rightOpen
+                  ? locale === 'zh-CN'
+                    ? '（单侧空位）'
+                    : ' (one end open)'
+                  : ''
             gaps.push(
               locale === 'zh-CN'
-                ? `中间断点 ${gapLabel} 可直接连通左右共 ${total} 子`
-                : `gap ${gapLabel} connects ${total} collinear stones`
+                ? `中间断点 ${gapLabel} 可直接连通左右共 ${total} 子${openHint}`
+                : `gap ${gapLabel} connects ${total} collinear stones${openHint}`
             )
           }
         }
@@ -483,20 +495,38 @@ export const gomokuRules: Omit<GamePlugin<GomokuState, GomokuCoord>, 'BoardCompo
     return { valid: true, move: coord }
   },
   pickFallbackMove: (state) => {
-    const nearby = getNearbyEmptyCoords(state.board)
-    for (const label of nearby) {
-      const coord = parseRawCoord(label)
-      if (coord && state.board[coord.row][coord.col] === 0) {
-        return coord
-      }
-    }
+    const emptyCoords: GomokuCoord[] = []
     for (let r = 0; r < GOMOKU_SIZE; r++) {
       for (let c = 0; c < GOMOKU_SIZE; c++) {
         if (state.board[r][c] === 0) {
-          return { row: r, col: c }
+          emptyCoords.push({ row: r, col: c })
         }
       }
     }
-    return null
+    if (emptyCoords.length === 0) {
+      return null
+    }
+    // 1) 己方一步成 5 直接赢；2) 立即封堵对手一步成 5 的 4 连点
+    for (const coord of emptyCoords) {
+      if (findWinLine(state.board, coord.row, coord.col, 2).length >= 5) {
+        return coord
+      }
+    }
+    for (const coord of emptyCoords) {
+      if (findWinLine(state.board, coord.row, coord.col, 1).length >= 5) {
+        return coord
+      }
+    }
+    const anchor = state.history[state.history.length - 1] ?? { row: 7, col: 7 }
+    let best = emptyCoords[0]
+    let bestDist = Infinity
+    for (const coord of emptyCoords) {
+      const d = Math.hypot(coord.row - anchor.row, coord.col - anchor.col)
+      if (d < bestDist) {
+        bestDist = d
+        best = coord
+      }
+    }
+    return best
   },
 }

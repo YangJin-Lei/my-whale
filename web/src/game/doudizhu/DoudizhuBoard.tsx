@@ -1,12 +1,18 @@
 import clsx from 'clsx'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { usePetCatalog } from '../../pet/catalog.js'
 import { PetSprite, type PetMood } from '../../pet/PetSprite.js'
 import { useSettings } from '../../services/settings.js'
 import type { BoardComponentProps } from '../types.js'
 import styles from './Doudizhu.module.css'
-import { canBeatCombo, detectCombo, findBeatCandidates, rankToLabel } from './engine.js'
+import {
+  canBeatCombo,
+  describeComboName,
+  detectCombo,
+  findBeatCandidates,
+  rankToLabel,
+} from './engine.js'
 import {
   type AiSeatId,
   resolveDoudizhuSeatOpponent,
@@ -60,7 +66,17 @@ export const DoudizhuBoard = ({
 
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [hintIndex, setHintIndex] = useState(0)
+  const [noBeatNotice, setNoBeatNotice] = useState(false)
   const [pickerSeat, setPickerSeat] = useState<AiSeatId | null>(null)
+  const swipeSelectRef = useRef<{
+    active: boolean
+    mode: 'select' | 'deselect'
+    visited: Set<string>
+  }>({
+    active: false,
+    mode: 'select',
+    visited: new Set(),
+  })
 
   const playerHand = state.hands.player
   const isPlayerTurn = !disabled && state.phase !== 'finished' && state.currentTurn === 'player'
@@ -71,7 +87,8 @@ export const DoudizhuBoard = ({
     const owned = new Set(playerHand.map((c) => c.id))
     setSelectedIds((prev) => prev.filter((id) => owned.has(id)))
     setHintIndex(0)
-  }, [playerHand])
+    setNoBeatNotice(false)
+  }, [playerHand, state.currentTurn])
 
   const selectedCards = useMemo(() => {
     const pickedSet = new Set(selectedIds)
@@ -87,13 +104,18 @@ export const DoudizhuBoard = ({
     return canBeatCombo(selectedCombo, target)
   }, [isLeading, isPlayerTurn, selectedCombo, state.phase, state.tablePlay])
 
-  const toggleCard = (id: string) => {
-    if (!isPlayerTurn || state.phase !== 'playing') {
-      return
-    }
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    )
+  const setCardSelection = (id: string, select: boolean) => {
+    setNoBeatNotice(false)
+    setSelectedIds((prev) => {
+      const has = prev.includes(id)
+      if (select && !has) {
+        return [...prev, id]
+      }
+      if (!select && has) {
+        return prev.filter((item) => item !== id)
+      }
+      return prev
+    })
   }
 
   const triggerHint = () => {
@@ -103,11 +125,11 @@ export const DoudizhuBoard = ({
     const target = isLeading ? null : (state.tablePlay?.combo ?? null)
     const candidates = findBeatCandidates(playerHand, target)
     if (candidates.length === 0) {
-      if (!isLeading) {
-        onPlayerMove({ type: 'pass' })
-      }
+      setNoBeatNotice(true)
+      setSelectedIds([])
       return
     }
+    setNoBeatNotice(false)
     const picked = candidates[hintIndex % candidates.length]
     setSelectedIds(picked.map((c) => c.id))
     setHintIndex((prev) => prev + 1)
@@ -323,6 +345,13 @@ export const DoudizhuBoard = ({
                 {turnSecondsLeft}s
               </span>
             ) : null}
+            {selectedCombo ? (
+              <span className={styles.comboPreviewBadge}>
+                {describeComboName(selectedCombo.kind, locale)}
+              </span>
+            ) : noBeatNotice ? (
+              <span className={styles.noBeatBadge}>{t('doudizhuNoBeatHint')}</span>
+            ) : null}
           </div>
 
           {state.phase !== 'finished' ? (
@@ -359,6 +388,19 @@ export const DoudizhuBoard = ({
                   >
                     {t('doudizhuHint')}
                   </button>
+                  {selectedIds.length > 0 ? (
+                    <button
+                      type="button"
+                      className={styles.actionBtn}
+                      disabled={!isPlayerTurn}
+                      onClick={() => {
+                        setSelectedIds([])
+                        setNoBeatNotice(false)
+                      }}
+                    >
+                      {t('doudizhuClear')}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className={styles.actionBtn}
@@ -380,12 +422,34 @@ export const DoudizhuBoard = ({
             </div>
           ) : null}
 
-          <div className={styles.handRow}>
+          <div
+            className={styles.handRow}
+            onPointerMove={(event) => {
+              if (!swipeSelectRef.current.active || !isPlayerTurn || state.phase !== 'playing') {
+                return
+              }
+              const hit = document.elementFromPoint(event.clientX, event.clientY)
+              const cardBtn =
+                hit instanceof Element ? hit.closest<HTMLElement>('[data-card-id]') : null
+              const cardId = cardBtn?.dataset.cardId
+              if (cardId && !swipeSelectRef.current.visited.has(cardId)) {
+                swipeSelectRef.current.visited.add(cardId)
+                setCardSelection(cardId, swipeSelectRef.current.mode === 'select')
+              }
+            }}
+            onPointerUp={() => {
+              swipeSelectRef.current.active = false
+            }}
+            onPointerCancel={() => {
+              swipeSelectRef.current.active = false
+            }}
+          >
             {playerHand.map((card, index) => {
               const selected = selectedIds.includes(card.id)
               return (
                 <button
                   key={card.id}
+                  data-card-id={card.id}
                   type="button"
                   disabled={!isPlayerTurn || state.phase !== 'playing'}
                   className={clsx(
@@ -393,7 +457,18 @@ export const DoudizhuBoard = ({
                     selected && styles.handCardSelected,
                     index > 0 && styles.handCardOverlap
                   )}
-                  onClick={() => toggleCard(card.id)}
+                  onPointerDown={() => {
+                    if (!isPlayerTurn || state.phase !== 'playing') {
+                      return
+                    }
+                    const nextMode = selected ? 'deselect' : 'select'
+                    swipeSelectRef.current = {
+                      active: true,
+                      mode: nextMode,
+                      visited: new Set([card.id]),
+                    }
+                    setCardSelection(card.id, nextMode === 'select')
+                  }}
                 >
                   {renderMiniCardFace(card, 'lg')}
                 </button>
