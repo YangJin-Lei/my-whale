@@ -10,6 +10,13 @@ const NAMED_ENTITIES = {
   quot: '"',
   apos: "'",
   nbsp: ' ',
+  ensp: ' ',
+  emsp: ' ',
+  thinsp: ' ',
+  zwnj: '',
+  zwj: '',
+  lrm: '',
+  rlm: '',
   hellip: '…',
   mdash: '—',
   ndash: '–',
@@ -17,13 +24,25 @@ const NAMED_ENTITIES = {
   rsquo: '’',
   ldquo: '“',
   rdquo: '”',
+  lsaquo: '‹',
+  rsaquo: '›',
+  laquo: '«',
+  raquo: '»',
   middot: '·',
+  bull: '•',
+  times: '×',
+  divide: '÷',
+  plusmn: '±',
   copy: '©',
   reg: '®',
   trade: '™',
+  yen: '¥',
+  euro: '€',
+  pound: '£',
+  deg: '°',
 }
 
-export function decodeHtmlEntities(input) {
+function decodeHtmlEntitiesOnce(input) {
   return String(input || '').replace(
     /&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z][a-zA-Z0-9]*);/g,
     (match, token) => {
@@ -38,6 +57,11 @@ export function decodeHtmlEntities(input) {
       return NAMED_ENTITIES[token.toLowerCase()] ?? match
     }
   )
+}
+
+export function decodeHtmlEntities(input) {
+  const once = decodeHtmlEntitiesOnce(input)
+  return once.includes('&') ? decodeHtmlEntitiesOnce(once) : once
 }
 
 export function stripTags(html) {

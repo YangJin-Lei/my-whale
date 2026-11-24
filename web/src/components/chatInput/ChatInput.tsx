@@ -76,6 +76,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const importingHistory = useChatStore((state) => state.importingHistory)
   const isMobile = useIsMobile()
   const search = useSettings((state) => state.search)
+  const builtinSearchEnabled = useSettings((state) => state.builtinSearchEnabled)
   const compactionEnabled = useSettings((state) => state.compactionEnabled)
   const [menuOpen, setMenuOpen] = useState(false)
   const cameraInputRef = useRef<HTMLInputElement>(null)
@@ -383,16 +384,24 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
                 <span className={styles.toggleLabel}>{t('thinkingSwitch')}</span>
               </button>
             </Tooltip>
-            <Tooltip content={t('deactivatedSearchTooltip')}>
+            <Tooltip
+              content={t(
+                builtinSearchEnabled
+                  ? 'deactivatedBuiltinSearchTooltip'
+                  : 'deactivatedSearchTooltip'
+              )}
+            >
               <button
                 type="button"
                 className={clsx(styles.toggle, search && styles.selected)}
-                aria-label={t('search')}
+                aria-label={t(builtinSearchEnabled ? 'searchBuiltin' : 'search')}
                 aria-pressed={search}
                 onClick={() => setSearch(!search)}
               >
                 <IconGlobeLanguageOutline14 />
-                <span className={styles.toggleLabel}>{t('search')}</span>
+                <span className={styles.toggleLabel}>
+                  {t(builtinSearchEnabled ? 'searchBuiltin' : 'search')}
+                </span>
               </button>
             </Tooltip>
           </div>

@@ -65,6 +65,7 @@ type Settings = {
   updateAccelerate: boolean
   updateMirror: string
   cacheModeEnabled: boolean
+  builtinSearchEnabled: boolean
   cacheBackendUrl: string
   compactionEnabled: boolean
   compactionAuto: boolean
@@ -112,6 +113,7 @@ const KEYS = {
   updateAccelerate: 'chat-demo:update-accelerate',
   updateMirror: 'chat-demo:update-mirror',
   cacheModeEnabled: 'chat-demo:cache-mode',
+  builtinSearchEnabled: 'chat-demo:builtin-search',
   cacheBackendUrl: 'chat-demo:cache-backend-url',
   compactionEnabled: 'chat-demo:compaction-enabled',
   compactionAuto: 'chat-demo:compaction-auto',
@@ -349,6 +351,8 @@ export const useSettings = create<Settings>(() => ({
       : isChineseBrowser(),
   updateMirror: read(KEYS.updateMirror) || 'https://ghfast.top/',
   cacheModeEnabled: read(KEYS.cacheModeEnabled) !== 'false',
+  // 内置搜索默认关闭，联网搜索默认直走 DeepSeek 官方；需增强本地多源检索时在通用设置中打开
+  builtinSearchEnabled: read(KEYS.builtinSearchEnabled) === 'true',
   cacheBackendUrl: read(KEYS.cacheBackendUrl) || 'http://127.0.0.1:8787',
   // 默认关闭自动压缩：自动压缩会在回复前串行调用多次 API 提炼摘要（很慢），且会改写前缀导致缓存失效
   // 上下文压缩总开关：默认关闭，用户手动开启后才显示压缩入口与档位选择
@@ -793,6 +797,9 @@ export const applySettingsSnapshot = (raw: Partial<SettingsSnapshot>) => {
   if (typeof raw.cacheModeEnabled === 'boolean') {
     setCacheModeEnabled(raw.cacheModeEnabled)
   }
+  if (typeof raw.builtinSearchEnabled === 'boolean') {
+    setBuiltinSearchEnabled(raw.builtinSearchEnabled)
+  }
   if (typeof raw.cacheBackendUrl === 'string') {
     setCacheBackendUrl(raw.cacheBackendUrl)
   }
@@ -951,6 +958,11 @@ export const setUpdateMirror = (updateMirror: string) => {
 export const setCacheModeEnabled = (cacheModeEnabled: boolean) => {
   write(KEYS.cacheModeEnabled, String(cacheModeEnabled))
   useSettings.setState({ cacheModeEnabled })
+}
+
+export const setBuiltinSearchEnabled = (builtinSearchEnabled: boolean) => {
+  write(KEYS.builtinSearchEnabled, String(builtinSearchEnabled))
+  useSettings.setState({ builtinSearchEnabled })
 }
 
 export const setCacheBackendUrl = (cacheBackendUrl: string) => {

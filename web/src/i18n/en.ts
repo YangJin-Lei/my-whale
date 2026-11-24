@@ -480,6 +480,12 @@ export const en = {
     'Open -> Avatar -> Data Management -> Export History -> Re-export -> Copy link -> Paste in browser',
   settingsOpenDeepSeek: 'Open DeepSeek',
   settingsCacheMode: 'Cache mode',
+  settingsBuiltinSearch: 'Built-in Search (Enhanced)',
+  settingsBuiltinSearchOn: 'On · Multi-source & reader',
+  settingsBuiltinSearchOff: 'Off · Official Web Search',
+  searchBuiltin: 'Built-in Search',
+  deactivatedBuiltinSearchTooltip:
+    'Enhanced multi-engine search & deep reader enabled (falls back to official when empty)',
   settingsCompaction: 'Context compaction',
   settingsCompactionHint:
     'Off by default. When on, a compaction entry appears below the chat for manual compaction and level selection. Compaction drops some detail and resets the prompt cache.',
@@ -497,7 +503,7 @@ export const en = {
   settingsNoticeItem5:
     'Notice: Playing mini-games invokes the API frequently (especially in Dou Dizhu, Werewolf, or DeepThink mode) and consumes more API credits than regular chat.',
   settingsNoticeItem6:
-    'Notice: Cache Mode is enabled by default. Search & fetch prefer the built-in cached backend (falling back to official DeepSeek search if built-in search returns no results) and preserve prompt prefixes; if unreachable on static Web it falls back to direct DeepSeek API.',
+    'Notice: Web Search defaults to official DeepSeek search. Enabling Built-in Search in General Settings switches to local multi-source search & page reader (falling back to official search if empty); static Web falls back to direct DeepSeek API when local backend is unavailable.',
   gameCostNotice:
     'Notice: Mini-games invoke DeepSeek API frequently and consume more API credits than normal chat.',
   drawGuessCopyPrompt: 'Copy prompt',

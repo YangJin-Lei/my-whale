@@ -459,6 +459,11 @@ export const zh = {
     '打开->头像->数据管理->导出历史对话->重新导出->复制下载链接->打开浏览器粘贴回车',
   settingsOpenDeepSeek: '打开 DeepSeek',
   settingsCacheMode: '缓存模式',
+  settingsBuiltinSearch: '内置搜索（增强多源）',
+  settingsBuiltinSearchOn: '已开启 · 内置多源检索',
+  settingsBuiltinSearchOff: '默认关闭 · 使用官方联网搜索',
+  searchBuiltin: '内置搜索',
+  deactivatedBuiltinSearchTooltip: '已开启内置增强搜索（多引擎聚合与网页精读，无结果时回退官方）',
   settingsCompaction: '上下文压缩',
   settingsCompactionHint:
     '默认关闭。开启后对话底部会出现压缩入口，可手动压缩或选择档位；长对话压缩后会丢失部分细节，且会让缓存重新建立。',
@@ -476,7 +481,7 @@ export const zh = {
   settingsNoticeItem5:
     '注意事项：玩小游戏会高频调用 API（尤其在斗地主、狼人杀或开启深度思考时），消耗的 API 费用比普通对话更多，请留意账户余额。',
   settingsNoticeItem6:
-    '注意事项：「缓存模式」默认开启，搜索优先使用内置缓存后端（若连续搜索无结果将自动切换官方联网搜索），同时固定历史前缀以提高 API 缓存命中率；在网页端无本地后端时会自动直连官方 API。',
+    '注意事项：「联网搜索」默认直连官方联网搜索；若在通用设置中开启「内置搜索」，将启用增强多源检索与网页精读（无结果时自动回退官方），网页端无本地后端时自动直连官方 API。',
   gameCostNotice:
     '注意事项：玩小游戏会高频调用 API（尤其是斗地主、狼人杀或开启深度思考时），消耗的 API 费用比普通对话更多，请留意余额。',
   drawGuessCopyPrompt: '复制提示词',

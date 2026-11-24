@@ -417,6 +417,164 @@ export type StreamApiOverride = {
   model?: string
 }
 
+type LocalSearchOutcome = {
+  ok?: boolean
+  backend?: string
+  cached?: boolean
+  results?: Array<{
+    title?: string
+    url?: string
+    snippet?: string
+    pageContent?: string
+  }>
+}
+
+const extractLastUserPlainText = (messages: MessageParam[]): string => {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = messages[i]
+    if (msg.role !== 'user') {
+      continue
+    }
+    if (typeof msg.content === 'string') {
+      return msg.content
+    }
+    return msg.content
+      .filter((b): b is TextBlockParam => b.type === 'text')
+      .map((b) => b.text)
+      .join('\n')
+  }
+  return ''
+}
+
+const sanitizeCustomSearchQuery = (raw: string): string =>
+  raw
+    .replace(/<latest_reminder>[\s\S]*?<\/latest_reminder>/gi, ' ')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/https?:\/\/\S+/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 140)
+
+const runCustomBuiltinSearch = async (
+  body: CreateMessageRequest,
+  cacheBackendUrl: string,
+  signal: AbortSignal
+): Promise<{
+  patchedBody: CreateMessageRequest
+  syntheticEvents: MessageStreamEvent[]
+}> => {
+  const wantsSearch = body.tools?.some((t) => t.name === 'deepseek_web_search')
+  if (!wantsSearch) {
+    return { patchedBody: body, syntheticEvents: [] }
+  }
+  const query = sanitizeCustomSearchQuery(extractLastUserPlainText(body.messages))
+  if (!query) {
+    return { patchedBody: body, syntheticEvents: [] }
+  }
+
+  const base = normalizeCacheBackendUrl(cacheBackendUrl)
+  await ensureNativeCacheStarted()
+  const controller = new AbortController()
+  const onParentAbort = () => controller.abort()
+  signal.addEventListener('abort', onParentAbort, { once: true })
+  const timer = setTimeout(() => controller.abort(), 9000)
+
+  try {
+    const res = await fetch(`${base}/api/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, limit: 8, deepRead: true }),
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      return { patchedBody: body, syntheticEvents: [] }
+    }
+    const data = (await res.json()) as LocalSearchOutcome
+    const items = (data.results ?? []).filter((r) => r.url && r.title)
+    if (items.length === 0) {
+      return { patchedBody: body, syntheticEvents: [] }
+    }
+
+    const toolId = `srvtoolu_custom_${Date.now().toString(36)}`
+    const syntheticEvents: MessageStreamEvent[] = [
+      {
+        type: 'content_block_start',
+        index: 900,
+        content_block: {
+          type: 'server_tool_use',
+          id: toolId,
+          name: 'deepseek_web_search',
+          input: { action: 'search', query, queries: [query] },
+          caller: { type: 'direct' },
+          kind: 'search',
+        },
+      },
+      { type: 'content_block_stop', index: 900 },
+      {
+        type: 'content_block_start',
+        index: 901,
+        content_block: {
+          type: 'web_search_tool_result',
+          tool_use_id: toolId,
+          kind: 'search',
+          content: items.map((item) => {
+            let siteName: string | null = null
+            try {
+              siteName = new URL(item.url ?? '').hostname
+            } catch {
+              siteName = null
+            }
+            return {
+              type: 'web_search_result' as const,
+              title: item.title ?? '',
+              url: item.url ?? '',
+              snippet: item.snippet ?? '',
+              site_name: siteName,
+              site_icon: null,
+              encrypted_content: '',
+              page_age: null,
+            }
+          }),
+        },
+      },
+      { type: 'content_block_stop', index: 901 },
+    ]
+
+    const lines = items.map((item, idx) => {
+      const baseLine = `${idx + 1}. ${item.title ?? ''}\nURL: ${item.url ?? ''}\n摘要: ${item.snippet ?? ''}`
+      return item.pageContent ? `${baseLine}\n正文节选:\n${item.pageContent}` : baseLine
+    })
+    const note = `【系统已通过内置增强搜索工具(${data.backend ?? 'search'})获取以下实时结果，请结合这些资料回答】\n关键词: ${query}\n${lines.join('\n\n')}`
+    const nextMessages = body.messages.map((msg, idx) => {
+      if (idx !== body.messages.length - 1 || msg.role !== 'user') {
+        return msg
+      }
+      if (typeof msg.content === 'string') {
+        return { ...msg, content: `${msg.content}\n\n${note}` }
+      }
+      return { ...msg, content: [...msg.content, { type: 'text' as const, text: `\n\n${note}` }] }
+    })
+    const remainingTools = body.tools?.filter(
+      (t) => t.name !== 'deepseek_web_search' && t.name !== 'deepseek_read_url'
+    )
+    return {
+      patchedBody: {
+        ...body,
+        messages: nextMessages,
+        ...(remainingTools && remainingTools.length > 0
+          ? { tools: remainingTools }
+          : { tools: undefined }),
+      },
+      syntheticEvents,
+    }
+  } catch {
+    return { patchedBody: body, syntheticEvents: [] }
+  } finally {
+    clearTimeout(timer)
+    signal.removeEventListener('abort', onParentAbort)
+  }
+}
+
 /**
  * POST /anthropic/v1/messages（stream: true），逐个产出流式事件，收到 message_stop 时结束。
  * ping、保活注释与无法解析的内容不产出；中止请求时抛出 signal 的 AbortError。
@@ -438,7 +596,13 @@ export async function* streamMessage(
     if (!customUrl || !customKey) {
       throw new ApiError('http', 'Missing custom API URL or API Key', 401)
     }
-    const resolvedBody = await resolveCustomBodyFiles(body)
+    const baseResolved = await resolveCustomBodyFiles(body)
+    const { patchedBody: resolvedBody, syntheticEvents } = settings.builtinSearchEnabled
+      ? await runCustomBuiltinSearch(baseResolved, settings.cacheBackendUrl, signal)
+      : { patchedBody: baseResolved, syntheticEvents: [] }
+    for (const synth of syntheticEvents) {
+      yield synth
+    }
     if (customProtocol === 'openai') {
       try {
         yield* streamCustomOpenAiMessage(
@@ -505,6 +669,7 @@ export async function* streamMessage(
     headers: {
       ...anthropicHeaders(effectiveOfficialKey, hasFile(effectiveBody)),
       ...(sessionId ? { 'x-session-id': sessionId } : {}),
+      'x-builtin-search': settings.builtinSearchEnabled ? '1' : '0',
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
     },

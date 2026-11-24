@@ -22,10 +22,13 @@ import java.net.Socket;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -34,6 +37,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
@@ -196,7 +201,11 @@ public class LocalCacheServer {
 
             if ("POST".equals(method) && "/api/search".equals(pathOnly)) {
                 JSONObject req = new JSONObject(new String(reqBody, StandardCharsets.UTF_8));
-                JSONObject res = runCachedSearch(req.optString("query", ""), req.optInt("limit", 6));
+                JSONObject res = runCachedSearch(
+                    req.optString("query", ""),
+                    req.optInt("limit", 6),
+                    req.optBoolean("deepRead", false)
+                );
                 sendJson(out, 200, res.toString());
                 return;
             }
@@ -307,7 +316,7 @@ public class LocalCacheServer {
         if (wantsSearch) {
             String query = sanitizeSearchQuery(lastUserText);
             if (!query.isEmpty()) {
-                JSONObject searchOut = runCachedSearch(query, 6);
+                JSONObject searchOut = runCachedSearch(query, 6, true);
                 JSONArray items = searchOut.optJSONArray("results");
                 if (items != null && items.length() > 0) {
                     String toolId = "srvtoolu_s_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
@@ -596,7 +605,177 @@ public class LocalCacheServer {
         conn.disconnect();
     }
 
-    private JSONObject runCachedSearch(String query, int limit) {
+    private static final Map<String, String> HTML_NAMED_ENTITIES = createNamedEntities();
+
+    private static Map<String, String> createNamedEntities() {
+        Map<String, String> m = new HashMap<>();
+        m.put("amp", "&");
+        m.put("lt", "<");
+        m.put("gt", ">");
+        m.put("quot", "\"");
+        m.put("apos", "'");
+        m.put("nbsp", " ");
+        m.put("ensp", " ");
+        m.put("emsp", " ");
+        m.put("thinsp", " ");
+        m.put("zwnj", "");
+        m.put("zwj", "");
+        m.put("shy", "");
+        m.put("middot", "·");
+        m.put("bull", "•");
+        m.put("hellip", "…");
+        m.put("mdash", "—");
+        m.put("ndash", "–");
+        m.put("lsquo", "‘");
+        m.put("rsquo", "’");
+        m.put("ldquo", "“");
+        m.put("rdquo", "”");
+        m.put("laquo", "«");
+        m.put("raquo", "»");
+        m.put("copy", "©");
+        m.put("reg", "®");
+        m.put("trade", "™");
+        m.put("times", "×");
+        m.put("divide", "÷");
+        m.put("plusmn", "±");
+        m.put("deg", "°");
+        m.put("yen", "¥");
+        m.put("euro", "€");
+        m.put("pound", "£");
+        m.put("cent", "¢");
+        return Collections.unmodifiableMap(m);
+    }
+
+    private static final Pattern ENTITY_PATTERN = Pattern.compile("&(#x[0-9a-fA-F]+|#\\d+|[a-zA-Z][a-zA-Z0-9]*);");
+
+    private static String decodeEntitiesOnce(String input) {
+        if (input == null || !input.contains("&")) {
+            return input == null ? "" : input;
+        }
+        Matcher m = ENTITY_PATTERN.matcher(input);
+        StringBuffer sb = new StringBuffer(input.length());
+        while (m.find()) {
+            String token = m.group(1);
+            String replacement = null;
+            if (token != null) {
+                if (token.startsWith("#x") || token.startsWith("#X")) {
+                    try {
+                        int cp = Integer.parseInt(token.substring(2), 16);
+                        if (cp >= 0 && cp <= 0x10FFFF) {
+                            replacement = new String(Character.toChars(cp));
+                        }
+                    } catch (NumberFormatException ignored) {
+                    }
+                } else if (token.startsWith("#")) {
+                    try {
+                        int cp = Integer.parseInt(token.substring(1), 10);
+                        if (cp >= 0 && cp <= 0x10FFFF) {
+                            replacement = new String(Character.toChars(cp));
+                        }
+                    } catch (NumberFormatException ignored) {
+                    }
+                } else {
+                    replacement = HTML_NAMED_ENTITIES.get(token.toLowerCase(Locale.ROOT));
+                }
+            }
+            m.appendReplacement(sb, Matcher.quoteReplacement(replacement != null ? replacement : m.group(0)));
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
+    private static String decodeHtmlEntities(String input) {
+        if (input == null || input.isEmpty()) {
+            return "";
+        }
+        String p1 = decodeEntitiesOnce(input);
+        String p2 = p1.contains("&") ? decodeEntitiesOnce(p1) : p1;
+        return p2.replaceAll("[ \\t]{2,}", " ");
+    }
+
+    private static String decodeTextBytes(byte[] bytes, String contentType) {
+        String charsetName = "";
+        if (contentType != null) {
+            Matcher ct = Pattern.compile("charset\\s*=\\s*[\"']?([a-zA-Z0-9_-]+)", Pattern.CASE_INSENSITIVE).matcher(contentType);
+            if (ct.find()) {
+                charsetName = ct.group(1).toLowerCase(Locale.ROOT);
+            }
+        }
+        if (charsetName.isEmpty()) {
+            String head = new String(bytes, 0, Math.min(bytes.length, 1500), StandardCharsets.ISO_8859_1);
+            Matcher m = Pattern.compile("<meta[^>]+charset=[\"']?([a-zA-Z0-9_-]+)", Pattern.CASE_INSENSITIVE).matcher(head);
+            if (m.find()) {
+                charsetName = m.group(1).toLowerCase(Locale.ROOT);
+            }
+        }
+        if ("gb2312".equals(charsetName) || "gbk".equals(charsetName) || "x-gbk".equals(charsetName)) {
+            charsetName = "GB18030";
+        }
+        if (!charsetName.isEmpty()) {
+            try {
+                return new String(bytes, Charset.forName(charsetName));
+            } catch (Exception ignored) {
+            }
+        }
+        return new String(bytes, StandardCharsets.UTF_8);
+    }
+
+    private static String canonicalizeSearchUrl(String rawUrl) {
+        try {
+            URL u = new URL(rawUrl);
+            String host = u.getHost().toLowerCase(Locale.ROOT).replaceFirst("^www\\.", "");
+            String path = u.getPath() == null ? "/" : u.getPath().replaceAll("/+$", "");
+            if (path.isEmpty()) {
+                path = "/";
+            }
+            String q = u.getQuery();
+            StringBuilder cleanQ = new StringBuilder();
+            if (q != null && !q.isEmpty()) {
+                for (String kv : q.split("&")) {
+                    String k = kv.contains("=") ? kv.substring(0, kv.indexOf('=')) : kv;
+                    if (k.startsWith("utm_") || "spm".equals(k) || "from".equals(k) || "ref".equals(k) || "fbclid".equals(k) || "gclid".equals(k)) {
+                        continue;
+                    }
+                    if (cleanQ.length() > 0) {
+                        cleanQ.append('&');
+                    }
+                    cleanQ.append(kv);
+                }
+            }
+            return u.getProtocol() + "://" + host + path + (cleanQ.length() > 0 ? "?" + cleanQ : "");
+        } catch (Exception ignored) {
+            return rawUrl == null ? "" : rawUrl.trim();
+        }
+    }
+
+    private static boolean isOpaqueRedirectUrl(String url) {
+        if (url == null) {
+            return false;
+        }
+        String lower = url.toLowerCase(Locale.ROOT);
+        return lower.contains("baidu.com/link?") || lower.contains("bing.com/ck/");
+    }
+
+    private static boolean isLowSignalDictHit(String url, String cleanQuery) {
+        if (cleanQuery.length() <= 2 || url == null) {
+            return false;
+        }
+        String lower = url.toLowerCase(Locale.ROOT);
+        return lower.contains("dict.revised.moe.edu.tw")
+            || lower.contains("hanyuguoxue.com")
+            || lower.contains("hancibao.com")
+            || lower.contains("zdic.net");
+    }
+
+    private static final class ScoredSearchItem {
+        double score;
+        String title;
+        String url;
+        String snippet;
+        String source;
+    }
+
+    private JSONObject runCachedSearch(String query, int limit, boolean deepRead) {
         JSONObject res = new JSONObject();
         String clean = query == null ? "" : query.trim();
         if (clean.isEmpty()) {
@@ -614,43 +793,261 @@ public class LocalCacheServer {
                 searchHits.incrementAndGet();
                 JSONObject obj = new JSONObject(cachedStr);
                 obj.put("cached", true);
+                if (deepRead) {
+                    enrichResultsWithDeepRead(obj.optJSONArray("results"), 2);
+                }
                 return obj;
             } catch (Exception ignored) {
             }
         }
 
-        JSONArray results = searchBing(clean, safeLimit);
-        String backend = "bing";
-        if (results.length() == 0) {
-            results = searchBaidu(clean, safeLimit);
-            backend = "baidu";
+        List<Future<JSONArray>> futures = new ArrayList<>();
+        futures.add(pool.submit(() -> searchBing(clean, 10)));
+        futures.add(pool.submit(() -> searchBaidu(clean, 10)));
+        futures.add(pool.submit(() -> searchDuckDuckGo(clean, 10)));
+        final boolean queryGitHub = Pattern.compile("(\\b(github|repo|cli|mcp|sdk|agent|api)\\b|开源|仓库|源码|项目|框架)", Pattern.CASE_INSENSITIVE).matcher(clean).find();
+        if (queryGitHub) {
+            futures.add(pool.submit(() -> searchGitHubRepos(clean)));
+        } else {
+            futures.add(pool.submit(() -> searchWikipedia(clean)));
         }
-        if (results.length() == 0) {
-            results = searchDuckDuckGo(clean, safeLimit);
-            backend = results.length() > 0 ? "duckduckgo" : "none";
+
+        Map<String, ScoredSearchItem> byCanon = new LinkedHashMap<>();
+        for (Future<JSONArray> f : futures) {
+            try {
+                JSONArray list = f.get(8500, TimeUnit.MILLISECONDS);
+                if (list == null) {
+                    continue;
+                }
+                for (int rank = 0; rank < list.length(); rank++) {
+                    JSONObject item = list.optJSONObject(rank);
+                    if (item == null) {
+                        continue;
+                    }
+                    String rawUrl = item.optString("url", "").trim();
+                    String title = decodeHtmlEntities(item.optString("title", "")).trim();
+                    String snippet = decodeHtmlEntities(item.optString("snippet", "")).trim();
+                    String source = item.optString("source", "web");
+                    if (rawUrl.isEmpty() || title.isEmpty()) {
+                        continue;
+                    }
+                    String canon = canonicalizeSearchUrl(rawUrl);
+                    double rrf = 1.0 / (60.0 + rank);
+                    double bonus =
+                        (snippet.length() >= 30 ? 0.008 : 0.0)
+                            + (!isOpaqueRedirectUrl(rawUrl) ? 0.004 : 0.0)
+                            - (isLowSignalDictHit(rawUrl, clean) ? 0.025 : 0.0);
+
+                    ScoredSearchItem existing = byCanon.get(canon);
+                    if (existing != null) {
+                        existing.score += rrf;
+                        if (snippet.length() > existing.snippet.length()) {
+                            existing.snippet = snippet;
+                        }
+                        if (isOpaqueRedirectUrl(existing.url) && !isOpaqueRedirectUrl(rawUrl)) {
+                            existing.url = rawUrl;
+                        }
+                    } else {
+                        ScoredSearchItem entry = new ScoredSearchItem();
+                        entry.score = rrf + bonus;
+                        entry.title = title;
+                        entry.url = rawUrl;
+                        entry.snippet = snippet;
+                        entry.source = source;
+                        byCanon.put(canon, entry);
+                    }
+                }
+            } catch (Exception ignored) {
+            }
         }
+
+        List<ScoredSearchItem> ranked = new ArrayList<>(byCanon.values());
+        ranked.sort((a, b) -> Double.compare(b.score, a.score));
+
+        JSONArray results = new JSONArray();
+        Set<String> sourcesUsed = new LinkedHashSet<>();
+        for (int i = 0; i < Math.min(safeLimit, ranked.size()); i++) {
+            ScoredSearchItem s = ranked.get(i);
+            sourcesUsed.add(s.source);
+            try {
+                results.put(
+                    new JSONObject()
+                        .put("title", s.title)
+                        .put("url", s.url)
+                        .put("snippet", s.snippet)
+                        .put("source", s.source)
+                );
+            } catch (Exception ignored) {
+            }
+        }
+        String backend = sourcesUsed.isEmpty() ? "none" : String.join("+", sourcesUsed);
         try {
             res.put("ok", true).put("query", clean).put("backend", backend).put("results", results).put("cached", false);
             if (results.length() > 0) {
                 dbHelper.put("search", key, res.toString(), System.currentTimeMillis() + SEARCH_TTL_MS);
+            }
+            if (deepRead && results.length() > 0) {
+                enrichResultsWithDeepRead(results, 2);
             }
         } catch (Exception ignored) {
         }
         return res;
     }
 
+    private void enrichResultsWithDeepRead(JSONArray results, int maxPages) {
+        if (results == null || results.length() == 0) {
+            return;
+        }
+        List<Integer> pickIndices = new ArrayList<>();
+        for (int i = 0; i < results.length() && pickIndices.size() < maxPages; i++) {
+            JSONObject r = results.optJSONObject(i);
+            if (r == null) {
+                continue;
+            }
+            String u = r.optString("url", "");
+            if (!u.isEmpty() && !isOpaqueRedirectUrl(u)) {
+                pickIndices.add(i);
+            }
+        }
+        if (pickIndices.isEmpty()) {
+            return;
+        }
+        List<Future<String>> futures = new ArrayList<>();
+        for (int idx : pickIndices) {
+            final String targetUrl = results.optJSONObject(idx).optString("url", "");
+            futures.add(pool.submit(() -> {
+                JSONObject fetched = runCachedFetch(targetUrl);
+                if (fetched.optBoolean("ok", false)) {
+                    String content = fetched.optString("content", "");
+                    if (content.length() >= 120) {
+                        return content.length() > 1400 ? content.substring(0, 1400) : content;
+                    }
+                }
+                return "";
+            }));
+        }
+        for (int k = 0; k < pickIndices.size(); k++) {
+            try {
+                String excerpt = futures.get(k).get(4500, TimeUnit.MILLISECONDS);
+                if (excerpt != null && !excerpt.isEmpty()) {
+                    results.getJSONObject(pickIndices.get(k)).put("pageContent", excerpt);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private JSONArray searchGitHubRepos(String query) {
+        JSONArray results = new JSONArray();
+        try {
+            String cleaned = query.replaceAll("(?i)(github|开源|仓库|源码|项目)", "").trim();
+            String q = cleaned.isEmpty() ? query : cleaned;
+            String url = "https://api.github.com/search/repositories?q=" + URLEncoder.encode(q, "UTF-8") + "&sort=stars&per_page=4";
+            HttpResult hr = httpGetWithTimeout(url, 6500, "application/vnd.github+json");
+            JSONObject json = new JSONObject(decodeTextBytes(hr.bytes, hr.contentType));
+            JSONArray items = json.optJSONArray("items");
+            if (items != null) {
+                for (int i = 0; i < items.length(); i++) {
+                    JSONObject repo = items.optJSONObject(i);
+                    if (repo == null) {
+                        continue;
+                    }
+                    String name = repo.optString("full_name", "");
+                    int stars = repo.optInt("stargazers_count", 0);
+                    String lang = repo.optString("language", "");
+                    String desc = repo.optString("description", "");
+                    String repoUrl = repo.optString("html_url", "");
+                    if (!name.isEmpty() && !repoUrl.isEmpty()) {
+                        String sn = (!lang.isEmpty() ? "[" + lang + "] " : "") + desc;
+                        results.put(new JSONObject()
+                            .put("title", name + " (GitHub ★" + stars + ")")
+                            .put("url", repoUrl)
+                            .put("snippet", decodeHtmlEntities(sn))
+                            .put("source", "github"));
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return results;
+    }
+
+    private JSONArray searchWikipedia(String query) {
+        JSONArray results = new JSONArray();
+        try {
+            String url = "https://zh.wikipedia.org/w/api.php?action=query&list=search&srsearch=" + URLEncoder.encode(query, "UTF-8") + "&utf8=1&format=json&srlimit=3";
+            HttpResult hr = httpGetWithTimeout(url, 6000, "application/json");
+            JSONObject json = new JSONObject(decodeTextBytes(hr.bytes, hr.contentType));
+            JSONObject qObj = json.optJSONObject("query");
+            JSONArray list = qObj != null ? qObj.optJSONArray("search") : null;
+            if (list != null) {
+                for (int i = 0; i < list.length(); i++) {
+                    JSONObject item = list.optJSONObject(i);
+                    if (item == null) {
+                        continue;
+                    }
+                    String title = decodeHtmlEntities(item.optString("title", "")).trim();
+                    String snippet = stripTags(item.optString("snippet", ""));
+                    if (!title.isEmpty()) {
+                        results.put(new JSONObject()
+                            .put("title", title + " - 维基百科")
+                            .put("url", "https://zh.wikipedia.org/wiki/" + URLEncoder.encode(title.replace(' ', '_'), "UTF-8"))
+                            .put("snippet", snippet)
+                            .put("source", "wikipedia"));
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return results;
+    }
+
     private JSONArray searchBaidu(String query, int limit) {
         JSONArray results = new JSONArray();
         try {
             String url = "https://www.baidu.com/s?wd=" + URLEncoder.encode(query, "UTF-8") + "&rn=" + limit;
-            String html = new String(httpGet(url).bytes, StandardCharsets.UTF_8);
-            Pattern pat = Pattern.compile("<h3[^>]*class=\"[^\"]*\\bt\\b[^\"]*\"[^>]*>[\\s\\S]*?<a[^>]*href=\"([^\"]+)\"[^>]*>([\\s\\S]*?)</a>", Pattern.CASE_INSENSITIVE);
-            Matcher m = pat.matcher(html);
-            while (m.find() && results.length() < limit) {
-                String targetUrl = m.group(1);
-                String title = stripTags(m.group(2));
-                if (!title.isEmpty() && targetUrl.startsWith("http")) {
-                    results.put(new JSONObject().put("title", title).put("url", targetUrl).put("snippet", "").put("source", "baidu"));
+            HttpResult hr = httpGetWithTimeout(url, 8000, "text/html,application/xhtml+xml,*/*;q=0.8");
+            String html = decodeTextBytes(hr.bytes, hr.contentType);
+            Pattern containerPat = Pattern.compile(
+                "<div[^>]*class=\"[^\"]*\\bresult\\b[^\"]*\\bc-container\\b[^\"]*\"[^>]*>([\\s\\S]*?)(?=<div[^>]*class=\"[^\"]*\\bresult\\b[^\"]*\\bc-container\\b|<div\\s+id=\"page\")",
+                Pattern.CASE_INSENSITIVE
+            );
+            Pattern linkPat = Pattern.compile("<h3[^>]*class=\"[^\"]*\\bt\\b[^\"]*\"[^>]*>[\\s\\S]*?<a[^>]*href=\"([^\"]+)\"[^>]*>([\\s\\S]*?)</a>", Pattern.CASE_INSENSITIVE);
+            Pattern snipPat = Pattern.compile(
+                "<span[^>]*class=\"[^\"]*content-right[^\"]*\"[^>]*>([\\s\\S]*?)</span>|<div[^>]*class=\"[^\"]*c-abstract[^\"]*\"[^>]*>([\\s\\S]*?)</div>",
+                Pattern.CASE_INSENSITIVE
+            );
+            Matcher cm = containerPat.matcher(html);
+            while (cm.find() && results.length() < limit) {
+                String block = cm.group(1);
+                Matcher lm = linkPat.matcher(block);
+                if (!lm.find()) {
+                    continue;
+                }
+                String targetUrl = lm.group(1);
+                String title = stripTags(lm.group(2));
+                if (title.isEmpty() || !targetUrl.startsWith("http")) {
+                    continue;
+                }
+                String snippet = "";
+                Matcher sm = snipPat.matcher(block);
+                if (sm.find()) {
+                    snippet = stripTags(sm.group(1) != null ? sm.group(1) : sm.group(2));
+                }
+                if (snippet.isEmpty()) {
+                    String plain = stripTags(block.replaceAll("(?is)<h3[\\s\\S]*?</h3>", ""));
+                    snippet = plain.length() > 220 ? plain.substring(0, 220) : plain;
+                }
+                results.put(new JSONObject().put("title", title).put("url", targetUrl).put("snippet", snippet).put("source", "baidu"));
+            }
+            if (results.length() == 0) {
+                Matcher m = linkPat.matcher(html);
+                while (m.find() && results.length() < limit) {
+                    String targetUrl = m.group(1);
+                    String title = stripTags(m.group(2));
+                    if (!title.isEmpty() && targetUrl.startsWith("http")) {
+                        results.put(new JSONObject().put("title", title).put("url", targetUrl).put("snippet", "").put("source", "baidu"));
+                    }
                 }
             }
         } catch (Exception ignored) {
@@ -662,8 +1059,8 @@ public class LocalCacheServer {
         JSONArray results = new JSONArray();
         try {
             String url = "https://cn.bing.com/search?q=" + URLEncoder.encode(query, "UTF-8") + "&count=" + limit;
-            byte[] body = httpGet(url).bytes;
-            String html = new String(body, StandardCharsets.UTF_8);
+            HttpResult hr = httpGetWithTimeout(url, 8000, "text/html,application/xhtml+xml,*/*;q=0.8");
+            String html = decodeTextBytes(hr.bytes, hr.contentType);
             Pattern blockPat = Pattern.compile("<li[^>]*class=\"[^\"]*b_algo[^\"]*\"[^>]*>([\\s\\S]*?)</li>", Pattern.CASE_INSENSITIVE);
             Pattern linkPat = Pattern.compile("<h2[^>]*>\\s*<a[^>]*href=\"([^\"]+)\"[^>]*>([\\s\\S]*?)</a>", Pattern.CASE_INSENSITIVE);
             Pattern snipPat = Pattern.compile("<p[^>]*class=\"[^\"]*b_lineclamp[^\"]*\"[^>]*>([\\s\\S]*?)</p>|<div[^>]*class=\"[^\"]*b_caption[^\"]*\"[^>]*>[\\s\\S]*?<p[^>]*>([\\s\\S]*?)</p>", Pattern.CASE_INSENSITIVE);
@@ -695,19 +1092,41 @@ public class LocalCacheServer {
         JSONArray results = new JSONArray();
         try {
             String url = "https://html.duckduckgo.com/html/?q=" + URLEncoder.encode(query, "UTF-8");
-            String html = new String(httpGet(url).bytes, StandardCharsets.UTF_8);
+            HttpResult hr = httpGetWithTimeout(url, 8000, "text/html,application/xhtml+xml,*/*;q=0.8");
+            String html = decodeTextBytes(hr.bytes, hr.contentType);
             Pattern linkPat = Pattern.compile("<a[^>]*class=\"[^\"]*result__a[^\"]*\"[^>]*href=\"([^\"]+)\"[^>]*>([\\s\\S]*?)</a>", Pattern.CASE_INSENSITIVE);
+            Pattern snipPat = Pattern.compile("<(?:a|div)[^>]*class=\"[^\"]*result__snippet[^\"]*\"[^>]*>([\\s\\S]*?)</(?:a|div)>", Pattern.CASE_INSENSITIVE);
             Matcher lm = linkPat.matcher(html);
+            Matcher sm = snipPat.matcher(html);
             while (lm.find() && results.length() < limit) {
                 String targetUrl = decodeDdgUrl(lm.group(1));
                 String title = stripTags(lm.group(2));
+                String snippet = sm.find() ? stripTags(sm.group(1)) : "";
                 if (!title.isEmpty() && targetUrl.startsWith("http")) {
-                    results.put(new JSONObject().put("title", title).put("url", targetUrl).put("snippet", "").put("source", "duckduckgo"));
+                    results.put(new JSONObject().put("title", title).put("url", targetUrl).put("snippet", snippet).put("source", "duckduckgo"));
                 }
             }
         } catch (Exception ignored) {
         }
         return results;
+    }
+
+    private JSONObject fetchViaJinaReader(String cleanUrl) {
+        try {
+            HttpResult hr = httpGetWithTimeout("https://r.jina.ai/" + cleanUrl, 6500, "text/plain");
+            String md = decodeTextBytes(hr.bytes, hr.contentType).trim();
+            if (md.length() < 120) {
+                return null;
+            }
+            String title = "";
+            Matcher m = Pattern.compile("^Title:\\s*(.+)$", Pattern.MULTILINE).matcher(md);
+            if (m.find()) {
+                title = decodeHtmlEntities(m.group(1)).trim();
+            }
+            return new JSONObject().put("title", title).put("content", md);
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private JSONObject runCachedFetch(String rawUrl) {
@@ -728,26 +1147,51 @@ public class LocalCacheServer {
                 fetchHits.incrementAndGet();
                 return new JSONObject(cachedStr).put("cached", true);
             }
-            HttpResult hr = httpGet(cleanUrl);
-            String ct = hr.contentType.toLowerCase(Locale.ROOT);
             String title = "";
-            String content;
-            if (isImageContent(hr.bytes, ct)) {
-                title = "图片资源";
-                content = "[图片资源 (" + ct + ", " + (hr.bytes.length / 1024) + " KB): " + cleanUrl + "]";
-            } else if (isPdfContent(hr.bytes, ct, cleanUrl)) {
-                title = "PDF 文档";
-                content = "[PDF 文档 (" + (hr.bytes.length / 1024) + " KB): 如需解析内容请直接通过附件上传]";
-            } else if (isZipContent(hr.bytes, ct, cleanUrl)) {
-                title = "ZIP 压缩包清单";
-                content = inspectZipEntries(hr.bytes);
-            } else if (ct.contains("html") || ct.contains("xml")) {
-                String html = new String(hr.bytes, StandardCharsets.UTF_8);
-                title = extractHtmlTitle(html);
-                content = extractReadableHtml(html);
-            } else {
-                content = new String(hr.bytes, StandardCharsets.UTF_8);
+            String content = "";
+            boolean fetchedOk = false;
+            boolean isHtml = false;
+            try {
+                HttpResult hr = httpGet(cleanUrl);
+                fetchedOk = true;
+                String ct = hr.contentType.toLowerCase(Locale.ROOT);
+                if (isImageContent(hr.bytes, ct)) {
+                    title = "图片资源";
+                    content = "[图片资源 (" + ct + ", " + (hr.bytes.length / 1024) + " KB): " + cleanUrl + "]";
+                } else if (isPdfContent(hr.bytes, ct, cleanUrl)) {
+                    title = "PDF 文档";
+                    content = "[PDF 文档 (" + (hr.bytes.length / 1024) + " KB): 如需解析内容请直接通过附件上传]";
+                } else if (isZipContent(hr.bytes, ct, cleanUrl)) {
+                    title = "ZIP 压缩包清单";
+                    content = inspectZipEntries(hr.bytes);
+                } else if (ct.contains("html") || ct.contains("xml")) {
+                    isHtml = true;
+                    String html = decodeTextBytes(hr.bytes, hr.contentType);
+                    title = extractHtmlTitle(html);
+                    content = extractReadableHtml(html);
+                } else {
+                    content = decodeTextBytes(hr.bytes, hr.contentType);
+                }
+            } catch (Exception directErr) {
+                JSONObject jina = fetchViaJinaReader(cleanUrl);
+                if (jina == null) {
+                    throw directErr;
+                }
+                fetchedOk = true;
+                title = jina.optString("title", "");
+                content = jina.optString("content", "");
             }
+
+            if (fetchedOk && isHtml && content.trim().length() < 180) {
+                JSONObject jina = fetchViaJinaReader(cleanUrl);
+                if (jina != null && jina.optString("content", "").length() > content.length()) {
+                    if (title.isEmpty()) {
+                        title = jina.optString("title", "");
+                    }
+                    content = jina.optString("content", "");
+                }
+            }
+
             if (content.length() > MAX_CONTENT_CHARS) {
                 content = content.substring(0, MAX_CONTENT_CHARS);
             }
@@ -774,11 +1218,16 @@ public class LocalCacheServer {
     }
 
     private HttpResult httpGet(String url) throws IOException {
+        return httpGetWithTimeout(url, 15_000, "text/html,application/xhtml+xml,*/*;q=0.8");
+    }
+
+    private HttpResult httpGetWithTimeout(String url, int timeoutMs, String acceptHeader) throws IOException {
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setInstanceFollowRedirects(true);
-        conn.setConnectTimeout(15_000);
-        conn.setReadTimeout(15_000);
+        conn.setConnectTimeout(timeoutMs);
+        conn.setReadTimeout(timeoutMs);
         conn.setRequestProperty("User-Agent", UA);
+        conn.setRequestProperty("Accept", acceptHeader);
         conn.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8");
         int code = conn.getResponseCode();
         if (code >= 400) {
@@ -843,11 +1292,14 @@ public class LocalCacheServer {
     }
 
     private static String stripTags(String html) {
-        return html.replaceAll("<[^>]+>", " ").replace("&nbsp;", " ").replace("&amp;", "&").replaceAll("\\s+", " ").trim();
+        return decodeHtmlEntities(html.replaceAll("<[^>]+>", " ")).replaceAll("\\s+", " ").trim();
     }
 
     private static String stripTagsKeepNewlines(String html) {
-        return html.replaceAll("<[^>]+>", " ").replace("&nbsp;", " ").replace("&amp;", "&").replaceAll("[ \\t]+", " ").replaceAll("\\n{3,}", "\n\n").trim();
+        return decodeHtmlEntities(html.replaceAll("<[^>]+>", " "))
+            .replaceAll("[ \\t]+", " ")
+            .replaceAll("\\n{3,}", "\n\n")
+            .trim();
     }
 
     private static String decodeBingUrl(String raw) {
@@ -1094,13 +1546,22 @@ public class LocalCacheServer {
     }
 
     private static String sanitizeSearchQuery(String text) {
+        if (text == null) {
+            return "";
+        }
         String cleaned = text
+            .replaceAll("(?is)<latest_reminder>[\\s\\S]*?</latest_reminder>", " ")
+            .replaceAll("```[\\s\\S]*?```", " ")
+            .replaceAll("(?ms)\\[(?:内置缓存|系统已通过内置)[\\s\\S]*$", " ")
             .replaceAll("https?://\\S+", " ")
-            .replaceFirst("^(?:请|帮我|给我|麻烦)?(?:上网|联网)?(?:搜索|搜一下|查一下|查询)\\s*", "")
             .replaceAll("[呢吗吧呀啊？?!！。.\\s]+$", "")
             .replaceAll("\\s+", " ")
             .trim();
-        return cleaned.length() > 140 ? cleaned.substring(0, 140) : cleaned;
+        String withoutLead = cleaned
+            .replaceFirst("^(?:请|帮我|给我|麻烦|请问)?(?:上网|联网)?(?:搜索|搜一下|查一下|查询)\\s*", "")
+            .trim();
+        String finalQuery = withoutLead.isEmpty() ? cleaned : withoutLead;
+        return finalQuery.length() > 140 ? finalQuery.substring(0, 140) : finalQuery;
     }
 
     private static Object siteHost(String url) {
@@ -1123,7 +1584,7 @@ public class LocalCacheServer {
             "HTTP/1.1 204 No Content\r\n"
                 + "Access-Control-Allow-Origin: *\r\n"
                 + "Access-Control-Allow-Methods: GET,POST,DELETE,OPTIONS\r\n"
-                + "Access-Control-Allow-Headers: *, authorization, x-target-url\r\n"
+                + "Access-Control-Allow-Headers: *, authorization, x-target-url, x-builtin-search, x-session-id\r\n"
                 + "Access-Control-Allow-Private-Network: true\r\n"
                 + "Content-Length: 0\r\n\r\n";
         out.write(resp.getBytes(StandardCharsets.UTF_8));

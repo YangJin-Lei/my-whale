@@ -1,4 +1,5 @@
 import { translate } from '../../i18n/index.js'
+import { decodeHtmlEntities } from '../../utils/htmlEntities.js'
 import type {
   ServerToolKind,
   TextCitation,
@@ -115,14 +116,16 @@ class SourceRegistry {
     publishedAt: string | null,
     metadata?: Pick<WebSearchResult, 'snippet' | 'site_icon' | 'site_name'>
   ): Source {
-    const siteName = metadata?.site_name?.trim() || getSiteName(url)
-    const snippet = metadata?.snippet?.trim() || null
+    const cleanTitle = title ? decodeHtmlEntities(title).trim() : null
+    const cleanSiteName = metadata?.site_name ? decodeHtmlEntities(metadata.site_name).trim() : ''
+    const siteName = cleanSiteName || getSiteName(url)
+    const snippet = metadata?.snippet ? decodeHtmlEntities(metadata.snippet).trim() || null : null
     const siteIcon = metadata?.site_icon?.trim() || null
     const existing = this.byUrl.get(url)
     if (existing) {
       // 同一网页可能先被打开，或先返回不完整元数据；后续结果补齐，不覆盖已有正文信息。
-      if (existing.title === url && title) {
-        existing.title = title
+      if (existing.title === url && cleanTitle) {
+        existing.title = cleanTitle
       }
       if (existing.siteName === getSiteName(url)) {
         existing.siteName = siteName
@@ -134,7 +137,7 @@ class SourceRegistry {
     }
     const source: Source = {
       url,
-      title: title || url,
+      title: cleanTitle || url,
       siteName,
       publishedAt,
       snippet,

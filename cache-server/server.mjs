@@ -66,14 +66,19 @@ function extractLastUserText(messages) {
   return ''
 }
 
-function sanitizeSearchQuery(rawText) {
-  return rawText
+export function sanitizeSearchQuery(rawText) {
+  const stripped = String(rawText || '')
+    .replace(/<latest_reminder>[\s\S]*?<\/latest_reminder>/gi, ' ')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/\[(?:内置缓存|系统已通过内置).*$/gms, ' ')
     .replace(/https?:\/\/[^\s]+/gi, ' ')
-    .replace(/^(请|帮我|给我|麻烦)?(上网|联网)?(搜索|搜一下|查一下|查询)\s*/i, '')
     .replace(/[呢吗吧呀啊？?!！。.\s]+$/g, '')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 140)
+  const withoutLead = stripped
+    .replace(/^(请|帮我|给我|麻烦|请问)?(上网|联网)?(搜索|搜一下|查一下|查询)\s*/i, '')
+    .trim()
+  return (withoutLead || stripped).slice(0, 140)
 }
 
 function getTurnText(msg) {
@@ -146,12 +151,17 @@ async function handleMessagesProxy(req, res) {
   }
 
   const incomingTools = Array.isArray(body.tools) ? body.tools : []
-  const wantsSearch = incomingTools.some(
-    (t) => t?.name === 'deepseek_web_search' || t?.type === 'deepseek_web_search'
-  )
-  const wantsReadUrl = incomingTools.some(
-    (t) => t?.name === 'deepseek_read_url' || t?.type === 'deepseek_read_url'
-  )
+  const useBuiltinSearch = String(req.headers['x-builtin-search'] || '') === '1'
+  const wantsSearch =
+    useBuiltinSearch &&
+    incomingTools.some(
+      (t) => t?.name === 'deepseek_web_search' || t?.type === 'deepseek_web_search'
+    )
+  const wantsReadUrl =
+    useBuiltinSearch &&
+    incomingTools.some(
+      (t) => t?.name === 'deepseek_read_url' || t?.type === 'deepseek_read_url'
+    )
 
   const sessionKey = req.headers['x-session-id'] ? String(req.headers['x-session-id']) : ''
   const stableMessages = stabilizeMessagesForPrefixCache(body.messages || []).map((m) => ({ ...m }))
@@ -232,7 +242,7 @@ async function handleMessagesProxy(req, res) {
   if (wantsSearch) {
     const query = sanitizeSearchQuery(lastUserText)
     if (query) {
-      const searchOut = await runCachedSearch(cacheStore, query, 6)
+      const searchOut = await runCachedSearch(cacheStore, query, 8, { deepRead: true })
       if (searchOut.results?.length > 0) {
         const toolId = `srvtoolu_s_${crypto.randomBytes(8).toString('hex')}`
         syntheticBlocks.push({
@@ -258,11 +268,12 @@ async function handleMessagesProxy(req, res) {
             page_age: null,
           })),
         })
-        const lines = searchOut.results.map(
-          (r, idx) => `${idx + 1}. ${r.title}\nURL: ${r.url}\n摘要: ${r.snippet}`
-        )
+        const lines = searchOut.results.map((r, idx) => {
+          const base = `${idx + 1}. ${r.title}\nURL: ${r.url}\n摘要: ${r.snippet || ''}`
+          return r.pageContent ? `${base}\n网页精读:\n${r.pageContent}` : base
+        })
         groundingParts.push(
-          `【系统已通过内置缓存搜索工具(${searchOut.backend}${searchOut.cached ? ', 命中缓存' : ''})获取以下实时结果，请直接结合这些结果回答用户，不要说自己没有搜索工具或无法联网】\n关键词: ${query}\n${lines.join('\n\n')}`
+          `【系统已通过内置增强搜索工具(${searchOut.backend}${searchOut.cached ? ', 命中缓存' : ''})获取以下实时结果与正文精读，请直接结合这些结果回答用户，不要说自己没有搜索工具或无法联网】\n关键词: ${query}\n${lines.join('\n\n')}`
         )
       } else {
         officialSearchFallback = true
@@ -278,15 +289,16 @@ async function handleMessagesProxy(req, res) {
   const upstreamBody = {
     ...body,
     messages: appendGroundingToLastUserMessage(stableMessages, groundingText),
-    tools: officialSearchFallback
-      ? incomingTools
-      : incomingTools.filter(
-          (t) =>
-            t?.name !== 'deepseek_web_search' &&
-            t?.name !== 'deepseek_read_url' &&
-            t?.type !== 'deepseek_web_search' &&
-            t?.type !== 'deepseek_read_url'
-        ),
+    tools:
+      !useBuiltinSearch || officialSearchFallback
+        ? incomingTools
+        : incomingTools.filter(
+            (t) =>
+              t?.name !== 'deepseek_web_search' &&
+              t?.name !== 'deepseek_read_url' &&
+              t?.type !== 'deepseek_web_search' &&
+              t?.type !== 'deepseek_read_url'
+          ),
   }
   if (upstreamBody.tools.length === 0) {
     delete upstreamBody.tools
@@ -516,8 +528,8 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(204, {
       ...CORS_HEADERS,
       'Access-Control-Allow-Headers': requested
-        ? `${requested}, authorization, x-target-url`
-        : 'authorization, content-type, accept, x-api-key, anthropic-version, anthropic-beta, x-target-url',
+        ? `${requested}, authorization, x-target-url, x-builtin-search, x-session-id`
+        : 'authorization, content-type, accept, x-api-key, anthropic-version, anthropic-beta, x-target-url, x-builtin-search, x-session-id',
       'Access-Control-Allow-Private-Network': 'true',
       'Access-Control-Max-Age': '600',
     })
@@ -542,7 +554,9 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'POST' && pathname === '/api/search') {
     const body = JSON.parse((await readRequestBuffer(req)).toString('utf8') || '{}')
-    const result = await runCachedSearch(cacheStore, body.query, body.limit)
+    const result = await runCachedSearch(cacheStore, body.query, body.limit, {
+      deepRead: Boolean(body.deepRead),
+    })
     sendJson(res, 200, result)
     return
   }

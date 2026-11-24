@@ -45,6 +45,7 @@ import {
   isIflytekConfigured,
   setCacheBackendUrl,
   setCacheModeEnabled,
+  setBuiltinSearchEnabled,
   setCompactionEnabled,
   setGameCacheEnabled,
   setChatBgImage,
@@ -230,6 +231,7 @@ const SettingsContent = () => {
                 <VoiceModeSetting />
                 <LocationSetting />
                 <CacheModeSetting />
+                <BuiltinSearchSetting />
                 <CompactionSetting />
                 <UpdateSetting />
                 <UpdateAccelerateSetting />
@@ -727,6 +729,43 @@ const CacheModeSetting = () => {
         </div>
       ) : null}
     </div>
+  )
+}
+
+const BuiltinSearchSetting = () => {
+  const t = useTranslate()
+  const builtinSearchEnabled = useSettings((state) => state.builtinSearchEnabled)
+  const cacheModeEnabled = useSettings((state) => state.cacheModeEnabled)
+  const cacheBackendUrl = useSettings((state) => state.cacheBackendUrl)
+
+  const handleToggle = async (next: boolean) => {
+    setBuiltinSearchEnabled(next)
+    if (next) {
+      if (!cacheModeEnabled) {
+        setCacheModeEnabled(true)
+      }
+      const res = await startNativeOrProbeCacheBackend(cacheBackendUrl).catch(() => null)
+      if (res && !res.online) {
+        showToast({ key: 'settingsCacheConnectFailed', type: 'error' })
+      }
+    }
+  }
+
+  return (
+    <SettingCell
+      label={t('settingsBuiltinSearch')}
+      status={{
+        key: builtinSearchEnabled ? 'settingsBuiltinSearchOn' : 'settingsBuiltinSearchOff',
+      }}
+      action={
+        <input
+          type="checkbox"
+          aria-label={t('settingsBuiltinSearch')}
+          checked={builtinSearchEnabled}
+          onChange={(event) => void handleToggle(event.target.checked)}
+        />
+      }
+    />
   )
 }
 

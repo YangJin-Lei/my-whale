@@ -109,6 +109,90 @@ fn try_spawn_node_server(port: u16) -> Option<Child> {
     cmd.spawn().ok()
 }
 
+fn decode_entities_once(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut i = 0;
+    let bytes = input.as_bytes();
+    while i < bytes.len() {
+        if bytes[i] == b'&' {
+            if let Some(rel_end) = input[i + 1..].find(';') {
+                if rel_end > 0 && rel_end <= 16 {
+                    let token = &input[i + 1..i + 1 + rel_end];
+                    let decoded = if let Some(hex) = token.strip_prefix("#x").or_else(|| token.strip_prefix("#X")) {
+                        u32::from_str_radix(hex, 16).ok().and_then(char::from_u32).map(|c| c.to_string())
+                    } else if let Some(dec) = token.strip_prefix('#') {
+                        dec.parse::<u32>().ok().and_then(char::from_u32).map(|c| c.to_string())
+                    } else {
+                        match token.to_ascii_lowercase().as_str() {
+                            "amp" => Some("&".to_string()),
+                            "lt" => Some("<".to_string()),
+                            "gt" => Some(">".to_string()),
+                            "quot" => Some("\"".to_string()),
+                            "apos" => Some("'".to_string()),
+                            "nbsp" | "ensp" | "emsp" | "thinsp" => Some(" ".to_string()),
+                            "zwnj" | "zwj" | "shy" => Some(String::new()),
+                            "middot" => Some("·".to_string()),
+                            "bull" => Some("•".to_string()),
+                            "hellip" => Some("…".to_string()),
+                            "mdash" => Some("—".to_string()),
+                            "ndash" => Some("–".to_string()),
+                            "lsquo" => Some("‘".to_string()),
+                            "rsquo" => Some("’".to_string()),
+                            "ldquo" => Some("“".to_string()),
+                            "rdquo" => Some("”".to_string()),
+                            "laquo" => Some("«".to_string()),
+                            "raquo" => Some("»".to_string()),
+                            "copy" => Some("©".to_string()),
+                            "reg" => Some("®".to_string()),
+                            "trade" => Some("™".to_string()),
+                            "times" => Some("×".to_string()),
+                            "divide" => Some("÷".to_string()),
+                            "plusmn" => Some("±".to_string()),
+                            "deg" => Some("°".to_string()),
+                            "yen" => Some("¥".to_string()),
+                            "euro" => Some("€".to_string()),
+                            "pound" => Some("£".to_string()),
+                            "cent" => Some("¢".to_string()),
+                            _ => None,
+                        }
+                    };
+                    if let Some(rep) = decoded {
+                        out.push_str(&rep);
+                        i += 1 + rel_end + 1;
+                        continue;
+                    }
+                }
+            }
+        }
+        let ch = input[i..].chars().next().unwrap_or('\0');
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
+}
+
+pub(crate) fn decode_html_entities(input: &str) -> String {
+    if !input.contains('&') {
+        return input.to_string();
+    }
+    let pass1 = decode_entities_once(input);
+    let pass2 = if pass1.contains('&') { decode_entities_once(&pass1) } else { pass1 };
+    let mut collapsed = String::with_capacity(pass2.len());
+    let mut prev_space = false;
+    for ch in pass2.chars() {
+        if ch == ' ' || ch == '\t' {
+            if !prev_space {
+                collapsed.push(' ');
+            }
+            prev_space = true;
+        } else {
+            prev_space = false;
+            collapsed.push(ch);
+        }
+    }
+    collapsed
+}
+
 fn strip_html_tags(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     let mut in_tag = false;
@@ -123,14 +207,87 @@ fn strip_html_tags(input: &str) -> String {
             _ => {}
         }
     }
-    out.replace("&nbsp;", " ")
-        .replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
+    decode_html_entities(&out)
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+fn percent_encode(input: &str) -> String {
+    let mut out = String::with_capacity(input.len() * 2);
+    for &b in input.as_bytes() {
+        if b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'.' || b == b'~' {
+            out.push(b as char);
+        } else if b == b' ' {
+            out.push('+');
+        } else {
+            out.push_str(&format!("%{:02X}", b));
+        }
+    }
+    out
+}
+
+fn percent_decode(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(hex) = std::str::from_utf8(&bytes[i + 1..i + 3]) {
+                if let Ok(val) = u8::from_str_radix(hex, 16) {
+                    out.push(val);
+                    i += 3;
+                    continue;
+                }
+            }
+        } else if bytes[i] == b'+' {
+            out.push(b' ');
+            i += 1;
+            continue;
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+pub(crate) fn sanitize_search_query(raw: &str) -> String {
+    let mut text = raw.to_string();
+    loop {
+        let lower = text.to_lowercase();
+        let Some(s) = lower.find("<latest_reminder>") else { break };
+        let Some(e_rel) = lower[s..].find("</latest_reminder>") else { break };
+        text.replace_range(s..s + e_rel + "</latest_reminder>".len(), " ");
+    }
+    loop {
+        let Some(s) = text.find("```") else { break };
+        let Some(e_rel) = text[s + 3..].find("```") else { break };
+        text.replace_range(s..s + 3 + e_rel + 3, " ");
+    }
+    for marker in ["[内置缓存", "[系统已通过内置"] {
+        if let Some(pos) = text.find(marker) {
+            text.truncate(pos);
+        }
+    }
+    let words_cleaned: String = text
+        .split_whitespace()
+        .filter(|w| !w.starts_with("http://") && !w.starts_with("https://"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let trimmed = words_cleaned
+        .trim_end_matches(|c: char| "呢吗吧呀啊？?!！。. ".contains(c))
+        .trim();
+    let mut without_lead = trimmed;
+    for prefix in ["请问", "请", "帮我", "给我", "麻烦", "上网", "联网", "搜索", "搜一下", "查一下", "查询"] {
+        if let Some(rest) = without_lead.strip_prefix(prefix) {
+            let r = rest.trim_start();
+            if !r.is_empty() {
+                without_lead = r;
+            }
+        }
+    }
+    let chosen = if without_lead.is_empty() { trimmed } else { without_lead };
+    chosen.chars().take(140).collect()
 }
 
 fn extract_tag_content(html: &str, open_prefix: &str, close_tag: &str) -> String {
@@ -169,6 +326,66 @@ fn extract_readable_html(html: &str) -> (String, String) {
     let text = strip_html_tags(&clean);
     let trimmed: String = text.chars().take(MAX_CONTENT_CHARS).collect();
     (title, trimmed)
+}
+
+fn decode_ddg_url(raw: &str) -> String {
+    if let Some(idx) = raw.find("uddg=") {
+        let rest = &raw[idx + 5..];
+        let end = rest.find('&').unwrap_or(rest.len());
+        let decoded = percent_decode(&rest[..end]);
+        if decoded.starts_with("http://") || decoded.starts_with("https://") {
+            return decoded;
+        }
+    }
+    raw.to_string()
+}
+
+fn canonicalize_search_url(raw: &str) -> String {
+    let lower = raw.trim().to_string();
+    let Some(scheme_pos) = lower.find("://") else { return lower };
+    let proto = &lower[..scheme_pos].to_lowercase();
+    let rest = &lower[scheme_pos + 3..];
+    let path_pos = rest.find('/').unwrap_or(rest.len());
+    let host = rest[..path_pos].to_lowercase().trim_start_matches("www.").to_string();
+    let path_and_q = &rest[path_pos..];
+    let (path, query) = if let Some(qp) = path_and_q.find('?') {
+        (&path_and_q[..qp], &path_and_q[qp + 1..])
+    } else {
+        (path_and_q, "")
+    };
+    let clean_path = path.trim_end_matches('/');
+    let clean_path = if clean_path.is_empty() { "/" } else { clean_path };
+    let kept_q: Vec<&str> = query
+        .split('&')
+        .filter(|kv| {
+            if kv.is_empty() {
+                return false;
+            }
+            let k = kv.split('=').next().unwrap_or("");
+            !k.starts_with("utm_") && k != "spm" && k != "from" && k != "ref" && k != "fbclid" && k != "gclid"
+        })
+        .collect();
+    if kept_q.is_empty() {
+        format!("{}://{}{}", proto, host, clean_path)
+    } else {
+        format!("{}://{}{}?{}", proto, host, clean_path, kept_q.join("&"))
+    }
+}
+
+fn is_opaque_redirect(url: &str) -> bool {
+    let lower = url.to_lowercase();
+    lower.contains("baidu.com/link?") || lower.contains("bing.com/ck/")
+}
+
+fn is_low_signal_dict(url: &str, clean_query: &str) -> bool {
+    if clean_query.chars().count() <= 2 {
+        return false;
+    }
+    let lower = url.to_lowercase();
+    lower.contains("dict.revised.moe.edu.tw")
+        || lower.contains("hanyuguoxue.com")
+        || lower.contains("hancibao.com")
+        || lower.contains("zdic.net")
 }
 
 fn parse_bing_links(html: &str, limit: usize) -> Vec<Value> {
@@ -215,8 +432,13 @@ fn parse_baidu_links(html: &str, limit: usize) -> Vec<Value> {
     while results.len() < limit {
         let Some(idx_rel) = lower[pos..].find("<h3") else { break };
         let h_start = pos + idx_rel;
-        let h_end = lower[h_start..].find("</h3>").map(|x| h_start + x).unwrap_or(html.len());
+        let h_end = lower[h_start..].find("</h3>").map(|x| h_start + x + 5).unwrap_or(html.len());
+        let next_container = lower[h_end..]
+            .find("c-container")
+            .map(|x| h_end + x)
+            .unwrap_or((h_end + 1400).min(html.len()));
         let block = &html[h_start..h_end];
+        let tail_block = &html[h_end..next_container.min(html.len())];
         if let Some(href_start) = block.find("href=\"") {
             let after_href = &block[href_start + 6..];
             if let Some(href_end) = after_href.find('"') {
@@ -226,11 +448,18 @@ fn parse_baidu_links(html: &str, limit: usize) -> Vec<Value> {
                     .find('>')
                     .and_then(|gt| title_area[gt + 1..].find("</a>").map(|end| strip_html_tags(&title_area[gt + 1..gt + 1 + end])))
                     .unwrap_or_default();
+                let mut snippet = extract_tag_content(tail_block, "content-right", "</span>");
+                if snippet.is_empty() {
+                    snippet = extract_tag_content(tail_block, "c-abstract", "</div>");
+                }
+                if snippet.is_empty() {
+                    snippet = strip_html_tags(tail_block).chars().take(200).collect();
+                }
                 if raw_url.starts_with("http") && !title.is_empty() {
                     results.push(json!({
                         "title": title,
                         "url": raw_url,
-                        "snippet": "",
+                        "snippet": snippet,
                         "source": "baidu"
                     }));
                 }
@@ -241,7 +470,233 @@ fn parse_baidu_links(html: &str, limit: usize) -> Vec<Value> {
     results
 }
 
-fn run_search(client: &reqwest::Client, cache: &MemoryToolCache, query: &str, limit: usize) -> Value {
+fn parse_duckduckgo_links(html: &str, limit: usize) -> Vec<Value> {
+    let mut results = Vec::new();
+    let lower = html.to_lowercase();
+    let mut pos = 0;
+    while results.len() < limit {
+        let Some(idx_rel) = lower[pos..].find("result__a") else { break };
+        let anchor_area = pos + idx_rel;
+        let tag_start = html[..anchor_area].rfind("<a").unwrap_or(anchor_area);
+        let Some(end_a_rel) = lower[anchor_area..].find("</a>") else { break };
+        let block = &html[tag_start..anchor_area + end_a_rel + 4];
+        if let Some(href_start) = block.find("href=\"") {
+            let after_href = &block[href_start + 6..];
+            if let Some(href_end) = after_href.find('"') {
+                let raw_url = decode_ddg_url(&after_href[..href_end]);
+                let title_area = &after_href[href_end + 1..];
+                let title = title_area
+                    .find('>')
+                    .and_then(|gt| title_area[gt + 1..].find("</a>").map(|end| strip_html_tags(&title_area[gt + 1..gt + 1 + end])))
+                    .unwrap_or_default();
+                let after_link = &html[anchor_area + end_a_rel + 4..];
+                let snippet_window = &after_link[..after_link.len().min(1200)];
+                let snippet = extract_tag_content(snippet_window, "result__snippet", "</");
+                if raw_url.starts_with("http") && !title.is_empty() {
+                    results.push(json!({
+                        "title": title,
+                        "url": raw_url,
+                        "snippet": snippet,
+                        "source": "duckduckgo"
+                    }));
+                }
+            }
+        }
+        pos = anchor_area + end_a_rel + 4;
+    }
+    results
+}
+
+async fn fetch_github_search(client: &reqwest::Client, query: &str) -> Vec<Value> {
+    let cleaned = query
+        .replace("github", "")
+        .replace("GitHub", "")
+        .replace("开源", "")
+        .replace("仓库", "")
+        .replace("源码", "")
+        .replace("项目", "");
+    let q = if cleaned.trim().is_empty() { query } else { cleaned.trim() };
+    let url = format!(
+        "https://api.github.com/search/repositories?q={}&sort=stars&per_page=4",
+        percent_encode(q)
+    );
+    let Ok(Ok(resp)) = tauri::async_runtime::spawn({
+        let c = client.clone();
+        async move {
+            c.get(&url)
+                .header("User-Agent", "Mozilla/5.0 Chrome/126.0.0.0 Safari/537.36")
+                .header("Accept", "application/vnd.github+json")
+                .timeout(Duration::from_millis(6500))
+                .send()
+                .await
+        }
+    })
+    .await else {
+        return Vec::new();
+    };
+    if !resp.status().is_success() {
+        return Vec::new();
+    }
+    let Ok(body) = resp.text().await else { return Vec::new() };
+    let Ok(val) = serde_json::from_str::<Value>(&body) else { return Vec::new() };
+    let mut out = Vec::new();
+    if let Some(items) = val.get("items").and_then(|v| v.as_array()) {
+        for repo in items {
+            let name = repo.get("full_name").and_then(|v| v.as_str()).unwrap_or("");
+            let stars = repo.get("stargazers_count").and_then(|v| v.as_u64()).unwrap_or(0);
+            let lang = repo.get("language").and_then(|v| v.as_str()).unwrap_or("");
+            let desc = repo.get("description").and_then(|v| v.as_str()).unwrap_or("");
+            let html_url = repo.get("html_url").and_then(|v| v.as_str()).unwrap_or("");
+            if !name.is_empty() && !html_url.is_empty() {
+                let sn = if lang.is_empty() {
+                    desc.to_string()
+                } else {
+                    format!("[{}] {}", lang, desc)
+                };
+                out.push(json!({
+                    "title": format!("{} (GitHub ★{})", name, stars),
+                    "url": html_url,
+                    "snippet": decode_html_entities(&sn),
+                    "source": "github"
+                }));
+            }
+        }
+    }
+    out
+}
+
+async fn fetch_wikipedia_search(client: &reqwest::Client, query: &str) -> Vec<Value> {
+    let url = format!(
+        "https://zh.wikipedia.org/w/api.php?action=query&list=search&srsearch={}&utf8=1&format=json&srlimit=3",
+        percent_encode(query)
+    );
+    let Ok(resp) = client
+        .get(&url)
+        .header("User-Agent", "Mozilla/5.0 Chrome/126.0.0.0 Safari/537.36")
+        .header("Accept", "application/json")
+        .timeout(Duration::from_millis(6000))
+        .send()
+        .await
+    else {
+        return Vec::new();
+    };
+    if !resp.status().is_success() {
+        return Vec::new();
+    }
+    let Ok(body) = resp.text().await else { return Vec::new() };
+    let Ok(val) = serde_json::from_str::<Value>(&body) else { return Vec::new() };
+    let mut out = Vec::new();
+    if let Some(items) = val
+        .get("query")
+        .and_then(|q| q.get("search"))
+        .and_then(|s| s.as_array())
+    {
+        for item in items {
+            let title = decode_html_entities(item.get("title").and_then(|v| v.as_str()).unwrap_or("")).trim().to_string();
+            let snippet = strip_html_tags(item.get("snippet").and_then(|v| v.as_str()).unwrap_or(""));
+            if !title.is_empty() {
+                out.push(json!({
+                    "title": format!("{} - 维基百科", title),
+                    "url": format!("https://zh.wikipedia.org/wiki/{}", percent_encode(&title.replace(' ', "_"))),
+                    "snippet": snippet,
+                    "source": "wikipedia"
+                }));
+            }
+        }
+    }
+    out
+}
+
+fn enrich_results_with_deep_read(
+    client: &reqwest::Client,
+    cache: &MemoryToolCache,
+    results: &mut Vec<Value>,
+    max_pages: usize,
+) {
+    let indices: Vec<usize> = results
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, r)| {
+            let u = r.get("url").and_then(|v| v.as_str()).unwrap_or("");
+            if !u.is_empty() && !is_opaque_redirect(u) { Some(idx) } else { None }
+        })
+        .take(max_pages)
+        .collect();
+    if indices.is_empty() {
+        return;
+    }
+    let urls: Vec<(usize, String)> = indices
+        .into_iter()
+        .filter_map(|idx| {
+            results[idx].get("url").and_then(|v| v.as_str()).map(|s| (idx, s.to_string()))
+        })
+        .collect();
+
+    let fetched_pairs: Vec<(usize, String)> = tauri::async_runtime::block_on(async {
+        let mut handles = Vec::new();
+        for (idx, u) in urls {
+            let c = client.clone();
+            handles.push((
+                idx,
+                u.clone(),
+                tauri::async_runtime::spawn(async move {
+                    let direct = c
+                        .get(&u)
+                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0.0.0 Safari/537.36")
+                        .timeout(Duration::from_millis(4500))
+                        .send()
+                        .await;
+                    if let Ok(r) = direct {
+                        if r.status().is_success() {
+                            let ct = r.headers().get("content-type").and_then(|v| v.to_str().ok()).unwrap_or("").to_lowercase();
+                            if ct.contains("html") || ct.contains("text") {
+                                let bytes = r.bytes().await.unwrap_or_default();
+                                let text = String::from_utf8_lossy(&bytes).into_owned();
+                                let (_, content) = if ct.contains("html") { extract_readable_html(&text) } else { (String::new(), text) };
+                                if content.chars().count() >= 180 {
+                                    return content.chars().take(1400).collect::<String>();
+                                }
+                            }
+                        }
+                    }
+                    let jina_url = format!("https://r.jina.ai/{}", u);
+                    if let Ok(jr) = c
+                        .get(&jina_url)
+                        .header("Accept", "text/plain")
+                        .timeout(Duration::from_millis(4500))
+                        .send()
+                        .await
+                    {
+                        if jr.status().is_success() {
+                            let md = jr.text().await.unwrap_or_default();
+                            if md.chars().count() >= 120 {
+                                return md.chars().take(1400).collect::<String>();
+                            }
+                        }
+                    }
+                    String::new()
+                }),
+            ));
+        }
+        let mut out = Vec::new();
+        for (idx, _u, h) in handles {
+            if let Ok(excerpt) = h.await {
+                if !excerpt.is_empty() {
+                    out.push((idx, excerpt));
+                }
+            }
+        }
+        out
+    });
+    let _ = cache;
+    for (idx, excerpt) in fetched_pairs {
+        if let Some(obj) = results.get_mut(idx).and_then(|v| v.as_object_mut()) {
+            obj.insert("pageContent".into(), Value::String(excerpt));
+        }
+    }
+}
+
+fn run_search(client: &reqwest::Client, cache: &MemoryToolCache, query: &str, limit: usize, deep_read: bool) -> Value {
     let clean = query.trim();
     if clean.is_empty() {
         return json!({ "ok": false, "query": "", "results": [] });
@@ -255,58 +710,151 @@ fn run_search(client: &reqwest::Client, cache: &MemoryToolCache, query: &str, li
                 if let Some(obj) = v.as_object_mut() {
                     obj.insert("cached".into(), Value::Bool(true));
                 }
+                if deep_read {
+                    if let Some(arr) = v.get_mut("results").and_then(|x| x.as_array_mut()) {
+                        enrich_results_with_deep_read(client, cache, arr, 2);
+                    }
+                }
                 return v;
             }
         }
     }
 
-    let url = format!(
-        "https://cn.bing.com/search?q={}&count={}",
-        clean.replace(' ', "+"),
-        limit
-    );
-    let results = tauri::async_runtime::block_on(async {
-        let resp = client
-            .get(&url)
-            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0.0.0 Safari/537.36")
-            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-            .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
-            .send()
-            .await;
-        let bing_res = match resp {
-            Ok(r) if r.status().is_success() => {
-                let html = r.text().await.unwrap_or_default();
-                parse_bing_links(&html, limit)
+    let clean_owned = clean.to_string();
+    let lower_q = clean.to_lowercase();
+    let wants_github = ["github", "repo", "cli", "mcp", "sdk", "agent", "api", "开源", "仓库", "源码", "项目", "框架"]
+        .iter()
+        .any(|kw| lower_q.contains(kw));
+
+    let all_lists: Vec<Vec<Value>> = tauri::async_runtime::block_on(async {
+        let q1 = percent_encode(&clean_owned);
+        let bing_url = format!("https://cn.bing.com/search?q={}&count=10", q1);
+        let baidu_url = format!("https://www.baidu.com/s?wd={}&rn=10", q1);
+        let ddg_url = format!("https://html.duckduckgo.com/html/?q={}", q1);
+
+        let c_bing = client.clone();
+        let h_bing = tauri::async_runtime::spawn(async move {
+            match c_bing
+                .get(&bing_url)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0.0.0 Safari/537.36")
+                .header("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
+                .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+                .timeout(Duration::from_millis(8000))
+                .send()
+                .await
+            {
+                Ok(r) if r.status().is_success() => parse_bing_links(&r.text().await.unwrap_or_default(), 10),
+                _ => Vec::new(),
             }
-            _ => Vec::new(),
+        });
+
+        let c_baidu = client.clone();
+        let h_baidu = tauri::async_runtime::spawn(async move {
+            match c_baidu
+                .get(&baidu_url)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0.0.0 Safari/537.36")
+                .header("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
+                .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+                .timeout(Duration::from_millis(8000))
+                .send()
+                .await
+            {
+                Ok(r) if r.status().is_success() => parse_baidu_links(&r.text().await.unwrap_or_default(), 10),
+                _ => Vec::new(),
+            }
+        });
+
+        let c_ddg = client.clone();
+        let h_ddg = tauri::async_runtime::spawn(async move {
+            match c_ddg
+                .get(&ddg_url)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0.0.0 Safari/537.36")
+                .header("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
+                .timeout(Duration::from_millis(8000))
+                .send()
+                .await
+            {
+                Ok(r) if r.status().is_success() => parse_duckduckgo_links(&r.text().await.unwrap_or_default(), 10),
+                _ => Vec::new(),
+            }
+        });
+
+        let extra = if wants_github {
+            fetch_github_search(client, &clean_owned).await
+        } else {
+            fetch_wikipedia_search(client, &clean_owned).await
         };
-        if !bing_res.is_empty() {
-            return bing_res;
-        }
-        let baidu_url = format!(
-            "https://www.baidu.com/s?wd={}&rn={}",
-            clean.replace(' ', "+"),
-            limit
-        );
-        let br = client
-            .get(&baidu_url)
-            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0.0.0 Safari/537.36")
-            .header("Accept", "text/html")
-            .send()
-            .await;
-        match br {
-            Ok(r) if r.status().is_success() => {
-                let html = r.text().await.unwrap_or_default();
-                parse_baidu_links(&html, limit)
-            }
-            _ => Vec::new(),
-        }
+
+        vec![
+            h_bing.await.unwrap_or_default(),
+            h_baidu.await.unwrap_or_default(),
+            h_ddg.await.unwrap_or_default(),
+            extra,
+        ]
     });
 
-    let payload = json!({
+    struct Scored {
+        score: f64,
+        title: String,
+        url: String,
+        snippet: String,
+        source: String,
+    }
+    let mut by_canon: HashMap<String, Scored> = HashMap::new();
+    for list in all_lists {
+        for (rank, item) in list.iter().enumerate() {
+            let raw_url = item.get("url").and_then(|v| v.as_str()).unwrap_or("").trim();
+            let title = decode_html_entities(item.get("title").and_then(|v| v.as_str()).unwrap_or("")).trim().to_string();
+            let snippet = decode_html_entities(item.get("snippet").and_then(|v| v.as_str()).unwrap_or("")).trim().to_string();
+            let source = item.get("source").and_then(|v| v.as_str()).unwrap_or("web").to_string();
+            if raw_url.is_empty() || title.is_empty() {
+                continue;
+            }
+            let canon = canonicalize_search_url(raw_url);
+            let rrf = 1.0 / (60.0 + rank as f64);
+            let bonus = (if snippet.chars().count() >= 30 { 0.008 } else { 0.0 })
+                + (if !is_opaque_redirect(raw_url) { 0.004 } else { 0.0 })
+                - (if is_low_signal_dict(raw_url, clean) { 0.025 } else { 0.0 });
+            if let Some(existing) = by_canon.get_mut(&canon) {
+                existing.score += rrf;
+                if snippet.len() > existing.snippet.len() {
+                    existing.snippet = snippet;
+                }
+                if is_opaque_redirect(&existing.url) && !is_opaque_redirect(raw_url) {
+                    existing.url = raw_url.to_string();
+                }
+            } else {
+                by_canon.insert(canon, Scored { score: rrf + bonus, title, url: raw_url.to_string(), snippet, source });
+            }
+        }
+    }
+
+    let mut ranked: Vec<Scored> = by_canon.into_values().collect();
+    ranked.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    let mut results: Vec<Value> = ranked
+        .into_iter()
+        .take(limit)
+        .map(|s| json!({ "title": s.title, "url": s.url, "snippet": s.snippet, "source": s.source }))
+        .collect();
+
+    let backend = if results.is_empty() {
+        "none".to_string()
+    } else {
+        let mut srcs = Vec::new();
+        for r in &results {
+            if let Some(s) = r.get("source").and_then(|v| v.as_str()) {
+                if !srcs.contains(&s) {
+                    srcs.push(s);
+                }
+            }
+        }
+        srcs.join("+")
+    };
+
+    let cached_payload = json!({
         "ok": true,
         "query": clean,
-        "backend": if results.is_empty() { "none" } else { "bing" },
+        "backend": backend,
         "results": results,
         "cached": false
     });
@@ -316,12 +864,48 @@ fn run_search(client: &reqwest::Client, cache: &MemoryToolCache, query: &str, li
                 key,
                 CacheEntry {
                     expires_at: now_secs() + SEARCH_TTL_SECS,
-                    payload: payload.clone(),
+                    payload: cached_payload.clone(),
                 },
             );
         }
+        if deep_read {
+            enrich_results_with_deep_read(client, cache, &mut results, 2);
+            return json!({
+                "ok": true,
+                "query": clean,
+                "backend": backend,
+                "results": results,
+                "cached": false
+            });
+        }
     }
-    payload
+    cached_payload
+}
+
+async fn try_jina_reader(client: &reqwest::Client, clean_url: &str) -> Option<(String, String)> {
+    let jina_url = format!("https://r.jina.ai/{}", clean_url);
+    let resp = client
+        .get(&jina_url)
+        .header("User-Agent", "Mozilla/5.0 Chrome/126.0.0.0 Safari/537.36")
+        .header("Accept", "text/plain")
+        .timeout(Duration::from_millis(6500))
+        .send()
+        .await
+        .ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let md = resp.text().await.unwrap_or_default();
+    let trimmed = md.trim().to_string();
+    if trimmed.chars().count() < 120 {
+        return None;
+    }
+    let title = trimmed
+        .lines()
+        .find_map(|l| l.strip_prefix("Title:"))
+        .map(|s| decode_html_entities(s).trim().to_string())
+        .unwrap_or_default();
+    Some((title, trimmed))
 }
 
 fn run_fetch(client: &reqwest::Client, cache: &MemoryToolCache, raw_url: &str) -> Value {
@@ -355,6 +939,12 @@ fn run_fetch(client: &reqwest::Client, cache: &MemoryToolCache, raw_url: &str) -
             Ok(r) => {
                 let status = r.status().as_u16();
                 if status >= 400 {
+                    if let Some((jt, jc)) = try_jina_reader(client, clean).await {
+                        let content: String = jc.chars().take(MAX_CONTENT_CHARS).collect();
+                        return json!({
+                            "ok": true, "url": clean, "title": jt, "content": content, "cached": false
+                        });
+                    }
                     return json!({ "ok": false, "url": clean, "status": status, "error": format!("HTTP {}", status) });
                 }
                 let ct = r
@@ -391,11 +981,21 @@ fn run_fetch(client: &reqwest::Client, cache: &MemoryToolCache, raw_url: &str) -
                     });
                 }
                 let text = String::from_utf8_lossy(&bytes).into_owned();
-                let (title, content) = if ct.contains("html") || ct.contains("xml") {
+                let (mut title, mut content) = if ct.contains("html") || ct.contains("xml") {
                     extract_readable_html(&text)
                 } else {
                     (String::new(), text.chars().take(MAX_CONTENT_CHARS).collect())
                 };
+                if (ct.contains("html") || ct.contains("xml")) && content.trim().chars().count() < 180 {
+                    if let Some((jt, jc)) = try_jina_reader(client, clean).await {
+                        if jc.len() > content.len() {
+                            if title.is_empty() {
+                                title = jt;
+                            }
+                            content = jc.chars().take(MAX_CONTENT_CHARS).collect();
+                        }
+                    }
+                }
                 json!({
                     "ok": true,
                     "url": clean,
@@ -404,7 +1004,15 @@ fn run_fetch(client: &reqwest::Client, cache: &MemoryToolCache, raw_url: &str) -
                     "cached": false
                 })
             }
-            Err(e) => json!({ "ok": false, "url": clean, "error": e.to_string() }),
+            Err(e) => {
+                if let Some((jt, jc)) = try_jina_reader(client, clean).await {
+                    let content: String = jc.chars().take(MAX_CONTENT_CHARS).collect();
+                    return json!({
+                        "ok": true, "url": clean, "title": jt, "content": content, "cached": false
+                    });
+                }
+                json!({ "ok": false, "url": clean, "error": e.to_string() })
+            }
         }
     });
 
@@ -478,7 +1086,7 @@ fn handle_tcp_client(mut stream: TcpStream, client: reqwest::Client, cache: Arc<
     }
 
     if method == "OPTIONS" {
-        let opt = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET,POST,DELETE,OPTIONS\r\nAccess-Control-Allow-Headers: *, authorization, x-target-url\r\nAccess-Control-Allow-Private-Network: true\r\nContent-Length: 0\r\n\r\n";
+        let opt = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET,POST,DELETE,OPTIONS\r\nAccess-Control-Allow-Headers: *, authorization, x-target-url, x-builtin-search, x-session-id\r\nAccess-Control-Allow-Private-Network: true\r\nContent-Length: 0\r\n\r\n";
         let _ = stream.write_all(opt.as_bytes());
         let _ = stream.flush();
         return;
@@ -520,8 +1128,9 @@ fn handle_tcp_client(mut stream: TcpStream, client: reqwest::Client, cache: Arc<
     if method == "POST" && path_only == "/api/search" {
         let parsed: Value = serde_json::from_slice(&body).unwrap_or(json!({}));
         let q = parsed.get("query").and_then(|v| v.as_str()).unwrap_or("");
-        let limit = parsed.get("limit").and_then(|v| v.as_u64()).unwrap_or(6) as usize;
-        let res = run_search(&client, &cache, q, limit.clamp(1, 10));
+        let limit = parsed.get("limit").and_then(|v| v.as_u64()).unwrap_or(8) as usize;
+        let deep_read = parsed.get("deepRead").and_then(|v| v.as_bool()).unwrap_or(false);
+        let res = run_search(&client, &cache, q, limit.clamp(1, 10), deep_read);
         send_http(&mut stream, 200, "application/json; charset=utf-8", res.to_string().as_bytes());
         return;
     }
@@ -595,8 +1204,9 @@ fn handle_tcp_client(mut stream: TcpStream, client: reqwest::Client, cache: Arc<
             }
         };
         let tools_arr = msg_body.get("tools").and_then(|v| v.as_array()).cloned().unwrap_or_default();
-        let wants_search = tools_arr.iter().any(|t| t.get("name").and_then(|n| n.as_str()) == Some("deepseek_web_search"));
-        let wants_fetch = tools_arr.iter().any(|t| t.get("name").and_then(|n| n.as_str()) == Some("deepseek_read_url"));
+        let use_builtin_search = headers.get("x-builtin-search").map(|s| s.as_str()) == Some("1");
+        let wants_search = use_builtin_search && tools_arr.iter().any(|t| t.get("name").and_then(|n| n.as_str()) == Some("deepseek_web_search"));
+        let wants_fetch = use_builtin_search && tools_arr.iter().any(|t| t.get("name").and_then(|n| n.as_str()) == Some("deepseek_read_url"));
 
         let session_key = headers.get("x-session-id").cloned().unwrap_or_default();
         let raw_msgs = msg_body.get("messages").and_then(|v| v.as_array()).cloned().unwrap_or_default();
@@ -678,16 +1288,9 @@ fn handle_tcp_client(mut stream: TcpStream, client: reqwest::Client, cache: Arc<
 
         let mut official_search_fallback = false;
         if wants_search {
-            let query: String = last_user_text
-                .split_whitespace()
-                .filter(|w| !w.starts_with("http://") && !w.starts_with("https://"))
-                .collect::<Vec<_>>()
-                .join(" ")
-                .chars()
-                .take(140)
-                .collect();
+            let query = sanitize_search_query(&last_user_text);
             if !query.is_empty() {
-                let s_out = run_search(&client, &cache, &query, 6);
+                let s_out = run_search(&client, &cache, &query, 8, true);
                 let items = s_out.get("results").and_then(|v| v.as_array()).cloned().unwrap_or_default();
                 if items.is_empty() {
                     official_search_fallback = true;
@@ -702,11 +1305,13 @@ fn handle_tcp_client(mut stream: TcpStream, client: reqwest::Client, cache: Arc<
                         "kind": "search"
                     }));
                     let mut mapped = Vec::new();
-                    grounding.push(format!("【系统已通过内置缓存搜索工具获取以下实时结果，请直接结合这些结果回答用户，不要说自己没有搜索工具或无法联网】\n关键词: {}", query));
+                    let backend_name = s_out.get("backend").and_then(|v| v.as_str()).unwrap_or("search");
+                    grounding.push(format!("【系统已通过内置增强搜索工具({})获取以下实时结果与网页精读，请直接结合这些结果回答用户，不要说自己没有搜索工具或无法联网】\n关键词: {}", backend_name, query));
                     for (i, item) in items.iter().enumerate() {
                         let t = item.get("title").and_then(|v| v.as_str()).unwrap_or("");
                         let u = item.get("url").and_then(|v| v.as_str()).unwrap_or("");
                         let sn = item.get("snippet").and_then(|v| v.as_str()).unwrap_or("");
+                        let pc = item.get("pageContent").and_then(|v| v.as_str()).unwrap_or("");
                         mapped.push(json!({
                             "type": "web_search_result",
                             "title": t,
@@ -717,7 +1322,11 @@ fn handle_tcp_client(mut stream: TcpStream, client: reqwest::Client, cache: Arc<
                             "encrypted_content": "",
                             "page_age": Value::Null
                         }));
-                        grounding.push(format!("{}. {}\nURL: {}\n摘要: {}", i + 1, t, u, sn));
+                        if pc.is_empty() {
+                            grounding.push(format!("{}. {}\nURL: {}\n摘要: {}", i + 1, t, u, sn));
+                        } else {
+                            grounding.push(format!("{}. {}\nURL: {}\n摘要: {}\n网页精读:\n{}", i + 1, t, u, sn, pc));
+                        }
                     }
                     synthetic_blocks.push(json!({
                         "type": "web_search_tool_result",
@@ -751,7 +1360,7 @@ fn handle_tcp_client(mut stream: TcpStream, client: reqwest::Client, cache: Arc<
 
         if let Some(obj) = msg_body.as_object_mut() {
             obj.insert("messages".into(), Value::Array(stable_msgs));
-            let filtered: Vec<Value> = if official_search_fallback {
+            let filtered: Vec<Value> = if !use_builtin_search || official_search_fallback {
                 tools_arr
             } else {
                 tools_arr
@@ -1000,6 +1609,18 @@ mod proxy_tests {
             }
         });
         port
+    }
+
+    #[test]
+    fn decodes_html_entities_and_sanitizes_queries() {
+        assert_eq!(decode_html_entities("《论语&#183;学而》"), "《论语·学而》");
+        assert_eq!(decode_html_entities("&quot;正字&quot;"), "\"正字\"");
+        assert_eq!(decode_html_entities("2026年11月10日&ensp;&#0183;&ensp;"), "2026年11月10日 · ");
+        assert_eq!(decode_html_entities("&amp;#xB7; &lt;本&gt;"), "· <本>");
+        assert_eq!(
+            sanitize_search_query("请帮我搜索 <latest_reminder>hidden</latest_reminder> Agent-Reach 是什么？"),
+            "Agent-Reach 是什么"
+        );
     }
 
     #[test]
