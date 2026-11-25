@@ -458,8 +458,8 @@ export const zh = {
   settingsDeepSeekExportGuide:
     '打开->头像->数据管理->导出历史对话->重新导出->复制下载链接->打开浏览器粘贴回车',
   settingsOpenDeepSeek: '打开 DeepSeek',
-  settingsCacheMode: '缓存模式',
-  settingsBuiltinSearch: '内置搜索（增强多源）',
+  settingsCacheMode: '后端地址',
+  settingsBuiltinSearch: '内置搜索',
   settingsBuiltinSearchOn: '已开启 · 内置多源检索',
   settingsBuiltinSearchOff: '默认关闭 · 使用官方联网搜索',
   searchBuiltin: '内置搜索',

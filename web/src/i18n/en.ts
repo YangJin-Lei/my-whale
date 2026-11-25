@@ -479,8 +479,8 @@ export const en = {
   settingsDeepSeekExportGuide:
     'Open -> Avatar -> Data Management -> Export History -> Re-export -> Copy link -> Paste in browser',
   settingsOpenDeepSeek: 'Open DeepSeek',
-  settingsCacheMode: 'Cache mode',
-  settingsBuiltinSearch: 'Built-in Search (Enhanced)',
+  settingsCacheMode: 'Backend URL',
+  settingsBuiltinSearch: 'Built-in Search',
   settingsBuiltinSearchOn: 'On · Multi-source & reader',
   settingsBuiltinSearchOff: 'Off · Official Web Search',
   searchBuiltin: 'Built-in Search',

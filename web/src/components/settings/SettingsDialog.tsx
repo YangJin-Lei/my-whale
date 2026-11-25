@@ -20,18 +20,14 @@ import {
   importHistory,
 } from '../../services/chat/backup.js'
 import { exportBlobFile } from '../../services/fileExport.js'
-import { clearDrawGuessCache, clearGameDecisionCache } from '../../game/history.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { useChatStore } from '../../services/chat/store.js'
 import { regionCodes, getRegionName, provinces } from '../../services/location.js'
 import { openDeepSeekDataExport, openExternal } from '../../services/links.js'
 import {
-  clearRemoteCacheBackend,
-  hasNativeCacheController,
   pingCacheBackend,
   startNativeOrProbeCacheBackend,
   stopNativeCacheBackend,
-  type CacheBackendStats,
 } from '../../services/cacheBackend.js'
 import {
   checkForUpdates,
@@ -557,18 +553,18 @@ const CompactionSetting = () => {
   const t = useTranslate()
   const compactionEnabled = useSettings((state) => state.compactionEnabled)
   return (
-    <div className={styles.cellCard}>
-      <div className={styles.row}>
-        <span className={styles.label}>{t('settingsCompaction')}</span>
+    <SettingCell
+      label={t('settingsCompaction')}
+      status={null}
+      action={
         <input
           type="checkbox"
           aria-label={t('settingsCompaction')}
           checked={compactionEnabled}
           onChange={(event) => setCompactionEnabled(event.target.checked)}
         />
-      </div>
-      <div className={styles.cacheSubLabel}>{t('settingsCompactionHint')}</div>
-    </div>
+      }
+    />
   )
 }
 
@@ -577,30 +573,21 @@ const CacheModeSetting = () => {
   const cacheModeEnabled = useSettings((state) => state.cacheModeEnabled)
   const cacheBackendUrl = useSettings((state) => state.cacheBackendUrl)
   const [busy, setBusy] = useState(false)
-  const [stats, setStats] = useState<CacheBackendStats>({
-    online: false,
-    searchCached: 0,
-    fetchCached: 0,
-    searchHits: 0,
-    fetchHits: 0,
-    upstreamCalls: 0,
-    prefixReadTokens: 0,
-    prefixCreateTokens: 0,
-    prefixInputTokens: 0,
-  })
-  const totalPrefix = stats.prefixReadTokens + stats.prefixCreateTokens + stats.prefixInputTokens
-  const prefixHitRate =
-    totalPrefix > 0 ? Math.round((stats.prefixReadTokens / totalPrefix) * 100) : 0
-
-  const refreshStatus = async (url?: string) => {
-    const res = await pingCacheBackend(url)
-    setStats(res)
-    return res
-  }
+  const [online, setOnline] = useState(false)
 
   useEffect(() => {
-    if (cacheModeEnabled) {
-      void refreshStatus(cacheBackendUrl)
+    if (!cacheModeEnabled) {
+      setOnline(false)
+      return
+    }
+    let cancelled = false
+    void pingCacheBackend(cacheBackendUrl).then((res) => {
+      if (!cancelled) {
+        setOnline(res.online)
+      }
+    })
+    return () => {
+      cancelled = true
     }
   }, [cacheModeEnabled, cacheBackendUrl])
 
@@ -608,61 +595,38 @@ const CacheModeSetting = () => {
     setCacheModeEnabled(next)
     if (!next) {
       await stopNativeCacheBackend()
-      setStats((prev) => ({ ...prev, online: false }))
+      setOnline(false)
       return
     }
     setBusy(true)
     try {
       const res = await startNativeOrProbeCacheBackend(cacheBackendUrl)
-      setStats(res)
+      setOnline(res.online)
       if (!res.online) {
         showToast({ key: 'settingsCacheConnectFailed', type: 'error' })
       }
     } finally {
       setBusy(false)
-    }
-  }
-
-  const handleStartBackend = async () => {
-    setBusy(true)
-    try {
-      const res = await startNativeOrProbeCacheBackend(cacheBackendUrl)
-      setStats(res)
-      if (!res.online) {
-        showToast({ key: 'settingsCacheConnectFailed', type: 'error' })
-      }
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const handleClearCache = async () => {
-    clearGameDecisionCache()
-    clearDrawGuessCache()
-    const ok = await clearRemoteCacheBackend(cacheBackendUrl).catch(() => false)
-    if (ok) {
-      showToast({ key: 'settingsCacheCleared' })
-      await refreshStatus(cacheBackendUrl)
     }
   }
 
   return (
     <div className={styles.cellCard}>
       <div className={styles.row}>
-        <span className={styles.label}>{t('settingsCacheMode')}</span>
+        <span className={styles.label}>{t('settingsCacheUrl')}</span>
         <div className={styles.cacheToggleRight}>
           {cacheModeEnabled ? (
-            <span className={stats.online ? styles.cacheOnlinePill : styles.cacheOfflinePill}>
+            <span className={online ? styles.cacheOnlinePill : styles.cacheOfflinePill}>
               {busy
                 ? t('settingsCacheStarting')
-                : stats.online
+                : online
                   ? t('settingsCacheRunning')
                   : t('settingsCacheStopped')}
             </span>
           ) : null}
           <input
             type="checkbox"
-            aria-label={t('settingsCacheMode')}
+            aria-label={t('settingsCacheUrl')}
             checked={cacheModeEnabled}
             disabled={busy}
             onChange={(event) => void handleToggle(event.target.checked)}
@@ -671,61 +635,14 @@ const CacheModeSetting = () => {
       </div>
       {cacheModeEnabled ? (
         <div className={styles.cacheDetail}>
-          <div className={styles.cacheUrlRow}>
-            <span className={styles.cacheSubLabel}>{t('settingsCacheUrl')}</span>
-            <input
-              type="url"
-              aria-label={t('settingsCacheUrl')}
-              className={styles.mirrorInput}
-              value={cacheBackendUrl}
-              placeholder="http://127.0.0.1:8787"
-              onChange={(event) => setCacheBackendUrl(event.target.value)}
-            />
-          </div>
-          <div className={styles.cacheActionRow}>
-            <Button
-              variant="outlined"
-              size="s"
-              className={styles.bgActionBtn}
-              disabled={busy}
-              onClick={() => void handleStartBackend()}
-            >
-              {hasNativeCacheController() && !stats.online ? t('settingsCacheStart') : t('retry')}
-            </Button>
-            {stats.online ? (
-              <>
-                {hasNativeCacheController() ? (
-                  <Button
-                    variant="outlined"
-                    size="s"
-                    className={styles.bgActionBtn}
-                    onClick={() => {
-                      void stopNativeCacheBackend().then(() =>
-                        setStats((prev) => ({ ...prev, online: false }))
-                      )
-                    }}
-                  >
-                    {t('settingsCacheStop')}
-                  </Button>
-                ) : null}
-                <Button
-                  variant="outlined"
-                  size="s"
-                  className={styles.bgActionBtn}
-                  onClick={() => void handleClearCache()}
-                >
-                  {t('settingsCacheClear')}
-                </Button>
-                <span className={styles.cacheStatsText}>
-                  {t('settingsCacheStats', {
-                    rate: prefixHitRate,
-                    search: stats.searchCached,
-                    fetch: stats.fetchCached,
-                  })}
-                </span>
-              </>
-            ) : null}
-          </div>
+          <input
+            type="url"
+            aria-label={t('settingsCacheUrl')}
+            className={clsx(styles.mirrorInput, styles.cacheUrlInput)}
+            value={cacheBackendUrl}
+            placeholder="http://127.0.0.1:8787"
+            onChange={(event) => setCacheBackendUrl(event.target.value)}
+          />
         </div>
       ) : null}
     </div>
@@ -754,9 +671,7 @@ const BuiltinSearchSetting = () => {
   return (
     <SettingCell
       label={t('settingsBuiltinSearch')}
-      status={{
-        key: builtinSearchEnabled ? 'settingsBuiltinSearchOn' : 'settingsBuiltinSearchOff',
-      }}
+      status={null}
       action={
         <input
           type="checkbox"

@@ -734,6 +734,10 @@
   gap: 8px;
 }
 
+.cacheUrlInput {
+  width: 100%;
+}
+
 .cacheUrlRow {
   display: flex;
   align-items: center;
